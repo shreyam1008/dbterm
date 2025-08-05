@@ -14,7 +14,7 @@ var (
 	surface1 = tcell.NewRGBColor(69, 71, 90)    //#45475a
 	red      = tcell.NewRGBColor(243, 139, 168) //#f38ba8
 	peach    = tcell.NewRGBColor(255, 180, 150) //#ffb4a6
-	blue     = tcell.NewRGBColor(97, 175, 239)  //#61afff
+	blue     = tcell.NewRGBColor(137, 180, 250) //#89b4fa
 )
 
 type App struct {
@@ -23,7 +23,7 @@ type App struct {
 	pages      *tview.Pages
 	tables     *tview.List
 	results    *tview.Table
-	queryInput *tview.InputField
+	queryInput *tview.TextArea
 }
 
 func NewApp() *App {
@@ -40,8 +40,8 @@ func (a *App) setupUI() {
 	a.results.SetBorder(true).SetTitle("Results (alt + r)")
 	a.tables = tview.NewList().ShowSecondaryText(false)
 	a.tables.SetBorder(true).SetTitle("Tables (alt + t)")
-	a.queryInput = tview.NewInputField().
-		SetPlaceholder("Type your query here, [alt + enter] to execute")
+	a.queryInput = tview.NewTextArea().
+		SetPlaceholder("Type your query here, [alt + enter] to execute").SetPlaceholderStyle(tcell.StyleDefault.Foreground(blue))
 	a.queryInput.SetBorder(true).SetTitle("Query (alt + q)")
 
 	// Right side: query on top, results below
