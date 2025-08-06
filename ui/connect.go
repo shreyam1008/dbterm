@@ -55,7 +55,7 @@ func (a *App) showConnectionForm() *tview.Form {
 	})
 
 	form.SetBorder(true).SetTitle(" Connect to Database ")
-	form.SetFieldTextColor(red).
+	form.
 		SetFieldBackgroundColor(mantle).
 		SetButtonBackgroundColor(surface1).
 		SetButtonTextColor(green)

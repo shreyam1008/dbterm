@@ -37,7 +37,7 @@ func (a *App) setupUI() {
 	// Set global styles
 	tview.Styles.PrimitiveBackgroundColor = bg
 	tview.Styles.ContrastBackgroundColor = bg
-	a.results = tview.NewTable().SetBorders(true)
+	a.results = tview.NewTable().SetBorders(true).SetSelectable(true, false).SetSelectedStyle(tcell.StyleDefault.Background(blue).Foreground(tcell.ColorBlack))
 	a.results.SetBorder(true).SetTitle("Results (alt + r)")
 	a.tables = tview.NewList().ShowSecondaryText(false)
 	a.tables.SetBorder(true).SetTitle("Tables (alt + t)")
