@@ -18,12 +18,13 @@ var (
 )
 
 type App struct {
-	app        *tview.Application
-	db         *sql.DB
-	pages      *tview.Pages
-	tables     *tview.List
-	results    *tview.Table
-	queryInput *tview.TextArea
+	app           *tview.Application
+	db            *sql.DB
+	pages         *tview.Pages
+	tables        *tview.List
+	selectedTable string
+	results       *tview.Table
+	queryInput    *tview.TextArea
 }
 
 func NewApp() *App {

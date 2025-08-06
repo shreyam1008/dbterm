@@ -2,8 +2,8 @@ package ui
 
 import "fmt"
 
-func (a *App) LoadResults(tableName string) error {
-	query := fmt.Sprintf("SELECT * FROM %q LIMIT 100", tableName)
+func (a *App) LoadResults() error {
+	query := fmt.Sprintf("SELECT * FROM %q LIMIT 100", a.selectedTable)
 
 	rows, err := a.db.Query(query)
 	if err != nil {

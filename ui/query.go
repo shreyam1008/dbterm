@@ -34,7 +34,7 @@ func (a *App) ExecuteQuery(query string) {
 
 		rowsAffected, _ := res.RowsAffected()
 		a.ShowAlert(fmt.Sprintf("Query executed successfully. Rows affected: %d", rowsAffected), "main")
-		a.results.Clear()
+		a.LoadResults()
 		a.LoadTables()
 	}
 }

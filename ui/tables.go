@@ -28,8 +28,9 @@ func (a *App) LoadTables() error {
 
 	}
 
-	a.tables.SetSelectedFunc(func(_ int, mainText string, _ string, _ rune) {
-		a.LoadResults(mainText)
+	a.tables.SetSelectedFunc(func(_ int, selectedTable string, _ string, _ rune) {
+		a.selectedTable = selectedTable
+		a.LoadResults()
 	})
 
 	return rows.Err()
