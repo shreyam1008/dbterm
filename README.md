@@ -22,21 +22,20 @@
 
 ## Installation
 
-Ensure you have Go installed (1.25+ recommended).
+You can install `pgterm` directly using `go install`:
 
 ```bash
-git clone https://github.com/nabsk911/pgterm.git
-cd pgterm
-go mod tidy
-go build -o pgterm
+go install github.com/nabsk911/pgterm@latest
 ```
+
+Make sure your `GOPATH` bin directory is in your system `PATH`.
 
 ## Usage
 
-Run the compiled binary:
+Run the application:
 
 ```bash
-./pgterm
+pgterm
 ```
 
 ## Screenshots
