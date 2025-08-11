@@ -143,7 +143,8 @@ func (a *App) setupUI() {
 		case 's', 'S':
 			// Sort by current column
 			_, col := a.results.GetSelection()
-			a.sortByColumn(col)
+			a.toggleSort(col)
+			a.results.Select(1, col) // Ensure selection stays visible
 			return nil
 		}
 		return event
@@ -265,8 +266,25 @@ func (a *App) refreshData() {
 	a.updateStatusBar("[green]↻ Refreshed[-]", 0)
 }
 
-// sortByColumn sorts the results table by the given column index
-func (a *App) sortByColumn(col int) {
+// toggleSort updates sort state and applies it
+func (a *App) toggleSort(col int) {
+	// Toggle sort direction if same column, else reset to ascending
+	if a.sortColumn == col {
+		a.sortAsc = !a.sortAsc
+	} else {
+		a.sortColumn = col
+		a.sortAsc = true
+	}
+	a.applySort()
+}
+
+// applySort sorts the results table based on current sort state
+func (a *App) applySort() {
+	col := a.sortColumn
+	if col == -1 {
+		return
+	}
+
 	rowCount := a.results.GetRowCount()
 	if rowCount <= 2 { // header + at most 1 row, nothing to sort
 		return
@@ -275,14 +293,6 @@ func (a *App) sortByColumn(col int) {
 	colCount := a.results.GetColumnCount()
 	if col < 0 || col >= colCount {
 		return
-	}
-
-	// Toggle sort direction if same column, else reset to ascending
-	if a.sortColumn == col {
-		a.sortAsc = !a.sortAsc
-	} else {
-		a.sortColumn = col
-		a.sortAsc = true
 	}
 
 	// Collect data rows (skip header at row 0)
@@ -343,8 +353,6 @@ func (a *App) sortByColumn(col int) {
 			headerCell.Text = name
 		}
 	}
-
-	a.results.Select(1, col)
 }
 
 func (a *App) setupKeyBindings() {

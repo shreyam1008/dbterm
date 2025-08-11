@@ -26,6 +26,9 @@ func (a *App) LoadResults() error {
 
 	a.queryStart = time.Now()
 
+	// Capture current selection state to restore after refresh
+	currentRow, currentCol := a.results.GetSelection()
+
 	rows, err := a.db.Query(query)
 	if err != nil {
 		a.results.SetTitle(" Results — [red]error[-] ")
@@ -38,10 +41,25 @@ func (a *App) LoadResults() error {
 		return err
 	}
 
+	// Re-apply sort if active
+	if a.sortColumn != -1 {
+		a.applySort()
+	}
+
+	// Restore selection (clamped to new bounds automatically by tview)
+	if currentRow > 0 {
+		a.results.Select(currentRow, currentCol)
+	}
+
 	elapsed := time.Since(a.queryStart)
 	a.results.SetTitle(fmt.Sprintf(" [yellow]%s[-] — [green]%d rows[-] in [teal]%s[-] ",
 		a.selectedTable, rowCount, formatDuration(elapsed)))
-	a.results.ScrollToBeginning()
+	
+	// Only scroll to beginning if we didn't restore a selection
+	if currentRow <= 1 {
+		a.results.ScrollToBeginning()
+	}
+	
 	a.updateStatusBar("", rowCount)
 
 	return nil
