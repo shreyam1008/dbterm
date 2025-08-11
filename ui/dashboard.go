@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -13,14 +14,20 @@ func (a *App) showDashboard() {
 	// ── Header ──
 	header := tview.NewTextView().
 		SetDynamicColors(true).
-		SetTextAlign(tview.AlignCenter).
-		SetText("\n[::b][#cba6f7]╔══════════════════════════════╗\n║         d b t e r m          ║\n╚══════════════════════════════╝[-][-]\n[#a6adc8]Multi-database terminal client[-]")
+		SetTextAlign(tview.AlignCenter)
 	header.SetBackgroundColor(bg)
+
+	connCount := len(a.store.Connections)
+	headerText := `
+[::b][#cba6f7]╔══════════════════════════════════╗
+║           d b t e r m            ║
+╚══════════════════════════════════╝[-][-]
+[#a6adc8]PostgreSQL  •  MySQL  •  SQLite[-]`
+	header.SetText(headerText)
 
 	// ── Connection List ──
 	connList := tview.NewList().ShowSecondaryText(true)
 	connList.SetBorder(true).
-		SetTitle(" Saved Connections ").
 		SetBorderColor(surface1).
 		SetTitleColor(mauve)
 	connList.SetBackgroundColor(bg)
@@ -29,41 +36,70 @@ func (a *App) showDashboard() {
 	connList.SetSelectedBackgroundColor(surface0)
 	connList.SetSelectedTextColor(green)
 
-	// Populate saved connections
-	if len(a.store.Connections) > 0 {
+	if connCount > 0 {
+		connList.SetTitle(fmt.Sprintf(" Saved Connections (%d) ", connCount))
+
 		for i, conn := range a.store.Connections {
-			idx := i // capture
-			statusIcon := "[red]●[-]"
+			// Status icon
+			statusIcon := "[#45475a]○[-]"
 			if conn.Active {
 				statusIcon = "[green]●[-]"
 			}
-			label := fmt.Sprintf("%s  %s  %s", statusIcon, conn.TypeLabel(), conn.Name)
 
+			// DB type with color
+			var typeTag string
+			switch conn.Type {
+			case config.PostgreSQL:
+				typeTag = "[#89b4fa]PG[-]"
+			case config.MySQL:
+				typeTag = "[#f9e2af]MY[-]"
+			case config.SQLite:
+				typeTag = "[#a6e3a1]SL[-]"
+			}
+
+			label := fmt.Sprintf(" %s  %s  %s", statusIcon, typeTag, conn.Name)
+
+			// Detail line
 			var detail string
 			if conn.Type == config.SQLite {
-				detail = fmt.Sprintf("   %s", conn.FilePath)
+				detail = fmt.Sprintf("       ◆ %s", conn.FilePath)
 			} else {
-				detail = fmt.Sprintf("   %s@%s:%s/%s", conn.User, conn.Host, conn.Port, conn.Database)
-			}
-			if conn.LastUsed != "" {
-				detail += fmt.Sprintf("  │  Last: %s", conn.LastUsed[:10])
+				detail = fmt.Sprintf("       %s@%s:%s/%s", conn.User, conn.Host, conn.Port, conn.Database)
 			}
 
-			connList.AddItem(label, detail, rune('1'+idx), nil)
+			if conn.LastUsed != "" {
+				t, err := time.Parse(time.RFC3339, conn.LastUsed)
+				if err == nil {
+					detail += fmt.Sprintf("  │  %s", formatTimeAgo(t))
+				}
+			}
+
+			// Shortcut key: 1-9 for first 9, then 0 for 10th, then none
+			var shortcut rune
+			if i < 9 {
+				shortcut = rune('1' + i)
+			} else if i == 9 {
+				shortcut = '0'
+			}
+
+			connList.AddItem(label, detail, shortcut, nil)
 		}
 	} else {
-		connList.AddItem("[gray]No saved connections[-]", "   Press [N] to add a new connection", 0, nil)
+		connList.SetTitle(" Saved Connections ")
+		connList.AddItem("  [#6c7086]No saved connections yet[-]", "       Press [green]N[-] to add your first database", 0, nil)
 	}
 
-	// ── Actions ──
+	// ── Footer Actions ──
 	actions := tview.NewTextView().
 		SetDynamicColors(true).
-		SetTextAlign(tview.AlignCenter).
-		SetText(fmt.Sprintf(
-			"  [green]Enter[-] Connect   [yellow]N[-] New   [blue]E[-] Edit   [red]D[-] Delete   [#cba6f7]Q[-] Quit   [teal]H[-] Help   │   [gray]%d saved[-]",
-			len(a.store.Connections),
-		))
+		SetTextAlign(tview.AlignCenter)
 	actions.SetBackgroundColor(crust)
+
+	if connCount > 0 {
+		actions.SetText("  [green]Enter[-] Connect  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [teal]H[-] Help  │  [#cba6f7]Q[-] Quit")
+	} else {
+		actions.SetText("  [yellow]N[-] New Connection  │  [teal]H[-] Help  │  [#cba6f7]Q[-] Quit")
+	}
 
 	// ── Layout ──
 	layout := tview.NewFlex().
@@ -79,23 +115,26 @@ func (a *App) showDashboard() {
 			a.showConnectionForm(nil, -1)
 			return nil
 		case 'e', 'E':
-			if len(a.store.Connections) > 0 {
+			if connCount > 0 {
 				idx := connList.GetCurrentItem()
-				if idx >= 0 && idx < len(a.store.Connections) {
+				if idx >= 0 && idx < connCount {
 					conn := a.store.Connections[idx]
 					a.showConnectionForm(&conn, idx)
 				}
+			} else {
+				a.ShowAlert("No connections to edit.\n\nPress N to create one.", "dashboard")
 			}
 			return nil
 		case 'd', 'D':
-			if len(a.store.Connections) > 0 {
+			if connCount > 0 {
 				idx := connList.GetCurrentItem()
-				if idx >= 0 && idx < len(a.store.Connections) {
+				if idx >= 0 && idx < connCount {
 					a.confirmDelete(idx)
 				}
 			}
 			return nil
 		case 'q', 'Q':
+			a.cleanup()
 			a.app.Stop()
 			return nil
 		case 'h', 'H':
@@ -103,10 +142,20 @@ func (a *App) showDashboard() {
 			return nil
 		}
 
-		if event.Key() == tcell.KeyEnter && len(a.store.Connections) > 0 {
+		if event.Key() == tcell.KeyEnter && connCount > 0 {
 			idx := connList.GetCurrentItem()
-			if idx >= 0 && idx < len(a.store.Connections) {
+			if idx >= 0 && idx < connCount {
 				a.connectToSaved(idx)
+			}
+			return nil
+		}
+
+		if event.Key() == tcell.KeyEscape {
+			if a.db != nil {
+				// Go back to workspace if already connected
+				a.pages.RemovePage("dashboard")
+				a.pages.ShowPage("main")
+				a.app.SetFocus(a.queryInput)
 			}
 			return nil
 		}
@@ -118,11 +167,11 @@ func (a *App) showDashboard() {
 	a.app.SetFocus(connList)
 }
 
-// confirmDelete shows a confirmation modal before deleting a connection
+// confirmDelete shows a confirmation modal before deleting
 func (a *App) confirmDelete(index int) {
-	name := a.store.Connections[index].Name
+	conn := a.store.Connections[index]
 	modal := tview.NewModal().
-		SetText(fmt.Sprintf("Delete connection [yellow]\"%s\"[-]?", name)).
+		SetText(fmt.Sprintf("Delete [yellow]\"%s\"[-] (%s)?\n\nThis cannot be undone.", conn.Name, conn.TypeLabel())).
 		AddButtons([]string{"  Delete  ", "  Cancel  "}).
 		SetDoneFunc(func(buttonIndex int, buttonLabel string) {
 			if buttonIndex == 0 {
@@ -140,8 +189,37 @@ func (a *App) confirmDelete(index int) {
 	a.pages.AddPage("confirmDelete", modal, true, true)
 }
 
-// connectToSaved connects to a saved connection config
+// connectToSaved connects to a saved config by index
 func (a *App) connectToSaved(index int) {
 	conn := a.store.Connections[index]
 	a.connectWithConfig(&conn, index)
+}
+
+// formatTimeAgo returns a human-readable relative time string
+func formatTimeAgo(t time.Time) string {
+	d := time.Since(t)
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		m := int(d.Minutes())
+		if m == 1 {
+			return "1 min ago"
+		}
+		return fmt.Sprintf("%d mins ago", m)
+	case d < 24*time.Hour:
+		h := int(d.Hours())
+		if h == 1 {
+			return "1 hour ago"
+		}
+		return fmt.Sprintf("%d hours ago", h)
+	case d < 7*24*time.Hour:
+		days := int(d.Hours() / 24)
+		if days == 1 {
+			return "yesterday"
+		}
+		return fmt.Sprintf("%d days ago", days)
+	default:
+		return t.Format("Jan 02, 2006")
+	}
 }
