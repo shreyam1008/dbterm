@@ -1,0 +1,19 @@
+# Binaries
+dbterm
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Build directory
+dist/
+
+# Test binary
+*.test
+*.out
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
