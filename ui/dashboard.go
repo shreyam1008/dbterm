@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/shreyam1008/dbterm/config"
 	"github.com/rivo/tview"
+	"github.com/shreyam1008/dbterm/config"
 )
 
 // showDashboard displays the saved connections landing page
@@ -23,11 +23,11 @@ func (a *App) showDashboard() {
 		SetTitle(" Saved Connections ").
 		SetBorderColor(surface1).
 		SetTitleColor(mauve)
-	connList.SetBackgroundColor(bg).
-		SetMainTextColor(text).
-		SetSecondaryTextColor(subtext0).
-		SetSelectedBackgroundColor(surface0).
-		SetSelectedTextColor(green)
+	connList.SetBackgroundColor(bg)
+	connList.SetMainTextColor(text)
+	connList.SetSecondaryTextColor(subtext0)
+	connList.SetSelectedBackgroundColor(surface0)
+	connList.SetSelectedTextColor(green)
 
 	// Populate saved connections
 	if len(a.store.Connections) > 0 {
