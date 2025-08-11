@@ -2,14 +2,15 @@ package ui
 
 import (
 	"database/sql"
+	"fmt"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/shreyam1008/dbterm/config"
 	"github.com/rivo/tview"
+	"github.com/shreyam1008/dbterm/config"
 )
 
-// ── Catppuccin Mocha Palette ──────────────────────────────────────────
+// ── Catppuccin Mocha ──────────────────────────────────────────────────
 var (
 	bg       = tcell.NewRGBColor(30, 30, 46)    // #1e1e2e  base
 	mantle   = tcell.NewRGBColor(24, 24, 37)    // #181825  mantle
@@ -28,13 +29,14 @@ var (
 	overlay0 = tcell.NewRGBColor(108, 112, 134) // #6c7086  overlay0
 )
 
-// App is the main application struct holding all TUI state
+// App holds all TUI state for the dbterm application
 type App struct {
 	app    *tview.Application
 	db     *sql.DB
 	pages  *tview.Pages
 	store  *config.Store
 	dbType config.DBType
+	dbName string // name of current connection (from config)
 
 	// Main UI components
 	tables        *tview.List
@@ -42,13 +44,18 @@ type App struct {
 	results       *tview.Table
 	queryInput    *tview.TextArea
 	statusBar     *tview.TextView
+	tableCount    int
 	queryStart    time.Time
 }
 
+// NewApp creates a new dbterm application instance
 func NewApp() *App {
-	store, _ := config.LoadStore()
+	store, err := config.LoadStore()
 	if store == nil {
 		store = &config.Store{}
+		if err != nil {
+			fmt.Printf("⚠ Warning: could not load saved connections: %v\n", err)
+		}
 	}
 	return &App{
 		app:   tview.NewApplication(),
@@ -57,7 +64,6 @@ func NewApp() *App {
 }
 
 func (a *App) setupUI() {
-	// Set global styles
 	tview.Styles.PrimitiveBackgroundColor = bg
 	tview.Styles.ContrastBackgroundColor = bg
 
@@ -80,7 +86,7 @@ func (a *App) setupUI() {
 
 	// ── Query Input ──
 	a.queryInput = tview.NewTextArea().
-		SetPlaceholder("  Type your SQL query here...  [Alt+Enter] to execute").
+		SetPlaceholder("  Write SQL here — Alt+Enter to execute").
 		SetPlaceholderStyle(tcell.StyleDefault.Foreground(overlay0))
 	a.queryInput.SetBorder(true).
 		SetTitle(" Query [yellow](Alt+Q)[-] ").
@@ -92,7 +98,7 @@ func (a *App) setupUI() {
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignLeft)
 	a.statusBar.SetBackgroundColor(crust)
-	a.updateStatusBar()
+	a.updateStatusBar("", 0)
 
 	// ── Layout ──
 	rightFlex := tview.NewFlex().
@@ -115,40 +121,71 @@ func (a *App) setupUI() {
 	// Execute query on Alt+Enter
 	a.queryInput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEnter && event.Modifiers()&tcell.ModAlt != 0 {
+			query := a.queryInput.GetText()
+			if query == "" {
+				a.ShowAlert("No query to execute.\n\nType a SQL query and press Alt+Enter.", "main")
+				return nil
+			}
 			a.queryStart = time.Now()
-			a.ExecuteQuery(a.queryInput.GetText())
+			a.ExecuteQuery(query)
 			return nil
 		}
 		return event
 	})
 }
 
-func (a *App) updateStatusBar() {
+// updateStatusBar refreshes the bottom status bar with current state
+func (a *App) updateStatusBar(extra string, rowCount int) {
 	if a.db == nil {
-		a.statusBar.SetText("  [gray]Not connected[-]  │  [yellow]Alt+H[-] Help")
+		a.statusBar.SetText("  [gray]● Disconnected[-]  │  [yellow]Alt+H[-] Help  │  [yellow]Q[-] Quit")
 		return
 	}
-	dbLabel := string(a.dbType)
+
+	var dbIcon string
 	switch a.dbType {
 	case config.PostgreSQL:
-		dbLabel = "[blue]PostgreSQL[-]"
+		dbIcon = "[#89b4fa]⬢ PostgreSQL[-]"
 	case config.MySQL:
-		dbLabel = "[yellow]MySQL[-]"
+		dbIcon = "[#f9e2af]⬡ MySQL[-]"
 	case config.SQLite:
-		dbLabel = "[green]SQLite[-]"
+		dbIcon = "[#a6e3a1]◆ SQLite[-]"
 	}
-	a.statusBar.SetText("  " + dbLabel + "  │  [green]● Connected[-]  │  [yellow]Alt+H[-] Help  │  [yellow]Alt+D[-] Dashboard")
+
+	info := fmt.Sprintf("  %s  │  [green]●[-] [white]%s[-]  │  [gray]%d tables[-]",
+		dbIcon, a.dbName, a.tableCount)
+
+	if rowCount > 0 {
+		info += fmt.Sprintf("  │  [teal]%d rows[-]", rowCount)
+	}
+	if extra != "" {
+		info += "  │  " + extra
+	}
+
+	info += "  │  [yellow]Alt+H[-] Help  │  [yellow]Alt+D[-] Dashboard"
+	a.statusBar.SetText(info)
 }
 
 func (a *App) setupKeyBindings() {
 	a.app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		page, _ := a.pages.GetFrontPage()
+
+		// Ctrl+C always quits
+		if event.Key() == tcell.KeyCtrlC {
+			a.cleanup()
+			a.app.Stop()
+			return nil
+		}
+
 		if event.Modifiers()&tcell.ModAlt != 0 {
 			switch event.Rune() {
 			case 'h', 'H':
 				if page == "help" {
-					a.pages.HidePage("help")
-					a.pages.ShowPage("main")
+					a.pages.RemovePage("help")
+					if a.db != nil {
+						a.pages.ShowPage("main")
+					} else {
+						a.showDashboard()
+					}
 				} else {
 					a.showHelp()
 				}
@@ -161,9 +198,11 @@ func (a *App) setupKeyBindings() {
 				return nil
 			}
 		}
+
 		if page != "main" {
 			return event
 		}
+
 		if event.Modifiers()&tcell.ModAlt != 0 {
 			switch event.Rune() {
 			case 't', 'T':
@@ -181,6 +220,15 @@ func (a *App) setupKeyBindings() {
 	})
 }
 
+// cleanup gracefully closes the database connection
+func (a *App) cleanup() {
+	if a.db != nil {
+		a.db.Close()
+		a.db = nil
+	}
+}
+
+// Run starts the application
 func (a *App) Run() error {
 	a.setupUI()
 	a.setupKeyBindings()
