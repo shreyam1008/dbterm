@@ -36,9 +36,19 @@
 
 ## 📦 Installation
 
+### Go install
+
 ```bash
 go install github.com/shreyam1008/dbterm@latest
 ```
+
+If your local Go is older than the version required by `go.mod`, Go may print:
+
+```text
+requires go >= 1.24.0; switching to go1.24.x
+```
+
+That is expected and means the Go toolchain auto-upgraded for this install.
 
 Make sure your Go bin directory is in your `PATH`:
 
@@ -51,6 +61,18 @@ Then run:
 ```bash
 dbterm
 ```
+
+### APT (Ubuntu/Debian)
+
+After adding the dbterm APT source once:
+
+```bash
+echo "deb [arch=$(dpkg --print-architecture) trusted=yes] https://shreyam1008.github.io/dbterm/apt stable main" | sudo tee /etc/apt/sources.list.d/dbterm.list >/dev/null
+sudo apt update
+sudo apt install dbterm
+```
+
+The repository is published from GitHub Actions release builds to the `gh-pages` branch.
 
 ---
 

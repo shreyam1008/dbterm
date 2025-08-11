@@ -110,9 +110,11 @@ jobs:
           PATCH=${PARTS[2]:-0}
           NEW_PATCH=$((PATCH + 1))
           NEW_TAG="v$MAJOR.$MINOR.$NEW_PATCH"
+          NEW_VERSION="${NEW_TAG#v}"
 
           echo "New version: $NEW_TAG"
           echo "tag_name=$NEW_TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
 
           COMMIT_MSG=$(git log -1 --pretty=%s)
           echo "commit_msg<<EOF" >> "$GITHUB_OUTPUT"
@@ -121,6 +123,7 @@ jobs:
 
       - name: Generate Checksums
         run: |
+          ./scripts/build-deb.sh "${{ steps.bump_version.outputs.version }}" dist
           cd dist
           sha256sum * > checksums.txt
 
@@ -131,3 +134,40 @@ jobs:
           name: ${{ steps.bump_version.outputs.tag_name }} - ${{ steps.bump_version.outputs.commit_msg }}
           files: dist/*
           generate_release_notes: true
+
+      - name: Publish APT repository (gh-pages)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          TAG_NAME: ${{ steps.bump_version.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+          REPO_URL="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          PAGES_DIR="/tmp/dbterm-gh-pages"
+
+          rm -rf "$PAGES_DIR"
+          if git ls-remote --exit-code --heads "$REPO_URL" gh-pages >/dev/null 2>&1; then
+            git clone --depth 1 --branch gh-pages "$REPO_URL" "$PAGES_DIR"
+          else
+            git clone --depth 1 "$REPO_URL" "$PAGES_DIR"
+            cd "$PAGES_DIR"
+            git checkout --orphan gh-pages
+            git rm -rf . >/dev/null 2>&1 || true
+            find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+            cd -
+          fi
+
+          ./scripts/build-apt-repo.sh "$PAGES_DIR/apt" dist
+          touch "$PAGES_DIR/.nojekyll"
+
+          cd "$PAGES_DIR"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apt .nojekyll
+          if git diff --cached --quiet; then
+            echo "No APT repository changes to publish."
+            exit 0
+          fi
+
+          git commit -m "apt: publish ${TAG_NAME}"
+          git push origin gh-pages
