@@ -69,7 +69,8 @@ dbterm
 |---|---|
 | `Tab` | Cycle focus: **Tables** → **Query** → **Results** |
 | `Alt + Enter` | Execute Query |
-| `F5` | **Refresh** data (preserves selection & sort) |
+| `F5` | **Refresh current table** (preserves selection & sort) |
+| `Ctrl + F5` | **Refresh database view** (table list + current table) |
 | `Alt + Q` | Focus Query Editor |
 | `Alt + R` | Focus Results Table |
 | `Alt + F` | Toggle **Fullscreen Results** |

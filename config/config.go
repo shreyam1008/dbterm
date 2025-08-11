@@ -143,12 +143,12 @@ func (c *ConnectionConfig) BuildConnString() string {
 			sslMode = "disable"
 		}
 		return fmt.Sprintf(
-			"host='%s' port='%s' user='%s' password='%s' dbname='%s' sslmode=%s",
+			"host='%s' port='%s' user='%s' password='%s' dbname='%s' sslmode=%s connect_timeout=5",
 			c.Host, c.Port, c.User, c.Password, c.Database, sslMode,
 		)
 	case MySQL:
 		return fmt.Sprintf(
-			"%s:%s@tcp(%s:%s)/%s?parseTime=true",
+			"%s:%s@tcp(%s:%s)/%s?parseTime=true&timeout=5s&readTimeout=30s&writeTimeout=30s",
 			c.User, c.Password, c.Host, c.Port, c.Database,
 		)
 	case SQLite:

@@ -60,6 +60,8 @@ type App struct {
 
 	// UI state
 	tableExpanded bool // results fullscreen mode
+	lastScreenW   int
+	lastScreenH   int
 }
 
 // NewApp creates a new dbterm application instance
@@ -123,11 +125,10 @@ func (a *App) setupUI() {
 	a.rightFlex = tview.NewFlex().
 		SetDirection(tview.FlexRow).
 		AddItem(a.queryInput, 0, 1, false).
-		AddItem(a.results, 0, 2, false)
+		AddItem(a.results, 0, 4, false) // Results get 80% vertical space
 
 	a.mainFlex = tview.NewFlex().
-		AddItem(a.tables, 0, 1, true).
-		AddItem(a.rightFlex, 0, 3, false)
+		SetDirection(tview.FlexColumn)
 
 	mainLayout := tview.NewFlex().
 		SetDirection(tview.FlexRow).
@@ -136,15 +137,19 @@ func (a *App) setupUI() {
 
 	a.pages = tview.NewPages()
 	a.pages.AddPage("main", mainLayout, true, false)
+	a.applyResponsiveLayout(120, 40)
 
 	// ── Results table input: sort on 's', key navigation ──
 	a.results.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Rune() {
 		case 's', 'S':
 			// Sort by current column
-			_, col := a.results.GetSelection()
+			row, col := a.results.GetSelection()
 			a.toggleSort(col)
-			a.results.Select(1, col) // Ensure selection stays visible
+			if row <= 0 {
+				row = 1
+			}
+			a.results.Select(row, col)
 			return nil
 		}
 		return event
@@ -193,7 +198,7 @@ func (a *App) updateStatusBar(extra string, rowCount int) {
 		info += "  │  " + extra
 	}
 
-	info += "  │  [yellow]F5[-] Refresh  │  [yellow]Alt+H[-] Help  │  [yellow]Alt+D[-] Dashboard  │  [yellow]Alt+S[-] Services"
+	info += "  │  [yellow]F5[-] Table Refresh  │  [yellow]Ctrl+F5[-] DB Refresh  │  [yellow]Alt+H[-] Help  │  [yellow]Alt+D[-] Dashboard  │  [yellow]Alt+S[-] Services"
 	a.statusBar.SetText(info)
 }
 
@@ -233,20 +238,16 @@ func (a *App) cycleFocus() {
 // toggleExpandResults toggles between fullscreen results and normal layout
 func (a *App) toggleExpandResults() {
 	if a.tableExpanded {
-		// Restore normal layout
-		a.mainFlex.Clear()
-		a.mainFlex.AddItem(a.tables, 0, 1, true)
-		a.mainFlex.AddItem(a.rightFlex, 0, 3, false)
-
-		a.rightFlex.Clear()
-		a.rightFlex.AddItem(a.queryInput, 0, 1, false)
-		a.rightFlex.AddItem(a.results, 0, 2, false)
-
+		w, h := a.getScreenSize()
 		a.tableExpanded = false
+		a.lastScreenW = 0
+		a.lastScreenH = 0
+		a.applyResponsiveLayout(w, h)
 		a.setFocusWithColor(a.results)
 	} else {
 		// Expand results to fill everything
 		a.mainFlex.Clear()
+		a.mainFlex.SetDirection(tview.FlexColumn)
 		a.mainFlex.AddItem(a.results, 0, 1, true)
 
 		a.tableExpanded = true
@@ -255,15 +256,47 @@ func (a *App) toggleExpandResults() {
 }
 
 // refreshData reloads tables list and current table data
-func (a *App) refreshData() {
+func (a *App) refreshData() error {
 	if a.db == nil {
-		return
+		return nil
 	}
-	a.LoadTables()
+
+	currentTable := a.selectedTable
+	currentTableIndex := a.tables.GetCurrentItem()
+
+	if err := a.LoadTables(); err != nil {
+		return err
+	}
+
+	if a.tableCount == 0 {
+		a.selectedTable = ""
+		a.results.Clear()
+		a.results.SetTitle(" Results [yellow](Alt+R)[-] ")
+		a.updateStatusBar("[green]↻ DB Refreshed[-]", 0)
+		return nil
+	}
+
+	if currentTable == "" {
+		if name, _ := a.tables.GetItemText(a.tables.GetCurrentItem()); !strings.HasPrefix(name, "[") {
+			a.selectedTable = name
+		}
+	} else if !a.tableExistsInList(currentTable) && currentTableIndex >= 0 && currentTableIndex < a.tableCount {
+		if name, _ := a.tables.GetItemText(currentTableIndex); !strings.HasPrefix(name, "[") {
+			a.selectedTable = name
+			a.tables.SetCurrentItem(currentTableIndex)
+		}
+	}
+
+	rowCount := 0
 	if a.selectedTable != "" {
-		a.LoadResults()
+		if err := a.LoadResults(); err != nil {
+			return err
+		}
+		rowCount = a.currentResultRowCount()
 	}
-	a.updateStatusBar("[green]↻ Refreshed[-]", 0)
+
+	a.updateStatusBar("[green]↻ DB Refreshed[-]", rowCount)
+	return nil
 }
 
 // toggleSort updates sort state and applies it
@@ -342,7 +375,7 @@ func (a *App) applySort() {
 	for c := 0; c < colCount; c++ {
 		headerCell := a.results.GetCell(0, c)
 		// Strip any existing sort indicators
-		name := strings.TrimRight(headerCell.Text, " ▲▼")
+		name := strings.TrimSuffix(strings.TrimSuffix(headerCell.Text, " ▲"), " ▼")
 		if c == col {
 			if a.sortAsc {
 				headerCell.Text = name + " ▲"
@@ -366,9 +399,25 @@ func (a *App) setupKeyBindings() {
 			return nil
 		}
 
-		// F5 — Refresh data (works from main page)
-		if event.Key() == tcell.KeyF5 && page == "main" {
-			a.refreshData()
+		// F5 — Refresh currently selected table results (preserve selection/sort)
+		// Ctrl+F5 — Full refresh (reload table list + results)
+		if event.Key() == tcell.KeyF5 {
+			if event.Modifiers()&tcell.ModCtrl != 0 {
+				if err := a.refreshData(); err != nil {
+					a.ShowAlert(fmt.Sprintf("Error refreshing database: %v", err), "main")
+				} else {
+					a.flashStatus("[green]↻ DB Refreshed[-]", a.currentResultRowCount(), 1200*time.Millisecond)
+				}
+				return nil
+			}
+			if page == "main" && a.selectedTable != "" {
+				if err := a.LoadResults(); err != nil {
+					a.ShowAlert(fmt.Sprintf("Error refreshing table: %v", err), "main")
+				} else {
+					a.flashStatus("[green]↻ Table Refreshed[-]", a.currentResultRowCount(), 1200*time.Millisecond)
+				}
+				return nil
+			}
 			return nil
 		}
 
@@ -443,7 +492,131 @@ func (a *App) Run() error {
 	a.setupKeyBindings()
 	a.showDashboard()
 
+	a.app.SetBeforeDrawFunc(func(screen tcell.Screen) bool {
+		w, h := screen.Size()
+		a.applyResponsiveLayout(w, h)
+		return false
+	})
+
 	return a.app.SetRoot(a.pages, true).
 		EnableMouse(true).
 		Run()
+}
+
+func (a *App) applyResponsiveLayout(width, height int) {
+	if width <= 0 || height <= 0 {
+		return
+	}
+	if a.lastScreenW == width && a.lastScreenH == height {
+		return
+	}
+	a.lastScreenW = width
+	a.lastScreenH = height
+
+	if a.tableExpanded {
+		return
+	}
+
+	a.mainFlex.Clear()
+	a.rightFlex.Clear()
+
+	queryHeight := clamp(height/4, 4, 12)
+	if height < 24 {
+		queryHeight = clamp(height/5, 3, 8)
+	}
+
+	a.rightFlex.SetDirection(tview.FlexRow)
+	a.rightFlex.AddItem(a.queryInput, queryHeight, 0, false)
+	a.rightFlex.AddItem(a.results, 0, 1, false)
+
+	if width < 110 {
+		tablesHeight := clamp(height/3, 6, 14)
+		a.mainFlex.SetDirection(tview.FlexRow)
+		a.mainFlex.AddItem(a.tables, tablesHeight, 0, true)
+		a.mainFlex.AddItem(a.rightFlex, 0, 1, false)
+		return
+	}
+
+	tablesWidth := clamp(width/4, 24, 38)
+	a.mainFlex.SetDirection(tview.FlexColumn)
+	a.mainFlex.AddItem(a.tables, tablesWidth, 0, true)
+	a.mainFlex.AddItem(a.rightFlex, 0, 1, false)
+}
+
+func (a *App) currentResultRowCount() int {
+	if a.results == nil {
+		return 0
+	}
+
+	if a.results.GetRowCount() == 2 {
+		if cell := a.results.GetCell(1, 0); cell != nil && cell.Text == "No rows returned" {
+			return 0
+		}
+	}
+
+	rows := a.results.GetRowCount() - 1
+	if rows < 0 {
+		return 0
+	}
+	return rows
+}
+
+func (a *App) flashStatus(extra string, rowCount int, duration time.Duration) {
+	a.updateStatusBar(extra, rowCount)
+	go func() {
+		time.Sleep(duration)
+		a.app.QueueUpdateDraw(func() {
+			a.updateStatusBar("", rowCount)
+		})
+	}()
+}
+
+func (a *App) tableExistsInList(name string) bool {
+	count := a.tables.GetItemCount()
+	for i := 0; i < count; i++ {
+		main, _ := a.tables.GetItemText(i)
+		if main == name {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *App) getScreenSize() (int, int) {
+	if a.lastScreenW > 0 && a.lastScreenH > 0 {
+		return a.lastScreenW, a.lastScreenH
+	}
+	return 120, 40
+}
+
+func (a *App) modalSize(minW, maxW, minH, maxH int) (int, int) {
+	w, h := a.getScreenSize()
+	availableW := max(30, w-4)
+	availableH := max(10, h-2)
+
+	if minW > availableW {
+		minW = availableW
+	}
+	if minH > availableH {
+		minH = availableH
+	}
+
+	return clamp(availableW, minW, maxW), clamp(availableH, minH, maxH)
+}
+
+func clamp(value, minValue, maxValue int) int {
+	if value < minValue {
+		return minValue
+	}
+	if value > maxValue {
+		return maxValue
+	}
+	return value
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
