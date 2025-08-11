@@ -15,6 +15,58 @@ import (
 	"github.com/shreyam1008/dbterm/utils"
 )
 
+// DirectConnect connects to a database using provided parameters
+func (a *App) DirectConnect(dbType config.DBType, dsn, name string) error {
+	// Create a temporary config
+	cfg := &config.ConnectionConfig{
+		Name: name,
+		Type: dbType,
+	}
+	
+	// For DirectConnect, we need to handle DSN differently since utils.ConnectDB expects 
+	// specific fields for some DBs, or we can patch it to use DSN if available.
+	// But looking at ui/connect.go, parseConnectionString fills the fields.
+	// Since we constructed the DSN in services.go, let's parse it back to config fields!
+	// This ensures utils.ConnectDB (which uses fields) works correctly.
+	
+	parsed, err := parseConnectionString(dbType, dsn)
+	if err != nil {
+		return err
+	}
+	// Copy parsed fields to our config
+	cfg.Host = parsed.Host
+	cfg.Port = parsed.Port
+	cfg.User = parsed.User
+	cfg.Password = parsed.Password
+	cfg.Database = parsed.Database
+	cfg.SSLMode = parsed.SSLMode
+
+	// Connect
+	db, err := utils.ConnectDB(cfg)
+	if err != nil {
+		return err
+	}
+
+	// Update App state
+	a.cleanup()
+	a.db = db
+	a.dbType = cfg.Type
+	a.dbName = cfg.Name
+
+	// Load tables
+	if err := a.LoadTables(); err != nil {
+		// We connected but failed to list tables. This is a partial success/warning state.
+		// For DirectConnect, let's just return the error so the UI shows it,
+		// but we keep the connection open.
+		return fmt.Errorf("connected but failed to list tables: %w", err)
+	}
+
+	// Reset page title for results
+	a.results.SetTitle(fmt.Sprintf(" %s Results [yellow](Alt+R)[-] ", iconResults))
+	
+	return nil
+}
+
 const (
 	connLabelName     = "Name (*)"
 	connLabelType     = "Type (*) " + iconDropdown
