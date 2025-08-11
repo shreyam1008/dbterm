@@ -10,7 +10,6 @@ import (
 	"github.com/shreyam1008/dbterm/ui"
 )
 
-// Build-time variables (set via -ldflags)
 var (
 	version = "1.0.0"
 	commit  = "dev"
@@ -18,30 +17,31 @@ var (
 
 func main() {
 	if len(os.Args) > 1 {
-		switch strings.ToLower(os.Args[1]) {
-		case "--help", "-h", "help":
+		arg := strings.ToLower(strings.TrimSpace(os.Args[1]))
+
+		// Normalize common typos and variations
+		switch {
+		case arg == "--help" || arg == "-h" || arg == "help":
 			printHelp()
-			return
-		case "--version", "-v", "version":
+		case arg == "--version" || arg == "-v" || arg == "version":
 			printVersion()
-			return
-		case "--info", "-i", "info":
+		case arg == "--info" || arg == "-i" || arg == "info":
 			printInfo()
-			return
-		case "--uninstall", "uninstall":
+		case strings.HasPrefix(arg, "--unin") || strings.HasPrefix(arg, "unin") || arg == "remove":
+			// Catches: --uninstall, --unintall, uninstall, uninst, remove, etc.
 			printUninstall()
-			return
 		default:
-			fmt.Printf("Unknown command: %s\n\n", os.Args[1])
+			fmt.Printf("\033[31mUnknown command:\033[0m %s\n\n", os.Args[1])
 			printHelp()
 			os.Exit(1)
 		}
+		return
 	}
 
 	// ── Startup Banner ──
 	fmt.Println()
 	fmt.Println("  \033[38;2;203;166;247m╔══════════════════════════════════╗\033[0m")
-	fmt.Println("  \033[38;2;203;166;247m║\033[0m  \033[1;38;2;203;166;247mdbterm\033[0m v" + version + "                  \033[38;2;203;166;247m║\033[0m")
+	fmt.Printf("  \033[38;2;203;166;247m║\033[0m  \033[1;38;2;203;166;247mdbterm\033[0m %-25s \033[38;2;203;166;247m║\033[0m\n", "v"+version)
 	fmt.Println("  \033[38;2;203;166;247m║\033[0m  \033[38;2;166;173;200mMulti-database terminal client\033[0m  \033[38;2;203;166;247m║\033[0m")
 	fmt.Println("  \033[38;2;203;166;247m╚══════════════════════════════════╝\033[0m")
 	fmt.Println()
@@ -53,114 +53,115 @@ func main() {
 
 	app := ui.NewApp()
 	if err := app.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "\033[31mFatal: %s\033[0m\n", err)
+		fmt.Fprintf(os.Stderr, "\n  \033[31mFatal error:\033[0m %s\n\n", err)
+		fmt.Fprintln(os.Stderr, "  If this keeps happening, try:")
+		fmt.Fprintln(os.Stderr, "    1. dbterm --info   (check system info)")
+		fmt.Fprintln(os.Stderr, "    2. Report at https://github.com/shreyam1008/dbterm/issues")
+		fmt.Fprintln(os.Stderr)
 		os.Exit(1)
 	}
 }
 
 func printHelp() {
-	fmt.Println(`
+	fmt.Print(`
   ` + "\033[1;38;2;203;166;247m" + `dbterm` + "\033[0m" + ` — Multi-database terminal client
 
   ` + "\033[33m" + `USAGE` + "\033[0m" + `
     dbterm                   Launch the TUI
-    dbterm --help, -h        Show this help
-    dbterm --version, -v     Show version
-    dbterm --info, -i        Show config, storage, and system info
-    dbterm --uninstall       Show uninstall instructions
+    dbterm --help             Show this help
+    dbterm --version          Show version info
+    dbterm --info             Config, storage & system info
+    dbterm --uninstall        How to remove dbterm
 
-  ` + "\033[33m" + `SUPPORTED DATABASES` + "\033[0m" + `
+  ` + "\033[33m" + `DATABASES` + "\033[0m" + `
     ⬢ PostgreSQL    ⬡ MySQL    ◆ SQLite
 
   ` + "\033[33m" + `QUICK START` + "\033[0m" + `
     1. Run ` + "\033[32m" + `dbterm` + "\033[0m" + `
-    2. Press ` + "\033[32m" + `N` + "\033[0m" + ` to add a new database connection
-    3. Choose your DB type, fill in details, and connect
-    4. Press ` + "\033[33m" + `Alt+H` + "\033[0m" + ` inside the app for keyboard shortcuts & SQL cheatsheets
+    2. Press ` + "\033[32m" + `N` + "\033[0m" + ` → add a new database connection
+    3. Fill in details → Save & Connect
+    4. Press ` + "\033[33m" + `Alt+H` + "\033[0m" + ` for SQL cheatsheets per DB
 
-  ` + "\033[33m" + `KEY BINDINGS (inside TUI)` + "\033[0m" + `
-    Alt+Q ............ Focus Query editor
-    Alt+R ............ Focus Results view
-    Alt+T ............ Focus Tables list
-    Alt+Enter ........ Execute query
-    Alt+H ............ Help & cheatsheets
-    Alt+D ............ Back to dashboard
-    Ctrl+C ........... Quit
+  ` + "\033[33m" + `KEY BINDINGS` + "\033[0m" + `
+    Alt+Q  Query editor    Alt+T  Tables list
+    Alt+R  Results view    Alt+H  Help panel
+    Alt+D  Dashboard       Alt+Enter  Execute
+    Ctrl+C Quit
 
-  ` + "\033[38;2;108;112;134m" + `Repository: https://github.com/shreyam1008/dbterm
+  ` + "\033[38;2;108;112;134m" + `https://github.com/shreyam1008/dbterm
   Based on pgterm by @nabsk911` + "\033[0m" + `
 `)
 }
 
 func printVersion() {
 	fmt.Printf("dbterm v%s (%s)\n", version, commit)
-	fmt.Printf("Go %s on %s/%s\n", runtime.Version(), runtime.GOOS, runtime.GOARCH)
+	fmt.Printf("Go %s, %s/%s\n", runtime.Version(), runtime.GOOS, runtime.GOARCH)
 }
 
 func printInfo() {
 	cfgDir := configDir()
 	cfgFile := filepath.Join(cfgDir, "connections.json")
+	goBin := goInstallPath()
 
-	// Check config size
 	cfgSize := "not created yet"
 	if info, err := os.Stat(cfgFile); err == nil {
-		cfgSize = formatBytes(info.Size())
+		cfgSize = fmtBytes(info.Size())
 	}
 
-	// Binary size
 	binSize := "unknown"
+	binPath := "unknown"
 	if ex, err := os.Executable(); err == nil {
+		binPath = ex
 		if info, err := os.Stat(ex); err == nil {
-			binSize = formatBytes(info.Size())
+			binSize = fmtBytes(info.Size())
 		}
 	}
 
-	fmt.Println(`
-  ` + "\033[1;38;2;203;166;247m" + `dbterm` + "\033[0m" + ` — System Information
+	fmt.Print(`
+  ` + "\033[1;38;2;203;166;247m" + `dbterm` + "\033[0m" + ` — System Info
 `)
-	fmt.Printf("  \033[33mVersion\033[0m          %s (%s)\n", version, commit)
-	fmt.Printf("  \033[33mGo\033[0m               %s\n", runtime.Version())
-	fmt.Printf("  \033[33mOS / Arch\033[0m        %s / %s\n", runtime.GOOS, runtime.GOARCH)
+	fmt.Printf("  \033[33mVersion\033[0m       %s (%s)\n", version, commit)
+	fmt.Printf("  \033[33mGo\033[0m            %s\n", runtime.Version())
+	fmt.Printf("  \033[33mOS / Arch\033[0m     %s / %s\n\n", runtime.GOOS, runtime.GOARCH)
+	fmt.Println("  \033[33mPATHS\033[0m")
+	fmt.Printf("  Binary        %s (%s)\n", binPath, binSize)
+	fmt.Printf("  Config        %s (%s)\n", cfgFile, cfgSize)
+	fmt.Printf("  GOPATH/bin    %s\n\n", goBin)
+	fmt.Println("  \033[33mRESOURCES\033[0m")
+	fmt.Println("  RAM (idle)    ~8–12 MB")
+	fmt.Println("  RAM (active)  ~15–30 MB (scales with result set)")
+	fmt.Println("  CPU           Near-zero (event-driven TUI)")
+	fmt.Println("  Disk          Binary only + tiny JSON config")
+	fmt.Println("  Network       Only when connected to remote DB")
 	fmt.Println()
-	fmt.Println("  \033[33mSTORAGE\033[0m")
-	fmt.Printf("  Binary size      %s\n", binSize)
-	fmt.Printf("  Config dir       %s\n", cfgDir)
-	fmt.Printf("  Config file      %s\n", cfgFile)
-	fmt.Printf("  Config size      %s\n", cfgSize)
+	fmt.Println("  \033[33mDRIVERS\033[0m       All pure Go — no CGO, no C deps")
+	fmt.Println("  PostgreSQL    lib/pq")
+	fmt.Println("  MySQL         go-sql-driver/mysql")
+	fmt.Println("  SQLite        modernc.org/sqlite")
 	fmt.Println()
-	fmt.Println("  \033[33mRESOURCE USAGE\033[0m")
-	fmt.Println("  RAM (idle)       ~8–12 MB")
-	fmt.Println("  RAM (active)     ~15–30 MB (depends on query results)")
-	fmt.Println("  CPU              Minimal (event-driven TUI, near-zero idle)")
-	fmt.Println("  Network          Only when connected to remote DB")
+	fmt.Println("  \033[33mUPDATE\033[0m        go install github.com/shreyam1008/dbterm@latest")
+	fmt.Println("  \033[33mREMOVE\033[0m        dbterm --uninstall")
 	fmt.Println()
-	fmt.Println("  \033[33mSUPPORTED DRIVERS\033[0m")
-	fmt.Println("  PostgreSQL       lib/pq (pure Go)")
-	fmt.Println("  MySQL            go-sql-driver/mysql (pure Go)")
-	fmt.Println("  SQLite           modernc.org/sqlite (pure Go, no CGO)")
-	fmt.Println()
-	fmt.Printf("  \033[38;2;108;112;134mRun \033[0mdbterm --uninstall\033[38;2;108;112;134m for removal instructions.\033[0m\n\n")
 }
 
 func printUninstall() {
 	cfgDir := configDir()
 
-	ex := "$(which dbterm)"
+	binPath := "$(which dbterm)"
 	if path, err := os.Executable(); err == nil {
-		ex = path
+		binPath = path
 	}
 
-	fmt.Println(`
-  ` + "\033[1;38;2;203;166;247m" + `dbterm` + "\033[0m" + ` — Uninstall Instructions
+	fmt.Print(`
+  ` + "\033[1;38;2;203;166;247m" + `dbterm` + "\033[0m" + ` — Uninstall
 `)
-	fmt.Println("  \033[33m1. Remove the binary\033[0m")
-	fmt.Printf("     rm %s\n\n", ex)
-	fmt.Println("  \033[33m2. Remove saved connections (optional)\033[0m")
-	fmt.Printf("     rm -rf %s\n\n", cfgDir)
-	fmt.Println("  \033[33m3. Remove Go module cache (optional)\033[0m")
-	fmt.Println("     go clean -modcache")
-	fmt.Println()
-	fmt.Println("  \033[38;2;108;112;134mThat's it! dbterm stores nothing else on your system.\033[0m")
+	fmt.Println("\n  \033[33mStep 1:\033[0m Remove the binary")
+	fmt.Printf("  $ rm %s\n", binPath)
+	fmt.Println("\n  \033[33mStep 2:\033[0m Remove saved connections (optional)")
+	fmt.Printf("  $ rm -rf %s\n", cfgDir)
+	fmt.Println("\n  \033[33mStep 3:\033[0m Clean Go cache (optional, frees ~50MB)")
+	fmt.Println("  $ go clean -modcache")
+	fmt.Println("\n  \033[38;2;166;227;161m✓\033[0m That's everything. dbterm stores nothing else.")
 	fmt.Println()
 }
 
@@ -176,7 +177,18 @@ func configPath() string {
 	return filepath.Join(configDir(), "connections.json")
 }
 
-func formatBytes(b int64) string {
+func goInstallPath() string {
+	if gopath := os.Getenv("GOPATH"); gopath != "" {
+		return filepath.Join(gopath, "bin")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "~/go/bin"
+	}
+	return filepath.Join(home, "go", "bin")
+}
+
+func fmtBytes(b int64) string {
 	switch {
 	case b >= 1<<20:
 		return fmt.Sprintf("%.1f MB", float64(b)/float64(1<<20))
