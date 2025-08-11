@@ -18,6 +18,7 @@ func (a *App) showHelp() {
   Alt + D ........... Back to Dashboard
   Alt + H ........... Toggle this Help
   Alt + S ........... Database Services
+  Alt + B ........... Backup current DB (PostgreSQL/MySQL)
   Tab ............... Cycle: Tables → Query → Results
   Esc ............... Close / Go back
   Ctrl+C ............ Quit
