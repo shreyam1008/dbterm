@@ -117,7 +117,9 @@ func (a *App) setupUI() {
 	// ── Status Bar ──
 	a.statusBar = tview.NewTextView().
 		SetDynamicColors(true).
-		SetTextAlign(tview.AlignLeft)
+		SetTextAlign(tview.AlignLeft).
+		SetWrap(false).
+		SetWordWrap(false)
 	a.statusBar.SetBackgroundColor(crust)
 	a.updateStatusBar("", 0)
 
@@ -173,33 +175,65 @@ func (a *App) setupUI() {
 
 // updateStatusBar refreshes the bottom status bar with current state
 func (a *App) updateStatusBar(extra string, rowCount int) {
+	width, _ := a.getScreenSize()
+	actionText := a.statusActionText(width)
+
 	if a.db == nil {
+		if width < 58 {
+			a.statusBar.SetText("  [gray]●[-]  [yellow]H[-]  [yellow]Q[-]")
+			return
+		}
+		if width < 80 {
+			a.statusBar.SetText("  [gray]● Disconnected[-]  │  [yellow]H[-] Help  │  [yellow]Q[-] Quit")
+			return
+		}
 		a.statusBar.SetText("  [gray]● Disconnected[-]  │  [yellow]Alt+H[-] Help  │  [yellow]Q[-] Quit")
 		return
 	}
 
-	var dbIcon string
+	var dbIcon, dbShort string
 	switch a.dbType {
 	case config.PostgreSQL:
 		dbIcon = "[#89b4fa]⬢ PostgreSQL[-]"
+		dbShort = "[#89b4fa]PG[-]"
 	case config.MySQL:
 		dbIcon = "[#f9e2af]⬡ MySQL[-]"
+		dbShort = "[#f9e2af]MY[-]"
 	case config.SQLite:
 		dbIcon = "[#a6e3a1]◆ SQLite[-]"
+		dbShort = "[#a6e3a1]SL[-]"
+	default:
+		dbShort = "[#6c7086]DB[-]"
 	}
 
-	info := fmt.Sprintf("  %s  │  [green]●[-] [white]%s[-]  │  [gray]%d tables[-]",
-		dbIcon, a.dbName, a.tableCount)
-
-	if rowCount > 0 {
-		info += fmt.Sprintf("  │  [teal]%d rows[-]", rowCount)
+	nameMax := 22
+	if width < 90 {
+		nameMax = 14
 	}
-	if extra != "" {
-		info += "  │  " + extra
+	if width < 70 {
+		nameMax = 10
 	}
 
-	info += "  │  [yellow]F5[-] Table Refresh  │  [yellow]Ctrl+F5[-] DB Refresh  │  [yellow]Alt+H[-] Help  │  [yellow]Alt+D[-] Dashboard  │  [yellow]Alt+S[-] Services"
-	a.statusBar.SetText(info)
+	parts := []string{
+		fmt.Sprintf("%s [green]●[-] [white]%s[-]", dbIcon, truncateForDisplay(a.dbName, nameMax)),
+	}
+
+	if width < 90 {
+		parts[0] = fmt.Sprintf("%s [green]●[-] [white]%s[-]", dbShort, truncateForDisplay(a.dbName, nameMax))
+	}
+
+	if width >= 90 {
+		parts = append(parts, fmt.Sprintf("[gray]%d tables[-]", a.tableCount))
+	}
+	if rowCount > 0 && width >= 64 {
+		parts = append(parts, fmt.Sprintf("[teal]%d rows[-]", rowCount))
+	}
+	if extra != "" && width >= 72 {
+		parts = append(parts, extra)
+	}
+
+	parts = append(parts, actionText)
+	a.statusBar.SetText("  " + strings.Join(parts, "  │  "))
 }
 
 // setFocusWithColor sets focus to a panel and updates border colors to indicate active panel
@@ -520,9 +554,9 @@ func (a *App) applyResponsiveLayout(width, height int) {
 	a.mainFlex.Clear()
 	a.rightFlex.Clear()
 
-	queryHeight := clamp(height/4, 4, 12)
+	queryHeight := clamp(height/5, 3, 9)
 	if height < 24 {
-		queryHeight = clamp(height/5, 3, 8)
+		queryHeight = clamp(height/6, 3, 6)
 	}
 
 	a.rightFlex.SetDirection(tview.FlexRow)
@@ -530,10 +564,20 @@ func (a *App) applyResponsiveLayout(width, height int) {
 	a.rightFlex.AddItem(a.results, 0, 1, false)
 
 	if width < 110 {
-		tablesHeight := clamp(height/3, 6, 14)
+		tablesHeight := clamp(height/4, 4, 10)
+		minResultsHeight := 8
+		usedHeight := tablesHeight + queryHeight
+		if remaining := (height - 1) - usedHeight; remaining < minResultsHeight {
+			reduceBy := min(minResultsHeight-remaining, tablesHeight-4)
+			if reduceBy > 0 {
+				tablesHeight -= reduceBy
+			}
+		}
+
 		a.mainFlex.SetDirection(tview.FlexRow)
 		a.mainFlex.AddItem(a.tables, tablesHeight, 0, true)
 		a.mainFlex.AddItem(a.rightFlex, 0, 1, false)
+		a.updateStatusBar("", a.currentResultRowCount())
 		return
 	}
 
@@ -541,6 +585,20 @@ func (a *App) applyResponsiveLayout(width, height int) {
 	a.mainFlex.SetDirection(tview.FlexColumn)
 	a.mainFlex.AddItem(a.tables, tablesWidth, 0, true)
 	a.mainFlex.AddItem(a.rightFlex, 0, 1, false)
+	a.updateStatusBar("", a.currentResultRowCount())
+}
+
+func (a *App) statusActionText(width int) string {
+	switch {
+	case width < 72:
+		return "[yellow]F5[-]  [yellow]H[-]"
+	case width < 90:
+		return "[yellow]F5[-] Refresh  │  [yellow]H[-] Help"
+	case width < 120:
+		return "[yellow]F5[-] Tbl  │  [yellow]Ctrl+F5[-] DB  │  [yellow]Alt+H[-] Help  │  [yellow]Alt+D[-] Dash"
+	default:
+		return "[yellow]F5[-] Table Refresh  │  [yellow]Ctrl+F5[-] DB Refresh  │  [yellow]Alt+H[-] Help  │  [yellow]Alt+D[-] Dashboard  │  [yellow]Alt+S[-] Services"
+	}
 }
 
 func (a *App) currentResultRowCount() int {
@@ -616,6 +674,13 @@ func clamp(value, minValue, maxValue int) int {
 
 func max(a, b int) int {
 	if a > b {
+		return a
+	}
+	return b
+}
+
+func min(a, b int) int {
+	if a < b {
 		return a
 	}
 	return b

@@ -3,9 +3,13 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
+
+	mysql "github.com/go-sql-driver/mysql"
 )
 
 // DBType represents the supported database types
@@ -142,15 +146,36 @@ func (c *ConnectionConfig) BuildConnString() string {
 		if sslMode == "" {
 			sslMode = "disable"
 		}
-		return fmt.Sprintf(
-			"host='%s' port='%s' user='%s' password='%s' dbname='%s' sslmode=%s connect_timeout=5",
-			c.Host, c.Port, c.User, c.Password, c.Database, sslMode,
-		)
+
+		user := url.User(c.User)
+		if c.Password != "" {
+			user = url.UserPassword(c.User, c.Password)
+		}
+
+		u := &url.URL{
+			Scheme: "postgres",
+			User:   user,
+			Host:   net.JoinHostPort(c.Host, c.Port),
+			Path:   c.Database,
+		}
+		q := u.Query()
+		q.Set("sslmode", sslMode)
+		q.Set("connect_timeout", "5")
+		u.RawQuery = q.Encode()
+		return u.String()
 	case MySQL:
-		return fmt.Sprintf(
-			"%s:%s@tcp(%s:%s)/%s?parseTime=true&timeout=5s&readTimeout=30s&writeTimeout=30s",
-			c.User, c.Password, c.Host, c.Port, c.Database,
-		)
+		cfg := mysql.Config{
+			User:         c.User,
+			Passwd:       c.Password,
+			Net:          "tcp",
+			Addr:         net.JoinHostPort(c.Host, c.Port),
+			DBName:       c.Database,
+			ParseTime:    true,
+			Timeout:      5 * time.Second,
+			ReadTimeout:  30 * time.Second,
+			WriteTimeout: 30 * time.Second,
+		}
+		return cfg.FormatDSN()
 	case SQLite:
 		return c.FilePath
 	default:

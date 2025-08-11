@@ -51,7 +51,13 @@ func (a *App) showServiceDashboard() {
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignCenter)
 	footer.SetBackgroundColor(crust)
-	footer.SetText("  [yellow]1[-] Toggle MySQL  │  [yellow]2[-] Toggle PostgreSQL  │  [yellow]R[-] Refresh  │  [yellow]Esc[-] Back")
+	screenW, _ := a.getScreenSize()
+	switch {
+	case screenW < 95:
+		footer.SetText("  [yellow]1[-] MySQL  │  [yellow]2[-] PG  │  [yellow]R[-] Refresh  │  [yellow]Esc[-] Back")
+	default:
+		footer.SetText("  [yellow]1[-] Toggle MySQL  │  [yellow]2[-] Toggle PostgreSQL  │  [yellow]R[-] Refresh  │  [yellow]Esc[-] Back")
+	}
 
 	// ── Layout ──
 	layout := tview.NewFlex().

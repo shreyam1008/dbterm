@@ -4,9 +4,15 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+)
+
+const (
+	maxCellPreviewRunes = 100
+	maxBinaryPreviewLen = 100
 )
 
 // populateTable fills the tview.Table with rows from a sql.Rows result set.
@@ -28,13 +34,25 @@ func populateTable(results *tview.Table, rows *sql.Rows) (int, error) {
 	}
 
 	// Header row with column names
+	hasMultipleColumns := len(columnNames) > 1
+	compactFirstCol := hasMultipleColumns && isLikelyCompactColumn(columnNames[0])
 	for i, name := range columnNames {
-		results.SetCell(0, i, &tview.TableCell{
-			Text:            strings.ToUpper(name),
-			Color:           peach,
-			NotSelectable:   true,
-			BackgroundColor: mantle,
-		})
+		expansion := 0
+		if !hasMultipleColumns || i > 0 {
+			expansion = 1
+		}
+
+		cell := tview.NewTableCell(strings.ToUpper(name)).
+			SetTextColor(peach).
+			SetSelectable(false).
+			SetBackgroundColor(mantle).
+			SetExpansion(expansion)
+
+		// Keep the first column compact (often ID/index), so data columns can stretch.
+		if compactFirstCol && i == 0 {
+			cell.SetMaxWidth(18)
+		}
+		results.SetCell(0, i, cell)
 	}
 
 	values := make([]any, len(columnNames))
@@ -51,10 +69,18 @@ func populateTable(results *tview.Table, rows *sql.Rows) (int, error) {
 
 		for colIndex, val := range values {
 			cellValue, cellColor := formatCellValue(val)
-			results.SetCell(rowIndex, colIndex, &tview.TableCell{
-				Text:  cellValue,
-				Color: cellColor,
-			})
+			expansion := 0
+			if !hasMultipleColumns || colIndex > 0 {
+				expansion = 1
+			}
+
+			cell := tview.NewTableCell(cellValue).
+				SetTextColor(cellColor).
+				SetExpansion(expansion)
+			if compactFirstCol && colIndex == 0 {
+				cell.SetMaxWidth(18)
+			}
+			results.SetCell(rowIndex, colIndex, cell)
 		}
 		rowIndex++
 	}
@@ -82,11 +108,12 @@ func formatCellValue(val any) (string, tcell.Color) {
 
 	switch v := val.(type) {
 	case []byte:
-		s := string(v)
-		if len(s) > 100 {
-			return s[:97] + "...", text
+		if len(v) > maxBinaryPreviewLen {
+			return string(v[:maxBinaryPreviewLen-3]) + "...", text
 		}
-		return s, text
+		return string(v), text
+	case string:
+		return truncateForDisplay(v, maxCellPreviewRunes), text
 	case bool:
 		if v {
 			return "true", green
@@ -97,10 +124,26 @@ func formatCellValue(val any) (string, tcell.Color) {
 	case float64:
 		return fmt.Sprintf("%.4g", v), teal
 	default:
-		s := fmt.Sprintf("%v", v)
-		if len(s) > 100 {
-			return s[:97] + "...", text
-		}
-		return s, text
+		return truncateForDisplay(fmt.Sprintf("%v", v), maxCellPreviewRunes), text
 	}
+}
+
+func truncateForDisplay(value string, maxRunes int) string {
+	if maxRunes <= 0 || value == "" {
+		return ""
+	}
+	if utf8.RuneCountInString(value) <= maxRunes {
+		return value
+	}
+
+	runes := []rune(value)
+	if maxRunes <= 3 {
+		return string(runes[:maxRunes])
+	}
+	return string(runes[:maxRunes-3]) + "..."
+}
+
+func isLikelyCompactColumn(columnName string) bool {
+	name := strings.ToLower(strings.TrimSpace(columnName))
+	return name == "id" || strings.HasSuffix(name, "_id")
 }
