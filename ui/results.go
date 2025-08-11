@@ -10,7 +10,12 @@ import (
 	"github.com/shreyam1008/dbterm/config"
 )
 
-const tablePreviewLimit = 100
+const (
+	defaultTablePreviewLimit   = 100
+	unlimitedTablePreviewLimit = -1
+)
+
+var tablePreviewSteps = []int{50, 100, 250, 500, 1000, 2500, 5000, 10000}
 
 type resultSelectionState struct {
 	row             int
@@ -33,7 +38,10 @@ func (a *App) LoadResults() error {
 
 	// DB-specific quoting for identifiers
 	quotedTable := quoteIdentifier(a.dbType, a.selectedTable)
-	query := fmt.Sprintf("SELECT * FROM %s LIMIT %d", quotedTable, tablePreviewLimit)
+	query := fmt.Sprintf("SELECT * FROM %s", quotedTable)
+	if limit := a.effectiveResultLimit(); limit > 0 {
+		query = fmt.Sprintf("%s LIMIT %d", query, limit)
+	}
 
 	a.queryStart = time.Now()
 

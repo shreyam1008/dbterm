@@ -49,6 +49,7 @@ type App struct {
 	statusBar     *tview.TextView
 	tableCount    int
 	queryStart    time.Time
+	resultLimit   int // >0 preview rows, -1 means no limit (all rows)
 
 	// Layout components for scaling
 	rightFlex *tview.Flex
@@ -74,8 +75,9 @@ func NewApp() *App {
 		}
 	}
 	return &App{
-		app:   tview.NewApplication(),
-		store: store,
+		app:         tview.NewApplication(),
+		store:       store,
+		resultLimit: defaultTablePreviewLimit,
 	}
 }
 
@@ -228,6 +230,12 @@ func (a *App) updateStatusBar(extra string, rowCount int) {
 	if rowCount > 0 && width >= 64 {
 		parts = append(parts, fmt.Sprintf("[teal]%d rows[-]", rowCount))
 	}
+	if width >= 84 {
+		parts = append(parts, a.resultLimitStatus(width))
+	}
+	if width >= 104 {
+		parts = append(parts, a.sortStatus(width))
+	}
 	if extra != "" && width >= 72 {
 		parts = append(parts, extra)
 	}
@@ -343,6 +351,136 @@ func (a *App) toggleSort(col int) {
 		a.sortAsc = true
 	}
 	a.applySort()
+	a.updateStatusBar("", a.currentResultRowCount())
+}
+
+func (a *App) effectiveResultLimit() int {
+	if a.resultLimit == 0 {
+		return defaultTablePreviewLimit
+	}
+	return a.resultLimit
+}
+
+func (a *App) setResultLimit(limit int) {
+	if limit == 0 {
+		limit = defaultTablePreviewLimit
+	}
+	if limit != unlimitedTablePreviewLimit && limit < tablePreviewSteps[0] {
+		limit = tablePreviewSteps[0]
+	}
+	if a.resultLimit == limit {
+		return
+	}
+
+	prevLimit := a.resultLimit
+	a.resultLimit = limit
+	if a.db == nil || a.selectedTable == "" {
+		a.updateStatusBar("", a.currentResultRowCount())
+		return
+	}
+
+	if err := a.LoadResults(); err != nil {
+		a.resultLimit = prevLimit
+		a.ShowAlert(fmt.Sprintf("%s Could not refresh results after changing preview limit:\n\n%v", iconWarn, err), "main")
+		return
+	}
+	a.flashStatus(fmt.Sprintf("[green]%s Preview %s[-]", iconRefresh, a.resultLimitReadable()), a.currentResultRowCount(), 1400*time.Millisecond)
+}
+
+func (a *App) increaseResultLimit() {
+	current := a.effectiveResultLimit()
+	if current == unlimitedTablePreviewLimit {
+		return
+	}
+	next := unlimitedTablePreviewLimit
+	for _, step := range tablePreviewSteps {
+		if step > current {
+			next = step
+			break
+		}
+	}
+	a.setResultLimit(next)
+}
+
+func (a *App) decreaseResultLimit() {
+	current := a.effectiveResultLimit()
+	if current == unlimitedTablePreviewLimit {
+		a.setResultLimit(tablePreviewSteps[len(tablePreviewSteps)-1])
+		return
+	}
+
+	prev := tablePreviewSteps[0]
+	for _, step := range tablePreviewSteps {
+		if step >= current {
+			break
+		}
+		prev = step
+	}
+	a.setResultLimit(prev)
+}
+
+func (a *App) toggleUnlimitedResultLimit() {
+	if a.effectiveResultLimit() == unlimitedTablePreviewLimit {
+		a.setResultLimit(defaultTablePreviewLimit)
+		return
+	}
+	a.setResultLimit(unlimitedTablePreviewLimit)
+}
+
+func (a *App) resultLimitReadable() string {
+	if a.effectiveResultLimit() == unlimitedTablePreviewLimit {
+		return "all rows"
+	}
+	return fmt.Sprintf("%d rows", a.effectiveResultLimit())
+}
+
+func (a *App) resultLimitStatus(width int) string {
+	limit := a.effectiveResultLimit()
+	if width < 120 {
+		if limit == unlimitedTablePreviewLimit {
+			return "[#a6adc8]lim[-]:[yellow]all[-]"
+		}
+		return fmt.Sprintf("[#a6adc8]lim[-]:[yellow]%d[-]", limit)
+	}
+
+	if limit == unlimitedTablePreviewLimit {
+		return "[#a6adc8]preview[-] [yellow]all[-]"
+	}
+	return fmt.Sprintf("[#a6adc8]preview[-] [yellow]%d[-]", limit)
+}
+
+func (a *App) sortStatus(width int) string {
+	if a.sortColumn < 0 {
+		if width < 120 {
+			return "[#6c7086]s:--[-]"
+		}
+		return "[#6c7086]sort: none[-]"
+	}
+
+	col := fmt.Sprintf("col%d", a.sortColumn+1)
+	if a.results != nil && a.sortColumn >= 0 && a.sortColumn < a.results.GetColumnCount() {
+		if cell := a.results.GetCell(0, a.sortColumn); cell != nil {
+			name := strings.TrimSpace(cell.Text)
+			name = strings.TrimSuffix(strings.TrimSuffix(name, " ▲"), " ▼")
+			if name != "" {
+				col = strings.ToLower(name)
+			}
+		}
+	}
+
+	if width < 120 {
+		dir := "↑"
+		if !a.sortAsc {
+			dir = "↓"
+		}
+		return fmt.Sprintf("[#a6adc8]s[-]:[yellow]%s%s[-]", truncateForDisplay(col, 8), dir)
+	}
+
+	dir := "asc"
+	if !a.sortAsc {
+		dir = "desc"
+	}
+	return fmt.Sprintf("[#a6adc8]sort[-] [yellow]%s %s[-]", truncateForDisplay(col, 14), dir)
 }
 
 // applySort sorts the results table based on current sort state
@@ -506,6 +644,15 @@ func (a *App) setupKeyBindings() {
 			case 'f', 'F':
 				a.toggleExpandResults()
 				return nil
+			case '=', '+':
+				a.increaseResultLimit()
+				return nil
+			case '-', '_':
+				a.decreaseResultLimit()
+				return nil
+			case '0':
+				a.toggleUnlimitedResultLimit()
+				return nil
 			}
 		}
 		return event
@@ -595,9 +742,10 @@ func (a *App) statusActionText(width int) string {
 	case width < 90:
 		return fmt.Sprintf("[yellow]F5[-] %s Refresh  │  [yellow]H[-] Help %s", iconRefresh, iconHelp)
 	case width < 120:
-		return fmt.Sprintf("[yellow]F5[-] Tbl %s  │  [yellow]Ctrl+F5[-] DB %s  │  [yellow]Alt+H[-] Help  │  [yellow]Alt+D[-] Dash %s", iconRefresh, iconRefresh, iconDashboard)
+		return fmt.Sprintf("[yellow]F5[-] Tbl %s  │  [yellow]Ctrl+F5[-] DB %s  │  [yellow]Alt+=/-[-] Rows  │  [yellow]Alt+H[-] Help  │  [yellow]Alt+D[-] Dash %s",
+			iconRefresh, iconRefresh, iconDashboard)
 	default:
-		return fmt.Sprintf("[yellow]F5[-] Table %s  │  [yellow]Ctrl+F5[-] DB %s  │  [yellow]Alt+H[-] Help %s  │  [yellow]Alt+D[-] Dashboard %s  │  [yellow]Alt+S[-] Services %s",
+		return fmt.Sprintf("[yellow]F5[-] Table %s  │  [yellow]Ctrl+F5[-] DB %s  │  [yellow]Alt+=/-[-] Preview  │  [yellow]Alt+0[-] All  │  [yellow]Alt+H[-] Help %s  │  [yellow]Alt+D[-] Dashboard %s  │  [yellow]Alt+S[-] Services %s",
 			iconRefresh, iconRefresh, iconHelp, iconDashboard, iconServices)
 	}
 }

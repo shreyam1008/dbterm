@@ -8,67 +8,116 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  release:
-    name: Build & Release
+  build-core:
+    name: Build Core Binaries
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # Fetch all history/tags to calculate next version
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23' # Use stable go version
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
 
-      - name: Install dependencies
-        run: go mod download
-
-      - name: Build Binaries
+      - name: Build Core Artifacts
         run: |
           mkdir -p dist
-          # Build using Makefile (or manually if Makefile isn't trusted in CI env, but we'll use manual here for clarity)
-          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o dist/dbterm-linux-amd64 .
-          GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o dist/dbterm-linux-arm64 .
-          GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o dist/dbterm-darwin-amd64 .
-          GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o dist/dbterm-darwin-arm64 .
-          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o dist/dbterm-windows-amd64.exe .
+          GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o dist/dbterm-linux-amd64 .
+          GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o dist/dbterm-linux-arm64 .
+          GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o dist/dbterm-darwin-amd64 .
+          GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o dist/dbterm-darwin-arm64 .
+          GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o dist/dbterm-windows-amd64.exe .
+
+      - name: Upload Core Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-core
+          path: dist/*
+          if-no-files-found: error
+
+  build-ios:
+    name: Build iOS Artifact
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Build iOS arm64 C archive
+        run: |
+          mkdir -p dist
+          SDKROOT="$(xcrun --sdk iphoneos --show-sdk-path)"
+          CC="$(xcrun --sdk iphoneos --find clang)"
+          GOOS=ios GOARCH=arm64 CGO_ENABLED=1 CC="$CC" SDKROOT="$SDKROOT" \
+          CGO_CFLAGS="-isysroot $SDKROOT -miphoneos-version-min=13.0" \
+          CGO_LDFLAGS="-isysroot $SDKROOT -miphoneos-version-min=13.0" \
+          go build -trimpath -buildmode=c-archive -ldflags="-s -w" -o dist/dbterm-ios-arm64.a .
+
+      - name: Upload iOS Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-ios
+          path: |
+            dist/dbterm-ios-arm64.a
+            dist/dbterm-ios-arm64.h
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build-core, build-ios]
+    steps:
+      - name: Checkout code (tags)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          fetch-tags: true
+
+      - name: Download built artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          merge-multiple: true
+          path: dist
 
       - name: Generate Next Version
         id: bump_version
         run: |
-          # Get the latest tag (default to v0.0.0 if none)
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          LATEST_TAG=$(git tag -l "v*" --sort=-v:refname | head -n1)
+          if [ -z "$LATEST_TAG" ]; then
+            LATEST_TAG="v0.0.0"
+          fi
           echo "Latest tag: $LATEST_TAG"
-          
-          # Remove 'v' prefix
+
           VERSION=${LATEST_TAG#v}
-          
-          # Split (assuming semver X.Y.Z)
           IFS='.' read -r -a PARTS <<< "$VERSION"
-          MAJOR=${PARTS[0]}
-          MINOR=${PARTS[1]}
-          PATCH=${PARTS[2]}
-          
-          # Default to 0 if empty (handle v0 case)
-          : ${MAJOR:=0}
-          : ${MINOR:=0}
-          : ${PATCH:=0}
-          
-          # Increment patch
+          MAJOR=${PARTS[0]:-0}
+          MINOR=${PARTS[1]:-0}
+          PATCH=${PARTS[2]:-0}
           NEW_PATCH=$((PATCH + 1))
           NEW_TAG="v$MAJOR.$MINOR.$NEW_PATCH"
-          
-          echo "New version: $NEW_TAG"
-          echo "tag_name=$NEW_TAG" >> $GITHUB_OUTPUT
 
-          # Get commit message for release title
+          echo "New version: $NEW_TAG"
+          echo "tag_name=$NEW_TAG" >> "$GITHUB_OUTPUT"
+
           COMMIT_MSG=$(git log -1 --pretty=%s)
-          echo "commit_msg<<EOF" >> $GITHUB_OUTPUT
-          echo "$COMMIT_MSG" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          echo "commit_msg<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$COMMIT_MSG" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
 
       - name: Generate Checksums
         run: |
@@ -80,11 +129,5 @@ jobs:
         with:
           tag_name: ${{ steps.bump_version.outputs.tag_name }}
           name: ${{ steps.bump_version.outputs.tag_name }} - ${{ steps.bump_version.outputs.commit_msg }}
-          files: |
-            dist/dbterm-linux-amd64
-            dist/dbterm-linux-arm64
-            dist/dbterm-darwin-amd64
-            dist/dbterm-darwin-arm64
-            dist/dbterm-windows-amd64.exe
-            dist/checksums.txt
+          files: dist/*
           generate_release_notes: true
