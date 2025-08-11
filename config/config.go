@@ -164,17 +164,17 @@ func (c *ConnectionConfig) BuildConnString() string {
 		u.RawQuery = q.Encode()
 		return u.String()
 	case MySQL:
-		cfg := mysql.Config{
-			User:         c.User,
-			Passwd:       c.Password,
-			Net:          "tcp",
-			Addr:         net.JoinHostPort(c.Host, c.Port),
-			DBName:       c.Database,
-			ParseTime:    true,
-			Timeout:      5 * time.Second,
-			ReadTimeout:  30 * time.Second,
-			WriteTimeout: 30 * time.Second,
-		}
+		// Use NewConfig so driver defaults stay intact (notably AllowNativePasswords=true).
+		cfg := mysql.NewConfig()
+		cfg.User = c.User
+		cfg.Passwd = c.Password
+		cfg.Net = "tcp"
+		cfg.Addr = net.JoinHostPort(c.Host, c.Port)
+		cfg.DBName = c.Database
+		cfg.ParseTime = true
+		cfg.Timeout = 5 * time.Second
+		cfg.ReadTimeout = 30 * time.Second
+		cfg.WriteTimeout = 30 * time.Second
 		return cfg.FormatDSN()
 	case SQLite:
 		return c.FilePath
