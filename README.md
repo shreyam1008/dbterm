@@ -1,49 +1,108 @@
-# pgterm
+# dbterm
 
-**pgterm** is a terminal-based interface (TUI) for PostgreSQL, written in Go. It allows you to connect to a PostgreSQL database, run queries, and browse tables directly from your terminal.
+> A mini DBeaver for your terminal — manage **PostgreSQL**, **MySQL**, and **SQLite** databases from one beautiful TUI.
 
-## Features
+Built on top of [nabsk911/pgterm](https://github.com/nabsk911/pgterm) — the original PostgreSQL terminal client. This is a rewrite with multi-database support, persistent configurations, and a full connection manager.
 
-- **Connection Manager**: Easily connect to any PostgreSQL database.
-- **Table Browser**: View list of tables in the database.
-- **SQL Query Editor**: Write and execute SQL queries.
-- **Result Viewer**: View query results in a formatted table.
-- **Keyboard Navigation**: Efficient keybindings for quick navigation.
+---
 
-## Shortcuts
+## ✨ Features
 
-| Key Binding         | Action               |
-| ------------------- | -------------------- |
-| `Alt` + `q`         | Focus Query Input    |
-| `Alt` + `r`         | Focus Results View   |
-| `Alt` + `t`         | Focus Tables List    |
-| `Alt` + `Enter`     | Execute Query        |
-| `Tab` / `Shift+Tab` | Navigate Up and Down |
+### Multi-Database Engine
+- **PostgreSQL** — full support via `lib/pq`
+- **MySQL** — full support via `go-sql-driver/mysql`
+- **SQLite** — pure Go driver, no CGO needed (`modernc.org/sqlite`)
 
-## Installation
+### Connection Manager (Dashboard)
+- Save unlimited database connections
+- See all connections at a glance — **type**, **host**, **status** (active/inactive), **last used**
+- **Connect**, **Edit**, **Delete** any saved connection
+- Dynamic forms — SQLite only asks for file path, PG/MySQL ask for host/port/user/pass/db
+- **Save Only** or **Save & Connect** — your choice
 
-You can install `pgterm` directly using `go install`:
+### SQL Workspace
+- **Table Browser** — click any table to preview its data
+- **Query Editor** — write and execute any SQL
+- **Result Viewer** — formatted, scrollable results table
+- **Status Bar** — shows connected DB type, connection status
+
+### Help & Cheatsheets
+- Built-in SQL cheatsheets for each database engine
+- Keyboard shortcuts reference
+- Common queries, schema inspection commands, performance tips
+
+### Persistent Config
+- Connections saved at `~/.config/dbterm/connections.json`
+- Survives restarts — open `dbterm` and your connections are waiting
+
+---
+
+## 📦 Installation
 
 ```bash
-go install github.com/nabsk911/pgterm@latest
+go install github.com/shreyam1008/dbterm@latest
 ```
 
-Make sure your `GOPATH` bin directory is in your system `PATH`.
-
-## Usage
-
-Run the application:
+Make sure `$GOPATH/bin` (usually `~/go/bin`) is in your `PATH`:
 
 ```bash
-pgterm
+export PATH=$PATH:$(go env GOPATH)/bin
 ```
 
-## Screenshots
+Then run:
 
-### Connection Form
+```bash
+dbterm
+```
 
-![Connection Modal](assets/connect_db.png)
+---
+
+## ⌨️ Keyboard Shortcuts
+
+### Dashboard
+
+| Key     | Action              |
+| ------- | ------------------- |
+| `Enter` | Connect to selected |
+| `N`     | New connection      |
+| `E`     | Edit selected       |
+| `D`     | Delete selected     |
+| `H`     | Help & Cheatsheets  |
+| `Q`     | Quit                |
 
 ### Main Interface
 
-![Main Interface](assets/main_ui.png)
+| Key             | Action             |
+| --------------- | ------------------ |
+| `Alt + Q`       | Focus Query editor |
+| `Alt + R`       | Focus Results view |
+| `Alt + T`       | Focus Tables list  |
+| `Alt + Enter`   | Execute Query      |
+| `Alt + H`       | Toggle Help panel  |
+| `Alt + D`       | Back to Dashboard  |
+| `Tab/Shift+Tab` | Navigate fields    |
+| `Esc`           | Close modal        |
+
+---
+
+## 🗄️ Supported Databases
+
+| Database   | Driver                | Connection Info                    |
+| ---------- | --------------------- | ---------------------------------- |
+| PostgreSQL | `lib/pq`              | Host, Port, User, Password, DB     |
+| MySQL      | `go-sql-driver/mysql` | Host, Port, User, Password, DB     |
+| SQLite     | `modernc.org/sqlite`  | File path only (pure Go, no CGO)   |
+
+---
+
+## 🙏 Credits
+
+This project is built on top of **[pgterm](https://github.com/nabsk911/pgterm)** by **[@nabsk911](https://github.com/nabsk911)** — a clean, minimal PostgreSQL TUI client. 
+
+**dbterm** extends it into a multi-database terminal client with connection management, persistent configs, and SQL cheatsheets.
+
+---
+
+## License
+
+MIT

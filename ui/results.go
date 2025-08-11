@@ -1,9 +1,23 @@
 package ui
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 func (a *App) LoadResults() error {
-	query := fmt.Sprintf("SELECT * FROM %q LIMIT 100", a.selectedTable)
+	// Use backtick quoting for MySQL, double-quote for PG, and plain for SQLite
+	var query string
+	switch a.dbType {
+	case "mysql":
+		query = fmt.Sprintf("SELECT * FROM `%s` LIMIT 100", a.selectedTable)
+	case "sqlite":
+		query = fmt.Sprintf("SELECT * FROM \"%s\" LIMIT 100", a.selectedTable)
+	default:
+		query = fmt.Sprintf("SELECT * FROM %q LIMIT 100", a.selectedTable)
+	}
+
+	a.queryStart = time.Now()
 
 	rows, err := a.db.Query(query)
 	if err != nil {
@@ -16,6 +30,5 @@ func (a *App) LoadResults() error {
 	}
 
 	a.results.ScrollToBeginning()
-
 	return nil
 }
