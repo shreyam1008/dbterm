@@ -3,6 +3,9 @@ package ui
 import (
 	"database/sql"
 	"fmt"
+	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -46,6 +49,17 @@ type App struct {
 	statusBar     *tview.TextView
 	tableCount    int
 	queryStart    time.Time
+
+	// Layout components for scaling
+	rightFlex *tview.Flex
+	mainFlex  *tview.Flex
+
+	// Sorting state
+	sortColumn int  // current sort column index (-1 = none)
+	sortAsc    bool // true = ascending
+
+	// UI state
+	tableExpanded bool // results fullscreen mode
 }
 
 // NewApp creates a new dbterm application instance
@@ -67,10 +81,15 @@ func (a *App) setupUI() {
 	tview.Styles.PrimitiveBackgroundColor = bg
 	tview.Styles.ContrastBackgroundColor = bg
 
+	// init sorting state
+	a.sortColumn = -1
+	a.sortAsc = true
+
 	// ── Results Table ──
 	a.results = tview.NewTable().
 		SetBorders(true).
-		SetSelectable(true, false).
+		SetSelectable(true, true).
+		SetFixed(1, 0). // ★ Freeze header row
 		SetSelectedStyle(tcell.StyleDefault.Background(blue).Foreground(crust))
 	a.results.SetBorder(true).
 		SetTitle(" Results [yellow](Alt+R)[-] ").
@@ -101,22 +120,34 @@ func (a *App) setupUI() {
 	a.updateStatusBar("", 0)
 
 	// ── Layout ──
-	rightFlex := tview.NewFlex().
+	a.rightFlex = tview.NewFlex().
 		SetDirection(tview.FlexRow).
 		AddItem(a.queryInput, 0, 1, false).
 		AddItem(a.results, 0, 2, false)
 
-	mainFlex := tview.NewFlex().
+	a.mainFlex = tview.NewFlex().
 		AddItem(a.tables, 0, 1, true).
-		AddItem(rightFlex, 0, 3, false)
+		AddItem(a.rightFlex, 0, 3, false)
 
 	mainLayout := tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(mainFlex, 0, 1, true).
+		AddItem(a.mainFlex, 0, 1, true).
 		AddItem(a.statusBar, 1, 0, false)
 
 	a.pages = tview.NewPages()
 	a.pages.AddPage("main", mainLayout, true, false)
+
+	// ── Results table input: sort on 's', key navigation ──
+	a.results.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Rune() {
+		case 's', 'S':
+			// Sort by current column
+			_, col := a.results.GetSelection()
+			a.sortByColumn(col)
+			return nil
+		}
+		return event
+	})
 
 	// Execute query on Alt+Enter
 	a.queryInput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
@@ -161,8 +192,159 @@ func (a *App) updateStatusBar(extra string, rowCount int) {
 		info += "  │  " + extra
 	}
 
-	info += "  │  [yellow]Alt+H[-] Help  │  [yellow]Alt+D[-] Dashboard"
+	info += "  │  [yellow]F5[-] Refresh  │  [yellow]Alt+H[-] Help  │  [yellow]Alt+D[-] Dashboard  │  [yellow]Alt+S[-] Services"
 	a.statusBar.SetText(info)
+}
+
+// setFocusWithColor sets focus to a panel and updates border colors to indicate active panel
+func (a *App) setFocusWithColor(target tview.Primitive) {
+	// Reset all panel borders to inactive color
+	a.tables.SetBorderColor(surface1)
+	a.queryInput.SetBorderColor(surface1)
+	a.results.SetBorderColor(surface1)
+
+	// Set the focused panel border to its accent color
+	switch target {
+	case a.tables:
+		a.tables.SetBorderColor(mauve)
+	case a.queryInput:
+		a.queryInput.SetBorderColor(blue)
+	case a.results:
+		a.results.SetBorderColor(green)
+	}
+
+	a.app.SetFocus(target)
+}
+
+// cycleFocus cycles Tab focus: Tables → Query → Results → Tables
+func (a *App) cycleFocus() {
+	current := a.app.GetFocus()
+	switch current {
+	case a.tables:
+		a.setFocusWithColor(a.queryInput)
+	case a.queryInput:
+		a.setFocusWithColor(a.results)
+	default:
+		a.setFocusWithColor(a.tables)
+	}
+}
+
+// toggleExpandResults toggles between fullscreen results and normal layout
+func (a *App) toggleExpandResults() {
+	if a.tableExpanded {
+		// Restore normal layout
+		a.mainFlex.Clear()
+		a.mainFlex.AddItem(a.tables, 0, 1, true)
+		a.mainFlex.AddItem(a.rightFlex, 0, 3, false)
+
+		a.rightFlex.Clear()
+		a.rightFlex.AddItem(a.queryInput, 0, 1, false)
+		a.rightFlex.AddItem(a.results, 0, 2, false)
+
+		a.tableExpanded = false
+		a.setFocusWithColor(a.results)
+	} else {
+		// Expand results to fill everything
+		a.mainFlex.Clear()
+		a.mainFlex.AddItem(a.results, 0, 1, true)
+
+		a.tableExpanded = true
+		a.setFocusWithColor(a.results)
+	}
+}
+
+// refreshData reloads tables list and current table data
+func (a *App) refreshData() {
+	if a.db == nil {
+		return
+	}
+	a.LoadTables()
+	if a.selectedTable != "" {
+		a.LoadResults()
+	}
+	a.updateStatusBar("[green]↻ Refreshed[-]", 0)
+}
+
+// sortByColumn sorts the results table by the given column index
+func (a *App) sortByColumn(col int) {
+	rowCount := a.results.GetRowCount()
+	if rowCount <= 2 { // header + at most 1 row, nothing to sort
+		return
+	}
+
+	colCount := a.results.GetColumnCount()
+	if col < 0 || col >= colCount {
+		return
+	}
+
+	// Toggle sort direction if same column, else reset to ascending
+	if a.sortColumn == col {
+		a.sortAsc = !a.sortAsc
+	} else {
+		a.sortColumn = col
+		a.sortAsc = true
+	}
+
+	// Collect data rows (skip header at row 0)
+	type rowData struct {
+		cells []*tview.TableCell
+	}
+	rows := make([]rowData, 0, rowCount-1)
+	for r := 1; r < rowCount; r++ {
+		rd := rowData{cells: make([]*tview.TableCell, colCount)}
+		for c := 0; c < colCount; c++ {
+			rd.cells[c] = a.results.GetCell(r, c)
+		}
+		rows = append(rows, rd)
+	}
+
+	// Sort by the selected column
+	asc := a.sortAsc
+	sort.SliceStable(rows, func(i, j int) bool {
+		textI := rows[i].cells[col].Text
+		textJ := rows[j].cells[col].Text
+
+		// Try numeric sort first
+		numI, errI := strconv.ParseFloat(strings.TrimSpace(textI), 64)
+		numJ, errJ := strconv.ParseFloat(strings.TrimSpace(textJ), 64)
+		if errI == nil && errJ == nil {
+			if asc {
+				return numI < numJ
+			}
+			return numI > numJ
+		}
+
+		// Fall back to string sort (case-insensitive)
+		if asc {
+			return strings.ToLower(textI) < strings.ToLower(textJ)
+		}
+		return strings.ToLower(textI) > strings.ToLower(textJ)
+	})
+
+	// Re-apply sorted rows to the table
+	for r, rd := range rows {
+		for c, cell := range rd.cells {
+			a.results.SetCell(r+1, c, cell)
+		}
+	}
+
+	// Update header to show sort indicator
+	for c := 0; c < colCount; c++ {
+		headerCell := a.results.GetCell(0, c)
+		// Strip any existing sort indicators
+		name := strings.TrimRight(headerCell.Text, " ▲▼")
+		if c == col {
+			if a.sortAsc {
+				headerCell.Text = name + " ▲"
+			} else {
+				headerCell.Text = name + " ▼"
+			}
+		} else {
+			headerCell.Text = name
+		}
+	}
+
+	a.results.Select(1, col)
 }
 
 func (a *App) setupKeyBindings() {
@@ -173,6 +355,12 @@ func (a *App) setupKeyBindings() {
 		if event.Key() == tcell.KeyCtrlC {
 			a.cleanup()
 			a.app.Stop()
+			return nil
+		}
+
+		// F5 — Refresh data (works from main page)
+		if event.Key() == tcell.KeyF5 && page == "main" {
+			a.refreshData()
 			return nil
 		}
 
@@ -196,6 +384,10 @@ func (a *App) setupKeyBindings() {
 					a.showDashboard()
 				}
 				return nil
+			case 's', 'S':
+				// Show service dashboard from anywhere
+				a.showServiceDashboard()
+				return nil
 			}
 		}
 
@@ -203,16 +395,25 @@ func (a *App) setupKeyBindings() {
 			return event
 		}
 
+		// Tab — cycle focus between panels
+		if event.Key() == tcell.KeyTab {
+			a.cycleFocus()
+			return nil
+		}
+
 		if event.Modifiers()&tcell.ModAlt != 0 {
 			switch event.Rune() {
 			case 't', 'T':
-				a.app.SetFocus(a.tables)
+				a.setFocusWithColor(a.tables)
 				return nil
 			case 'q', 'Q':
-				a.app.SetFocus(a.queryInput)
+				a.setFocusWithColor(a.queryInput)
 				return nil
 			case 'r', 'R':
-				a.app.SetFocus(a.results)
+				a.setFocusWithColor(a.results)
+				return nil
+			case 'f', 'F':
+				a.toggleExpandResults()
 				return nil
 			}
 		}

@@ -18,11 +18,17 @@ func (a *App) showDashboard() {
 	header.SetBackgroundColor(bg)
 
 	connCount := len(a.store.Connections)
-	headerText := `
+
+	// Get quick service status for the header
+	mysqlStatus := getQuickStatus("mysql")
+	pgStatus := getQuickStatus("postgresql")
+
+	headerText := fmt.Sprintf(`
 [::b][#cba6f7]╔══════════════════════════════════╗
 ║           d b t e r m            ║
 ╚══════════════════════════════════╝[-][-]
-[#a6adc8]PostgreSQL  •  MySQL  •  SQLite[-]`
+[#a6adc8]PostgreSQL  •  MySQL  •  SQLite[-]
+%s  %s   [#6c7086]Press S for details[-]`, pgStatus, mysqlStatus)
 	header.SetText(headerText)
 
 	// ── Connection List ──
@@ -96,15 +102,15 @@ func (a *App) showDashboard() {
 	actions.SetBackgroundColor(crust)
 
 	if connCount > 0 {
-		actions.SetText("  [green]Enter[-] Connect  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [teal]H[-] Help  │  [#cba6f7]Q[-] Quit")
+		actions.SetText("  [green]Enter[-] Connect  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [#94e2d5]S[-] Services  │  [teal]H[-] Help  │  [#cba6f7]Q[-] Quit")
 	} else {
-		actions.SetText("  [yellow]N[-] New Connection  │  [teal]H[-] Help  │  [#cba6f7]Q[-] Quit")
+		actions.SetText("  [yellow]N[-] New Connection  │  [#94e2d5]S[-] Services  │  [teal]H[-] Help  │  [#cba6f7]Q[-] Quit")
 	}
 
 	// ── Layout ──
 	layout := tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(header, 6, 0, false).
+		AddItem(header, 8, 0, false).
 		AddItem(connList, 0, 1, true).
 		AddItem(actions, 1, 0, false)
 
@@ -139,6 +145,9 @@ func (a *App) showDashboard() {
 			return nil
 		case 'h', 'H':
 			a.showHelp()
+			return nil
+		case 's', 'S':
+			a.showServiceDashboard()
 			return nil
 		}
 
