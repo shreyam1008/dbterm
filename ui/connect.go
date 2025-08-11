@@ -2,14 +2,29 @@ package ui
 
 import (
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
+	mysql "github.com/go-sql-driver/mysql"
 	"github.com/rivo/tview"
 	"github.com/shreyam1008/dbterm/config"
 	"github.com/shreyam1008/dbterm/utils"
+)
+
+const (
+	connLabelName     = "Name (*)"
+	connLabelType     = "Type (*) " + iconDropdown
+	connLabelDSN      = "Connection String (Optional)"
+	connLabelHost     = "Host"
+	connLabelPort     = "Port"
+	connLabelUser     = "User"
+	connLabelPassword = "Password"
+	connLabelDatabase = "Database"
+	connLabelFilePath = "File Path (SQLite)"
 )
 
 // showConnectionForm displays a form for new or editing a connection
@@ -18,28 +33,19 @@ func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex in
 
 	form := tview.NewForm()
 
-	// ── Name ──
-	nameDefault := ""
-	if isEdit {
-		nameDefault = editConn.Name
-	}
-	form.AddInputField("Name (*)", nameDefault, 30, nil, nil)
-
-	// ── Type Dropdown ──
 	dbTypes := []string{"PostgreSQL", "MySQL", "SQLite"}
 	initialType := 0
+	nameDefault := ""
+	connStringDefault := ""
+	hostDefault, portDefault, userDefault, passDefault, dbDefault, fileDefault := "localhost", "5432", "", "", "", ""
 	if isEdit {
+		nameDefault = editConn.Name
 		switch editConn.Type {
 		case config.MySQL:
 			initialType = 1
 		case config.SQLite:
 			initialType = 2
 		}
-	}
-
-	// Default values
-	hostDefault, portDefault, userDefault, passDefault, dbDefault, fileDefault := "localhost", "5432", "", "", "", ""
-	if isEdit {
 		hostDefault = editConn.Host
 		portDefault = editConn.Port
 		userDefault = editConn.User
@@ -48,39 +54,100 @@ func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex in
 		fileDefault = editConn.FilePath
 	}
 
-	// Track selected type for auto-port and hints
-	form.AddDropDown("Type (*)", dbTypes, initialType, func(option string, index int) {
-		// Auto-set port when type changes (only if user hasn't typed a custom port)
-		portItem := form.GetFormItemByLabel("Port")
-		if portField, ok := portItem.(*tview.InputField); ok {
-			currentPort := portField.GetText()
-			switch option {
-			case "PostgreSQL":
-				if currentPort == "" || currentPort == "3306" {
-					portField.SetText("5432")
-				}
-			case "MySQL":
-				if currentPort == "" || currentPort == "5432" {
-					portField.SetText("3306")
-				}
-			case "SQLite":
-				portField.SetText("")
+	form.AddInputField(connLabelName, nameDefault, 30, nil, nil)
+	form.AddDropDown(connLabelType, dbTypes, initialType, nil)
+
+	dynamicLabels := []string{
+		connLabelDSN,
+		connLabelHost,
+		connLabelPort,
+		connLabelUser,
+		connLabelPassword,
+		connLabelDatabase,
+		connLabelFilePath,
+	}
+	fieldValues := map[string]string{
+		connLabelDSN:      connStringDefault,
+		connLabelHost:     hostDefault,
+		connLabelPort:     portDefault,
+		connLabelUser:     userDefault,
+		connLabelPassword: passDefault,
+		connLabelDatabase: dbDefault,
+		connLabelFilePath: fileDefault,
+	}
+
+	removeDynamicFields := func() {
+		// Preserve latest typed values before rebuilding type-specific fields.
+		for _, label := range dynamicLabels {
+			fieldValues[label] = formInputValue(form, label)
+		}
+		for _, label := range dynamicLabels {
+			idx := form.GetFormItemIndex(label)
+			if idx >= 0 {
+				form.RemoveFormItem(idx)
 			}
 		}
-	})
+	}
 
-	form.AddInputField("Host", hostDefault, 30, nil, nil)
-	form.AddInputField("Port", portDefault, 10, nil, nil)
-	form.AddInputField("User", userDefault, 30, nil, nil)
-	form.AddPasswordField("Password", passDefault, 30, '*', nil)
-	form.AddInputField("Database", dbDefault, 30, nil, nil)
-	form.AddInputField("File Path (SQLite)", fileDefault, 45, nil, nil)
+	addNetworkFields := func() {
+		form.AddInputField(connLabelDSN, fieldValues[connLabelDSN], 72, nil, nil)
+		form.AddInputField(connLabelHost, fieldValues[connLabelHost], 30, nil, nil)
+		form.AddInputField(connLabelPort, fieldValues[connLabelPort], 10, nil, nil)
+		form.AddInputField(connLabelUser, fieldValues[connLabelUser], 30, nil, nil)
+		form.AddPasswordField(connLabelPassword, fieldValues[connLabelPassword], 30, '*', nil)
+		form.AddInputField(connLabelDatabase, fieldValues[connLabelDatabase], 30, nil, nil)
+	}
+
+	addSQLiteFields := func() {
+		form.AddInputField(connLabelFilePath, fieldValues[connLabelFilePath], 60, nil, nil)
+	}
+
+	_, initialTypeName := form.GetFormItemByLabel(connLabelType).(*tview.DropDown).GetCurrentOption()
+	currentTypeName := initialTypeName
+
+	var footer *tview.TextView
+	updateFooter := func() {
+		if footer == nil {
+			return
+		}
+		screenW, _ := a.getScreenSize()
+		footer.SetText(connectFooterText(screenW, dbTypeFromName(currentTypeName)))
+	}
+
+	applyFieldsForType := func(typeName string) {
+		removeDynamicFields()
+		currentTypeName = typeName
+		switch typeName {
+		case "SQLite":
+			addSQLiteFields()
+		default:
+			// Auto-default ports for network DBs if empty or swapped.
+			switch typeName {
+			case "PostgreSQL":
+				if fieldValues[connLabelPort] == "" || fieldValues[connLabelPort] == "3306" {
+					fieldValues[connLabelPort] = "5432"
+				}
+			case "MySQL":
+				if fieldValues[connLabelPort] == "" || fieldValues[connLabelPort] == "5432" {
+					fieldValues[connLabelPort] = "3306"
+				}
+			}
+			addNetworkFields()
+		}
+		updateFooter()
+	}
+
+	typeDropDown := form.GetFormItemByLabel(connLabelType).(*tview.DropDown)
+	typeDropDown.SetSelectedFunc(func(option string, _ int) {
+		applyFieldsForType(option)
+	})
+	applyFieldsForType(initialTypeName)
 
 	// ── Buttons ──
-	title := " ⊕ New Connection "
+	title := fmt.Sprintf(" %s New Connection ", iconConnect)
 	btnLabel := "Save & Connect"
 	if isEdit {
-		title = " ✎ Edit Connection "
+		title = fmt.Sprintf(" ✎ Edit %s ", iconConnect)
 		btnLabel = "Update & Connect"
 	}
 
@@ -91,13 +158,13 @@ func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex in
 		}
 		if isEdit {
 			if err := a.store.Update(editIndex, *cfg); err != nil {
-				a.ShowAlert(fmt.Sprintf("Could not update connection:\n\n%v", err), "connectModal")
+				a.ShowAlert(fmt.Sprintf("%s Could not update connection:\n\n%v", iconWarn, err), "connectModal")
 				return
 			}
 			a.connectWithConfig(cfg, editIndex)
 		} else {
 			if err := a.store.Add(*cfg); err != nil {
-				a.ShowAlert(fmt.Sprintf("Could not save connection:\n\n%v", err), "connectModal")
+				a.ShowAlert(fmt.Sprintf("%s Could not save connection:\n\n%v", iconWarn, err), "connectModal")
 				return
 			}
 			idx := len(a.store.Connections) - 1
@@ -112,12 +179,12 @@ func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex in
 		}
 		if isEdit {
 			if err := a.store.Update(editIndex, *cfg); err != nil {
-				a.ShowAlert(fmt.Sprintf("Could not update connection:\n\n%v", err), "connectModal")
+				a.ShowAlert(fmt.Sprintf("%s Could not update connection:\n\n%v", iconWarn, err), "connectModal")
 				return
 			}
 		} else {
 			if err := a.store.Add(*cfg); err != nil {
-				a.ShowAlert(fmt.Sprintf("Could not save connection:\n\n%v", err), "connectModal")
+				a.ShowAlert(fmt.Sprintf("%s Could not save connection:\n\n%v", iconWarn, err), "connectModal")
 				return
 			}
 		}
@@ -132,6 +199,12 @@ func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex in
 			return
 		}
 		a.testConnection(cfg)
+	})
+
+	form.AddButton("Parse DSN", func() {
+		if _, err := a.applyConnectionStringToForm(form); err != nil {
+			a.ShowAlert(fmt.Sprintf("%s Could not parse connection string:\n\n%v", iconWarn, err), "connectModal")
+		}
 	})
 
 	form.AddButton("Cancel", func() {
@@ -149,11 +222,11 @@ func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex in
 		SetLabelColor(text)
 
 	// ── Footer ──
-	footer := tview.NewTextView().
+	footer = tview.NewTextView().
 		SetDynamicColors(true).
-		SetTextAlign(tview.AlignCenter).
-		SetText(" [yellow]Tab[-] Navigate  │  [yellow]Esc[-] Cancel  │  [gray]SQLite: only File Path needed[-]")
+		SetTextAlign(tview.AlignCenter)
 	footer.SetBackgroundColor(crust)
+	updateFooter()
 
 	formWithFooter := tview.NewFlex().
 		SetDirection(tview.FlexRow).
@@ -196,11 +269,11 @@ func (a *App) testConnection(cfg *config.ConnectionConfig) {
 		a.app.QueueUpdateDraw(func() {
 			a.pages.RemovePage("loading")
 			if err != nil {
-				a.ShowAlert(fmt.Sprintf("✗ Connection failed\n\n%s\n\n%s",
+				a.ShowAlert(fmt.Sprintf("%s Connection failed\n\n%s\n\n%s", iconFail,
 					err.Error(), connectionHint(err, cfg)), "connectModal")
 				return
 			}
-			a.ShowAlert(fmt.Sprintf("✓ Connection successful!\n\n%s -> %s",
+			a.ShowAlert(fmt.Sprintf("%s Connection successful\n\n%s -> %s", iconSuccess,
 				cfg.TypeLabel(), cfg.Name), "connectModal")
 		})
 	}()
@@ -208,54 +281,74 @@ func (a *App) testConnection(cfg *config.ConnectionConfig) {
 
 // buildConfigFromForm builds and validates a ConnectionConfig from form fields
 func (a *App) buildConfigFromForm(form *tview.Form) *config.ConnectionConfig {
-	getText := func(label string) string {
-		item := form.GetFormItemByLabel(label)
-		if input, ok := item.(*tview.InputField); ok {
-			return strings.TrimSpace(input.GetText())
-		}
-		return ""
-	}
+	getText := func(label string) string { return formInputValue(form, label) }
 
-	name := getText("Name (*)")
+	name := getText(connLabelName)
 	if name == "" {
-		a.ShowAlert("Connection name is required.\n\nGive it a short, descriptive name like \"local-dev\" or \"prod-db\".", "connectModal")
+		a.ShowAlert(fmt.Sprintf("%s Connection name is required.\n\nGive it a short, descriptive name like \"local-dev\" or \"prod-db\".", iconInfo), "connectModal")
 		return nil
 	}
 
-	_, typeName := form.GetFormItemByLabel("Type (*)").(*tview.DropDown).GetCurrentOption()
-	var dbType config.DBType
-	switch typeName {
-	case "PostgreSQL":
-		dbType = config.PostgreSQL
-	case "MySQL":
-		dbType = config.MySQL
-	case "SQLite":
-		dbType = config.SQLite
-	}
+	_, typeName := form.GetFormItemByLabel(connLabelType).(*tview.DropDown).GetCurrentOption()
+	dbType := dbTypeFromName(typeName)
 
 	cfg := &config.ConnectionConfig{
 		Name:     name,
 		Type:     dbType,
-		Host:     getText("Host"),
-		Port:     getText("Port"),
-		User:     getText("User"),
-		Password: getText("Password"),
-		Database: getText("Database"),
-		FilePath: getText("File Path (SQLite)"),
+		Host:     getText(connLabelHost),
+		Port:     getText(connLabelPort),
+		User:     getText(connLabelUser),
+		Password: getText(connLabelPassword),
+		Database: getText(connLabelDatabase),
+		FilePath: getText(connLabelFilePath),
+	}
+
+	// Optional network DSN: if present, parse and auto-fill individual fields.
+	if dbType != config.SQLite {
+		if connString := getText(connLabelDSN); connString != "" {
+			parsedCfg, err := parseConnectionString(dbType, connString)
+			if err != nil {
+				a.ShowAlert(fmt.Sprintf("%s Could not parse connection string:\n\n%v", iconWarn, err), "connectModal")
+				return nil
+			}
+			if parsedCfg.Host != "" {
+				cfg.Host = parsedCfg.Host
+				setFormInputValue(form, connLabelHost, parsedCfg.Host)
+			}
+			if parsedCfg.Port != "" {
+				cfg.Port = parsedCfg.Port
+				setFormInputValue(form, connLabelPort, parsedCfg.Port)
+			}
+			if parsedCfg.User != "" {
+				cfg.User = parsedCfg.User
+				setFormInputValue(form, connLabelUser, parsedCfg.User)
+			}
+			if parsedCfg.Password != "" {
+				cfg.Password = parsedCfg.Password
+				setFormInputValue(form, connLabelPassword, parsedCfg.Password)
+			}
+			if parsedCfg.Database != "" {
+				cfg.Database = parsedCfg.Database
+				setFormInputValue(form, connLabelDatabase, parsedCfg.Database)
+			}
+			if parsedCfg.SSLMode != "" {
+				cfg.SSLMode = parsedCfg.SSLMode
+			}
+		}
 	}
 
 	// ── Validation ──
 	switch dbType {
 	case config.SQLite:
 		if cfg.FilePath == "" {
-			a.ShowAlert("File path is required for SQLite.\n\nExample: /home/user/data.db\nA new file will be created if it doesn't exist.", "connectModal")
+			a.ShowAlert(fmt.Sprintf("%s File path is required for SQLite.\n\nExample: /home/user/data.db\nA new file will be created if it doesn't exist.", iconInfo), "connectModal")
 			return nil
 		}
 		// Check parent directory exists for new files
 		dir := filepath.Dir(cfg.FilePath)
 		if dir != "." && dir != "" {
 			if _, err := os.Stat(dir); os.IsNotExist(err) {
-				a.ShowAlert(fmt.Sprintf("Directory does not exist:\n%s\n\nPlease create it first.", dir), "connectModal")
+				a.ShowAlert(fmt.Sprintf("%s Directory does not exist:\n%s\n\nPlease create it first.", iconWarn, dir), "connectModal")
 				return nil
 			}
 		}
@@ -271,7 +364,7 @@ func (a *App) buildConfigFromForm(form *tview.Form) *config.ConnectionConfig {
 			missing = append(missing, "Database")
 		}
 		if len(missing) > 0 {
-			a.ShowAlert(fmt.Sprintf("Required fields missing:\n\n• %s\n\nFill these to connect to %s.", strings.Join(missing, "\n• "), typeName), "connectModal")
+			a.ShowAlert(fmt.Sprintf("%s Required fields missing:\n\n• %s\n\nFill these to connect to %s.", iconInfo, strings.Join(missing, "\n• "), typeName), "connectModal")
 			return nil
 		}
 		// Default port
@@ -288,9 +381,275 @@ func (a *App) buildConfigFromForm(form *tview.Form) *config.ConnectionConfig {
 	return cfg
 }
 
+func dbTypeFromName(typeName string) config.DBType {
+	switch typeName {
+	case "PostgreSQL":
+		return config.PostgreSQL
+	case "MySQL":
+		return config.MySQL
+	case "SQLite":
+		return config.SQLite
+	default:
+		return config.PostgreSQL
+	}
+}
+
+func connectFooterText(width int, dbType config.DBType) string {
+	switch dbType {
+	case config.SQLite:
+		switch {
+		case width < 78:
+			return fmt.Sprintf(" [yellow]Tab[-] Next  │  [yellow]Esc[-] Back %s", iconBack)
+		default:
+			return fmt.Sprintf(" [yellow]Tab[-] Navigate  │  [yellow]Esc[-] Back %s  │  [gray]SQLite: only File Path needed[-]", iconBack)
+		}
+	default:
+		switch {
+		case width < 78:
+			return fmt.Sprintf(" [yellow]Tab[-] Next  │  [yellow]Esc[-] Back %s  │  [yellow]Parse DSN[-] %s", iconBack, iconDropdown)
+		default:
+			return fmt.Sprintf(" [yellow]Tab[-] Navigate  │  [yellow]Esc[-] Back %s  │  [yellow]Parse DSN[-] %s auto-fills host/user/db[-]", iconBack, iconDropdown)
+		}
+	}
+}
+
+func formInputValue(form *tview.Form, label string) string {
+	item := form.GetFormItemByLabel(label)
+	if input, ok := item.(*tview.InputField); ok {
+		return strings.TrimSpace(input.GetText())
+	}
+	return ""
+}
+
+func setFormInputValue(form *tview.Form, label, value string) {
+	item := form.GetFormItemByLabel(label)
+	if input, ok := item.(*tview.InputField); ok {
+		input.SetText(value)
+	}
+}
+
+func (a *App) applyConnectionStringToForm(form *tview.Form) (*config.ConnectionConfig, error) {
+	dsn := formInputValue(form, connLabelDSN)
+	if dsn == "" {
+		return nil, fmt.Errorf("connection string is empty")
+	}
+
+	typeItem := form.GetFormItemByLabel(connLabelType)
+	typeDropDown, ok := typeItem.(*tview.DropDown)
+	if !ok {
+		return nil, fmt.Errorf("could not read selected database type")
+	}
+
+	_, typeName := typeDropDown.GetCurrentOption()
+	dbType := dbTypeFromName(typeName)
+	if dbType == config.SQLite {
+		return nil, fmt.Errorf("SQLite does not use network connection strings")
+	}
+
+	parsedCfg, err := parseConnectionString(dbType, dsn)
+	if err != nil {
+		return nil, err
+	}
+
+	setFormInputValue(form, connLabelHost, parsedCfg.Host)
+	setFormInputValue(form, connLabelPort, parsedCfg.Port)
+	setFormInputValue(form, connLabelUser, parsedCfg.User)
+	setFormInputValue(form, connLabelPassword, parsedCfg.Password)
+	setFormInputValue(form, connLabelDatabase, parsedCfg.Database)
+	return parsedCfg, nil
+}
+
+func parseConnectionString(dbType config.DBType, connString string) (*config.ConnectionConfig, error) {
+	switch dbType {
+	case config.PostgreSQL:
+		return parsePostgresConnectionString(connString)
+	case config.MySQL:
+		return parseMySQLConnectionString(connString)
+	default:
+		return nil, fmt.Errorf("connection strings are supported for PostgreSQL and MySQL only")
+	}
+}
+
+func parseMySQLConnectionString(connString string) (*config.ConnectionConfig, error) {
+	cfg, err := mysql.ParseDSN(strings.TrimSpace(connString))
+	if err != nil {
+		return nil, fmt.Errorf("invalid MySQL DSN: %w", err)
+	}
+
+	host, port := splitHostPortWithDefault(cfg.Addr, "3306")
+	if cfg.Net == "unix" {
+		host = "localhost"
+		port = "3306"
+	}
+
+	return &config.ConnectionConfig{
+		Type:     config.MySQL,
+		Host:     host,
+		Port:     port,
+		User:     cfg.User,
+		Password: cfg.Passwd,
+		Database: cfg.DBName,
+	}, nil
+}
+
+func parsePostgresConnectionString(connString string) (*config.ConnectionConfig, error) {
+	dsn := strings.TrimSpace(connString)
+	lower := strings.ToLower(dsn)
+	if strings.HasPrefix(lower, "postgres://") || strings.HasPrefix(lower, "postgresql://") {
+		return parsePostgresURL(dsn)
+	}
+	return parsePostgresKeyValueDSN(dsn)
+}
+
+func parsePostgresURL(connString string) (*config.ConnectionConfig, error) {
+	u, err := url.Parse(connString)
+	if err != nil {
+		return nil, fmt.Errorf("invalid PostgreSQL URL: %w", err)
+	}
+	if u.Scheme != "postgres" && u.Scheme != "postgresql" {
+		return nil, fmt.Errorf("unsupported PostgreSQL URL scheme: %s", u.Scheme)
+	}
+
+	host, port := splitHostPortWithDefault(u.Host, "5432")
+	database := strings.TrimPrefix(u.Path, "/")
+
+	user := ""
+	password := ""
+	if u.User != nil {
+		user = u.User.Username()
+		password, _ = u.User.Password()
+	}
+
+	return &config.ConnectionConfig{
+		Type:     config.PostgreSQL,
+		Host:     host,
+		Port:     port,
+		User:     user,
+		Password: password,
+		Database: database,
+		SSLMode:  u.Query().Get("sslmode"),
+	}, nil
+}
+
+func parsePostgresKeyValueDSN(connString string) (*config.ConnectionConfig, error) {
+	fields := splitConnectionStringTokens(connString)
+	values := make(map[string]string, len(fields))
+	for _, field := range fields {
+		keyValue := strings.SplitN(field, "=", 2)
+		if len(keyValue) != 2 {
+			continue
+		}
+		key := strings.ToLower(strings.TrimSpace(keyValue[0]))
+		value := strings.TrimSpace(keyValue[1])
+		value = strings.Trim(value, `"'`)
+		values[key] = value
+	}
+
+	database := values["dbname"]
+	if database == "" {
+		database = values["database"]
+	}
+
+	if values["host"] == "" && values["user"] == "" && values["password"] == "" && database == "" {
+		return nil, fmt.Errorf("invalid PostgreSQL DSN")
+	}
+
+	host := values["host"]
+	if host == "" {
+		host = "localhost"
+	}
+	port := values["port"]
+	if port == "" {
+		port = "5432"
+	}
+
+	return &config.ConnectionConfig{
+		Type:     config.PostgreSQL,
+		Host:     host,
+		Port:     port,
+		User:     values["user"],
+		Password: values["password"],
+		Database: database,
+		SSLMode:  values["sslmode"],
+	}, nil
+}
+
+func splitConnectionStringTokens(connString string) []string {
+	var (
+		tokens  []string
+		current strings.Builder
+		quote   rune
+		escaped bool
+	)
+
+	flush := func() {
+		if current.Len() > 0 {
+			tokens = append(tokens, current.String())
+			current.Reset()
+		}
+	}
+
+	for _, r := range connString {
+		switch {
+		case escaped:
+			current.WriteRune(r)
+			escaped = false
+		case r == '\\':
+			escaped = true
+		case quote != 0:
+			if r == quote {
+				quote = 0
+			} else {
+				current.WriteRune(r)
+			}
+		case r == '\'' || r == '"':
+			quote = r
+		case r == ' ' || r == '\t' || r == '\n':
+			flush()
+		default:
+			current.WriteRune(r)
+		}
+	}
+	flush()
+	return tokens
+}
+
+func splitHostPortWithDefault(address, defaultPort string) (string, string) {
+	address = strings.TrimSpace(address)
+	if address == "" {
+		return "localhost", defaultPort
+	}
+
+	if host, port, err := net.SplitHostPort(address); err == nil {
+		if host == "" {
+			host = "localhost"
+		}
+		if port == "" {
+			port = defaultPort
+		}
+		return host, port
+	}
+
+	// Handle plain host:port forms that may not be bracketed IPv6 values.
+	if strings.Count(address, ":") == 1 && !strings.HasPrefix(address, "[") {
+		parts := strings.SplitN(address, ":", 2)
+		host := strings.TrimSpace(parts[0])
+		port := strings.TrimSpace(parts[1])
+		if host == "" {
+			host = "localhost"
+		}
+		if port == "" {
+			port = defaultPort
+		}
+		return host, port
+	}
+
+	return address, defaultPort
+}
+
 // connectWithConfig connects and transitions to the main workspace
 func (a *App) connectWithConfig(cfg *config.ConnectionConfig, storeIndex int) {
-	a.showLoadingModal(fmt.Sprintf("Connecting to %s...", cfg.Name))
+	a.showLoadingModal(fmt.Sprintf("%s Connecting to %s...", iconConnect, cfg.Name))
 
 	go func() {
 		db, err := utils.ConnectDB(cfg)
@@ -298,7 +657,7 @@ func (a *App) connectWithConfig(cfg *config.ConnectionConfig, storeIndex int) {
 			a.pages.RemovePage("loading")
 
 			if err != nil {
-				a.ShowAlert(fmt.Sprintf("✗ Connection failed\n\n%s\n\n%s",
+				a.ShowAlert(fmt.Sprintf("%s Connection failed\n\n%s\n\n%s", iconFail,
 					err.Error(), connectionHint(err, cfg)), "connectModal")
 				return
 			}
@@ -311,16 +670,16 @@ func (a *App) connectWithConfig(cfg *config.ConnectionConfig, storeIndex int) {
 
 			if storeIndex >= 0 {
 				if err := a.store.MarkUsed(storeIndex); err != nil {
-					a.ShowAlert(fmt.Sprintf("Connected, but failed to update saved state:\n\n%v", err), "main")
+					a.ShowAlert(fmt.Sprintf("%s Connected, but failed to update saved state:\n\n%v", iconWarn, err), "main")
 				}
 			}
 
 			if err := a.LoadTables(); err != nil {
-				a.ShowAlert(fmt.Sprintf("Connected, but could not load tables:\n\n%v\n\nYou can still run queries manually.", err), "main")
+				a.ShowAlert(fmt.Sprintf("%s Connected, but could not load tables:\n\n%v\n\nYou can still run queries manually.", iconWarn, err), "main")
 			}
 
 			a.updateStatusBar("", 0)
-			a.results.SetTitle(" Results [yellow](Alt+R)[-] ")
+			a.results.SetTitle(fmt.Sprintf(" %s Results [yellow](Alt+R)[-] ", iconResults))
 
 			a.pages.RemovePage("connectModal")
 			a.pages.RemovePage("dashboard")

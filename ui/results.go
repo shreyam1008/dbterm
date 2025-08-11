@@ -44,7 +44,7 @@ func (a *App) LoadResults() error {
 
 	rows, err := a.db.QueryContext(ctx, query)
 	if err != nil {
-		a.results.SetTitle(" Results — [red]error[-] ")
+		a.results.SetTitle(fmt.Sprintf(" %s Results — [red]%s error[-] ", iconResults, iconFail))
 		return err
 	}
 	defer rows.Close()
@@ -62,8 +62,8 @@ func (a *App) LoadResults() error {
 	a.restoreResultSelection(selection, rowCount)
 
 	elapsed := time.Since(a.queryStart)
-	a.results.SetTitle(fmt.Sprintf(" [yellow]%s[-] — [green]%d rows[-] in [teal]%s[-] ",
-		a.selectedTable, rowCount, formatDuration(elapsed)))
+	a.results.SetTitle(fmt.Sprintf(" %s [yellow]%s[-] — [green]%d rows[-] in [teal]%s[-] ",
+		iconResults, a.selectedTable, rowCount, formatDuration(elapsed)))
 
 	a.updateStatusBar("", rowCount)
 

@@ -16,14 +16,14 @@ func (a *App) ExecuteQuery(query string) {
 
 	// Check connection health before executing
 	if a.db == nil {
-		a.ShowAlert("Not connected to any database.\n\nPress Alt+D to go to Dashboard and connect.", "main")
+		a.ShowAlert(fmt.Sprintf("%s Not connected to any database.\n\nPress Alt+D to go to Dashboard and connect.", iconWarn), "main")
 		return
 	}
 
 	pingCtx, pingCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer pingCancel()
 	if err := a.db.PingContext(pingCtx); err != nil {
-		a.ShowAlert(fmt.Sprintf("Connection lost: %v\n\nPress Alt+D to reconnect from Dashboard.", err), "main")
+		a.ShowAlert(fmt.Sprintf("%s Connection lost: %v\n\nPress Alt+D to reconnect from Dashboard.", iconWarn, err), "main")
 		return
 	}
 
@@ -51,12 +51,12 @@ func (a *App) ExecuteQuery(query string) {
 
 		rowCount, err := populateTable(a.results, rows)
 		if err != nil {
-			a.ShowAlert(fmt.Sprintf("Error reading results:\n\n%v", err), "main")
+			a.ShowAlert(fmt.Sprintf("%s Error reading results:\n\n%v", iconWarn, err), "main")
 			return
 		}
 
 		elapsed := time.Since(a.queryStart)
-		a.results.SetTitle(fmt.Sprintf(" Results [yellow](Alt+R)[-] — [green]%d rows[-] in [teal]%s[-] ", rowCount, formatDuration(elapsed)))
+		a.results.SetTitle(fmt.Sprintf(" %s Results [yellow](Alt+R)[-] — [green]%d rows[-] in [teal]%s[-] ", iconResults, rowCount, formatDuration(elapsed)))
 		a.results.ScrollToBeginning()
 		a.updateStatusBar(fmt.Sprintf("[teal]%s[-]", formatDuration(elapsed)), rowCount)
 		a.app.SetFocus(a.results)
@@ -74,13 +74,13 @@ func (a *App) ExecuteQuery(query string) {
 		elapsed := time.Since(a.queryStart)
 
 		a.ShowAlert(
-			fmt.Sprintf("✓ Query executed successfully\n\nRows affected: %d\nTime: %s", rowsAffected, formatDuration(elapsed)),
+			fmt.Sprintf("%s Query executed successfully\n\nRows affected: %d\nTime: %s", iconSuccess, rowsAffected, formatDuration(elapsed)),
 			"main",
 		)
 
 		// Refresh tables & results in case schema changed
 		if err := a.refreshData(); err != nil {
-			a.ShowAlert(fmt.Sprintf("Query succeeded, but refresh failed:\n\n%v", err), "main")
+			a.ShowAlert(fmt.Sprintf("%s Query succeeded, but refresh failed:\n\n%v", iconWarn, err), "main")
 		}
 	}
 }
@@ -111,7 +111,7 @@ func (a *App) showQueryError(err error, query string) {
 		hint = "\n\n💡 Hint: Connection issue. Press Alt+D to check your connection."
 	}
 
-	message := fmt.Sprintf("Query error:\n\n%s", errMsg)
+	message := fmt.Sprintf("%s Query error:\n\n%s", iconFail, errMsg)
 	if displayQuery != "" {
 		message += fmt.Sprintf("\n\nQuery: %s", displayQuery)
 	}
