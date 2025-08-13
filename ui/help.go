@@ -18,7 +18,7 @@ func (a *App) showHelp() {
   Alt + D ........... Back to Dashboard
   Alt + H ........... Toggle this Help
   Alt + S ........... Database Services
-  Alt + B ........... Backup current DB (PostgreSQL/MySQL)
+  B ................. Backup current DB (PostgreSQL/MySQL)
   Tab ............... Cycle: Tables → Query → Results
   Esc ............... Close / Go back
   Ctrl+C ............ Quit
@@ -27,7 +27,7 @@ func (a *App) showHelp() {
   Alt + Enter ....... Execute query
   F5 ................ Refresh current table (keep sort/selection) ` + iconRefresh + `
   Ctrl + F5 ......... Refresh table list + current table ` + iconRefresh + `
-  Alt + F ........... Toggle fullscreen results
+  F ................. Toggle fullscreen results
   S ................. Sort by current column (in Results)
   Alt + = / - ....... Increase / decrease preview row limit
   Alt + 0 ........... Toggle preview limit (100 ↔ all rows)
@@ -47,6 +47,7 @@ func (a *App) showHelp() {
 [#a6e3a1]Services (Alt+S) ` + iconServices + `[-]
   1 ................. Toggle MySQL start/stop
   2 ................. Toggle PostgreSQL start/stop
+  C / Enter ......... Connect to selected service ` + iconConnect + `
   R ................. Refresh service info ` + iconRefresh + `
   Esc ............... Go back ` + iconBack + `
 
