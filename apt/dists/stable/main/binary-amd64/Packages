@@ -3,10 +3,10 @@ Version: 0.0.1
 Architecture: amd64
 Maintainer: dbterm maintainers <shreyam1008@users.noreply.github.com>
 Filename: pool/main/d/dbterm/dbterm_0.0.1_amd64.deb
-Size: 4038226
-MD5sum: cb164b71e37b1850753ad28258e4b65d
-SHA1: a4202d530025523045033e231b38de4752fbb3c9
-SHA256: 1ea192ffbcffcd612cefeeb64fe01e91bfde848fc3ad3059edc434c4ebf8fa47
+Size: 4038224
+MD5sum: e8dd3598dcd1a2e40ab293bfd625c859
+SHA1: 557bfe9cc4d2468a4d54974a878bfc76d3a28e4d
+SHA256: b1f6669d939097a3c26b9631d72db02ed24ee4d144677a97e399ab805e2fe38c
 Section: database
 Priority: optional
 Description: Multi-database terminal client (PostgreSQL, MySQL, SQLite)
