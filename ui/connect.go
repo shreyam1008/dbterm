@@ -86,6 +86,9 @@ const (
 	connLabelPassword = "Password"
 	connLabelDatabase = "Database"
 	connLabelFilePath = "File Path (SQLite)"
+	connLabelAuthToken = "Auth Token"
+	connLabelAccountID = "Account ID"
+	connLabelDatabaseID = "Database ID (UUID)"
 )
 
 // showConnectionForm displays a form for new or editing a connection
@@ -93,12 +96,13 @@ func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex in
 	isEdit := editConn != nil
 
 	form := tview.NewForm()
-
-	dbTypes := []string{"PostgreSQL", "MySQL", "SQLite"}
+	
+	dbTypes := []string{"PostgreSQL", "MySQL", "SQLite", "Turso", "Cloudflare D1"}
 	initialType := 0
 	nameDefault := ""
 	connStringDefault := ""
 	hostDefault, portDefault, userDefault, passDefault, dbDefault, fileDefault := "localhost", "5432", "", "", "", ""
+	authTokenDefault, accountIDDefault, dbIDDefault := "", "", ""
 	if isEdit {
 		nameDefault = editConn.Name
 		switch editConn.Type {
@@ -106,6 +110,10 @@ func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex in
 			initialType = 1
 		case config.SQLite:
 			initialType = 2
+		case config.Turso:
+			initialType = 3
+		case config.CloudflareD1:
+			initialType = 4
 		}
 		hostDefault = editConn.Host
 		portDefault = editConn.Port
@@ -113,6 +121,9 @@ func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex in
 		passDefault = editConn.Password
 		dbDefault = editConn.Database
 		fileDefault = editConn.FilePath
+		authTokenDefault = editConn.AuthToken
+		accountIDDefault = editConn.AccountID
+		dbIDDefault = editConn.DatabaseID
 	}
 
 	form.AddInputField(connLabelName, nameDefault, 30, nil, nil)
@@ -126,6 +137,9 @@ func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex in
 		connLabelPassword,
 		connLabelDatabase,
 		connLabelFilePath,
+		connLabelAuthToken,
+		connLabelAccountID,
+		connLabelDatabaseID,
 	}
 	fieldValues := map[string]string{
 		connLabelDSN:      connStringDefault,
@@ -135,6 +149,9 @@ func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex in
 		connLabelPassword: passDefault,
 		connLabelDatabase: dbDefault,
 		connLabelFilePath: fileDefault,
+		connLabelAuthToken: authTokenDefault,
+		connLabelAccountID: accountIDDefault,
+		connLabelDatabaseID: dbIDDefault,
 	}
 
 	removeDynamicFields := func() {
@@ -163,6 +180,18 @@ func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex in
 		form.AddInputField(connLabelFilePath, fieldValues[connLabelFilePath], 60, nil, nil)
 	}
 
+	addTursoFields := func() {
+		// Re-use 'Host' for the Database URL
+		form.AddInputField(connLabelHost + " (libsql://... or https://...)", fieldValues[connLabelHost], 60, nil, nil)
+		form.AddPasswordField(connLabelAuthToken, fieldValues[connLabelAuthToken], 60, '*', nil)
+	}
+
+	addD1Fields := func() {
+		form.AddInputField(connLabelAccountID, fieldValues[connLabelAccountID], 40, nil, nil)
+		form.AddInputField(connLabelDatabaseID, fieldValues[connLabelDatabaseID], 40, nil, nil)
+		form.AddPasswordField(connLabelAuthToken + " (API Token)", fieldValues[connLabelAuthToken], 60, '*', nil)
+	}
+
 	_, initialTypeName := form.GetFormItemByLabel(connLabelType).(*tview.DropDown).GetCurrentOption()
 	currentTypeName := initialTypeName
 
@@ -181,6 +210,10 @@ func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex in
 		switch typeName {
 		case "SQLite":
 			addSQLiteFields()
+		case "Turso":
+			addTursoFields()
+		case "Cloudflare D1":
+			addD1Fields()
 		default:
 			// Auto-default ports for network DBs if empty or swapped.
 			switch typeName {
@@ -362,10 +395,13 @@ func (a *App) buildConfigFromForm(form *tview.Form) *config.ConnectionConfig {
 		Password: getText(connLabelPassword),
 		Database: getText(connLabelDatabase),
 		FilePath: getText(connLabelFilePath),
+		AuthToken: getText(connLabelAuthToken),
+		AccountID: getText(connLabelAccountID),
+		DatabaseID: getText(connLabelDatabaseID),
 	}
 
 	// Optional network DSN: if present, parse and auto-fill individual fields.
-	if dbType != config.SQLite {
+	if dbType != config.SQLite && dbType != config.Turso && dbType != config.CloudflareD1 {
 		if connString := getText(connLabelDSN); connString != "" {
 			parsedCfg, err := parseConnectionString(dbType, connString)
 			if err != nil {
@@ -413,6 +449,18 @@ func (a *App) buildConfigFromForm(form *tview.Form) *config.ConnectionConfig {
 				return nil
 			}
 		}
+	case config.Turso:
+		if cfg.Host == "" {
+			a.ShowAlert(fmt.Sprintf("%s Database URL is required for Turso.\n\nExample: libsql://mydb-user.turso.io", iconInfo), "connectModal")
+			return nil
+		}
+		// Auth token is usually required for remote, but maybe not for local dev?
+		// We'll leave it optional in validation but robust in practice.
+	case config.CloudflareD1:
+		if cfg.AccountID == "" || cfg.DatabaseID == "" || cfg.AuthToken == "" {
+			a.ShowAlert(fmt.Sprintf("%s Account ID, Database ID, and API Token are required for D1.", iconInfo), "connectModal")
+			return nil
+		}
 	default:
 		missing := []string{}
 		if cfg.Host == "" {
@@ -450,6 +498,10 @@ func dbTypeFromName(typeName string) config.DBType {
 		return config.MySQL
 	case "SQLite":
 		return config.SQLite
+	case "Turso":
+		return config.Turso
+	case "Cloudflare D1":
+		return config.CloudflareD1
 	default:
 		return config.PostgreSQL
 	}
@@ -464,6 +516,10 @@ func connectFooterText(width int, dbType config.DBType) string {
 		default:
 			return fmt.Sprintf(" [yellow]Tab[-] Navigate  │  [yellow]Esc[-] Back %s  │  [gray]SQLite: only File Path needed[-]", iconBack)
 		}
+	case config.Turso:
+		return fmt.Sprintf(" [yellow]Tab[-] Navigate  │  [yellow]Esc[-] Back %s  │  [gray]Turso: URL + Auth Token[-]", iconBack)
+	case config.CloudflareD1:
+		return fmt.Sprintf(" [yellow]Tab[-] Navigate  │  [yellow]Esc[-] Back %s  │  [gray]D1: Account ID + DB ID + Token[-]", iconBack)
 	default:
 		switch {
 		case width < 78:
@@ -503,8 +559,8 @@ func (a *App) applyConnectionStringToForm(form *tview.Form) (*config.ConnectionC
 
 	_, typeName := typeDropDown.GetCurrentOption()
 	dbType := dbTypeFromName(typeName)
-	if dbType == config.SQLite {
-		return nil, fmt.Errorf("SQLite does not use network connection strings")
+	if dbType == config.SQLite || dbType == config.Turso || dbType == config.CloudflareD1 {
+		return nil, fmt.Errorf("this database type does not support DSN parsing here")
 	}
 
 	parsedCfg, err := parseConnectionString(dbType, dsn)

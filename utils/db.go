@@ -10,6 +10,8 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
+	_ "github.com/peterheb/cfd1"
+	_ "github.com/tursodatabase/libsql-client-go/libsql"
 	_ "modernc.org/sqlite"
 )
 
@@ -19,7 +21,7 @@ func ConnectDB(cfg *config.ConnectionConfig) (*sql.DB, error) {
 	connStr := cfg.BuildConnString()
 
 	if driver == "" || connStr == "" {
-		return nil, fmt.Errorf("unsupported database type: %q — supported: postgresql, mysql, sqlite", cfg.Type)
+		return nil, fmt.Errorf("unsupported database type: %q — supported: postgresql, mysql, sqlite, turso, d1", cfg.Type)
 	}
 
 	db, err := sql.Open(driver, connStr)
@@ -50,7 +52,7 @@ func ListTablesQuery(dbType config.DBType) string {
 		return `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name`
 	case config.MySQL:
 		return `SHOW TABLES`
-	case config.SQLite:
+	case config.SQLite, config.Turso, config.CloudflareD1:
 		return `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name`
 	default:
 		return ""
