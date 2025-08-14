@@ -53,6 +53,16 @@ func (a *App) showHelp() {
   R ................. Refresh service info ` + iconRefresh + `
   Esc ............... Go back ` + iconBack + `
 
+[#a6e3a1]CLI Commands (run in terminal)[-]
+  dbterm --help ..... Show command help
+  dbterm --version .. Show app version + build
+  dbterm --info ..... Show install/config/system info
+  dbterm --update ... Update to latest release
+  dbterm --update X.Y.Z  Update to a specific version
+  dbterm --uninstall Remove binary (asks confirmation)
+  dbterm --uninstall --yes  Remove binary without prompt
+  dbterm --uninstall --purge  Remove binary + saved connections
+
 
 `
 

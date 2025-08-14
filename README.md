@@ -58,6 +58,7 @@ What happens automatically:
 2. Create tag `v<version>`.
 3. Publish GitHub release assets + checksums.
 4. Update the APT repository on `gh-pages`.
+5. Stamp binaries with the same manifest version/commit for `dbterm --version`.
 
 If the tag already exists, the workflow fails (prevents duplicate release tags).
 
@@ -109,6 +110,26 @@ Download the binary for your system from the [Releases Page](https://github.com/
 
 ```bash
 go install github.com/shreyam1008/dbterm@latest
+```
+
+### In-App Update
+
+```bash
+dbterm --update
+```
+
+Optional specific version:
+
+```bash
+dbterm --update 0.3.4
+```
+
+### In-App Uninstall
+
+```bash
+dbterm --uninstall
+dbterm --uninstall --purge
+dbterm --uninstall --yes
 ```
 
 ---

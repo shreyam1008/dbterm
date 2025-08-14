@@ -1,5 +1,5 @@
 BINARY_NAME=dbterm
-VERSION?=dev
+VERSION?=$(shell awk -F'|' '/^[[:space:]]*#/ {next} /^[[:space:]]*$$/ {next} {gsub(/^[[:space:]]+|[[:space:]]+$$/, "", $$1); print $$1; exit}' releases/versions.txt 2>/dev/null || echo dev)
 COMMIT?=$(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
 GO_BUILD_FLAGS=-trimpath -ldflags="-s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT)"
 
