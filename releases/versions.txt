@@ -1,0 +1,13 @@
+# dbterm release manifest
+#
+# HOW TO UPDATE THIS FILE:
+# 1) Add a new entry as the FIRST non-comment line (top of this list).
+# 2) Format for each entry:
+#      <version>|<release name>|<short description>
+# 3) Version must be SemVer without "v" (example: 0.3.4).
+# 4) Commit and push to main.
+#    The release workflow reads only the first non-comment line and creates that GitHub release.
+# 5) If that tag already exists, the workflow fails (prevents duplicate releases).
+#
+# Newest entry first:
+0.3.3|Production Installer Rollout|Cross-platform one-command installer flow, Windows ARM64 artifacts, shortcut/help sync, and direct dbterm uninstall support.

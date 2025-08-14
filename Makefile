@@ -1,6 +1,7 @@
 BINARY_NAME=dbterm
-GO_BUILD_FLAGS=-trimpath -ldflags="-s -w"
-VERSION?=0.0.0
+VERSION?=dev
+COMMIT?=$(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
+GO_BUILD_FLAGS=-trimpath -ldflags="-s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT)"
 
 .PHONY: all build clean test release release-core release-ios deb apt-repo
 

@@ -6,13 +6,14 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strings"
 
 	"github.com/shreyam1008/dbterm/ui"
 )
 
 var (
-	version = "1.0.0"
+	version = "dev"
 	commit  = "dev"
 )
 
@@ -46,7 +47,7 @@ func main() {
 	// ── Startup Banner ──
 	fmt.Println()
 	fmt.Println("  \033[38;2;203;166;247m╔══════════════════════════════════╗\033[0m")
-	fmt.Printf("  \033[38;2;203;166;247m║\033[0m  \033[1;38;2;203;166;247mdbterm\033[0m %-25s \033[38;2;203;166;247m║\033[0m\n", "v"+version)
+	fmt.Printf("  \033[38;2;203;166;247m║\033[0m  \033[1;38;2;203;166;247mdbterm\033[0m %-25s \033[38;2;203;166;247m║\033[0m\n", "v"+buildVersion())
 	fmt.Println("  \033[38;2;203;166;247m║\033[0m  \033[38;2;166;173;200mMulti-database terminal client\033[0m  \033[38;2;203;166;247m║\033[0m")
 	fmt.Println("  \033[38;2;203;166;247m╚══════════════════════════════════╝\033[0m")
 	fmt.Println()
@@ -101,7 +102,7 @@ func printHelp() {
 }
 
 func printVersion() {
-	fmt.Printf("dbterm v%s (%s)\n", version, commit)
+	fmt.Printf("dbterm v%s (%s)\n", buildVersion(), buildCommit())
 	fmt.Printf("Go %s, %s/%s\n", runtime.Version(), runtime.GOOS, runtime.GOARCH)
 }
 
@@ -126,7 +127,7 @@ func printInfo() {
 	fmt.Print(`
   ` + "\033[1;38;2;203;166;247m" + `dbterm` + "\033[0m" + ` — System Info
 `)
-	fmt.Printf("  \033[33mVersion\033[0m       %s (%s)\n", version, commit)
+	fmt.Printf("  \033[33mVersion\033[0m       %s (%s)\n", buildVersion(), buildCommit())
 	fmt.Printf("  \033[33mGo\033[0m            %s\n", runtime.Version())
 	fmt.Printf("  \033[33mOS / Arch\033[0m     %s / %s\n\n", runtime.GOOS, runtime.GOARCH)
 	fmt.Println("  \033[33mPATHS\033[0m")
@@ -251,4 +252,33 @@ func fmtBytes(b int64) string {
 	default:
 		return fmt.Sprintf("%d B", b)
 	}
+}
+
+func buildVersion() string {
+	if version != "" && version != "dev" {
+		return strings.TrimPrefix(version, "v")
+	}
+	if bi, ok := debug.ReadBuildInfo(); ok {
+		if bi.Main.Version != "" && bi.Main.Version != "(devel)" {
+			return strings.TrimPrefix(bi.Main.Version, "v")
+		}
+	}
+	return "dev"
+}
+
+func buildCommit() string {
+	if commit != "" && commit != "dev" {
+		return commit
+	}
+	if bi, ok := debug.ReadBuildInfo(); ok {
+		for _, s := range bi.Settings {
+			if s.Key == "vcs.revision" && s.Value != "" {
+				if len(s.Value) > 7 {
+					return s.Value[:7]
+				}
+				return s.Value
+			}
+		}
+	}
+	return "dev"
 }
