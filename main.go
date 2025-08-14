@@ -101,7 +101,6 @@ func printVersion() {
 func printInfo() {
 	cfgDir := configDir()
 	cfgFile := filepath.Join(cfgDir, "connections.json")
-	goBin := goInstallPath()
 
 	cfgSize := "not created yet"
 	if info, err := os.Stat(cfgFile); err == nil {
@@ -125,8 +124,7 @@ func printInfo() {
 	fmt.Printf("  \033[33mOS / Arch\033[0m     %s / %s\n\n", runtime.GOOS, runtime.GOARCH)
 	fmt.Println("  \033[33mPATHS\033[0m")
 	fmt.Printf("  Binary        %s (%s)\n", binPath, binSize)
-	fmt.Printf("  Config        %s (%s)\n", cfgFile, cfgSize)
-	fmt.Printf("  GOPATH/bin    %s\n\n", goBin)
+	fmt.Printf("  Config        %s (%s)\n\n", cfgFile, cfgSize)
 	fmt.Println("  \033[33mRESOURCES\033[0m")
 	fmt.Println("  RAM (idle)    ~8–12 MB")
 	fmt.Println("  RAM (active)  ~15–30 MB (scales with result set)")
@@ -139,7 +137,9 @@ func printInfo() {
 	fmt.Println("  MySQL         go-sql-driver/mysql")
 	fmt.Println("  SQLite        modernc.org/sqlite")
 	fmt.Println()
-	fmt.Println("  \033[33mUPDATE\033[0m        go install github.com/shreyam1008/dbterm@latest")
+	fmt.Println("  \033[33mINSTALL\033[0m       No Go required")
+	fmt.Println("  macOS/Linux   curl -fsSL https://raw.githubusercontent.com/shreyam1008/dbterm/main/install.sh | bash")
+	fmt.Println("  Windows       powershell -NoProfile -ExecutionPolicy Bypass -Command \"irm https://raw.githubusercontent.com/shreyam1008/dbterm/main/install.ps1 | iex\"")
 	fmt.Println("  \033[33mREMOVE\033[0m        dbterm --uninstall")
 	fmt.Println()
 }
@@ -155,12 +155,22 @@ func printUninstall() {
 	fmt.Print(`
   ` + "\033[1;38;2;203;166;247m" + `dbterm` + "\033[0m" + ` — Uninstall
 `)
-	fmt.Println("\n  \033[33mStep 1:\033[0m Remove the binary")
-	fmt.Printf("  $ rm %s\n", binPath)
-	fmt.Println("\n  \033[33mStep 2:\033[0m Remove saved connections (optional)")
-	fmt.Printf("  $ rm -rf %s\n", cfgDir)
-	fmt.Println("\n  \033[33mStep 3:\033[0m Clean Go cache (optional, frees ~50MB)")
-	fmt.Println("  $ go clean -modcache")
+	if runtime.GOOS == "windows" {
+		fmt.Println("\n  \033[33mStep 1:\033[0m Remove the binary")
+		fmt.Printf("  PS> Remove-Item -Force \"%s\"\n", binPath)
+		fmt.Println("\n  \033[33mStep 2:\033[0m Remove saved connections (optional)")
+		fmt.Printf("  PS> Remove-Item -Recurse -Force \"%s\"\n", cfgDir)
+		fmt.Println("\n  \033[33mStep 3:\033[0m Remove dbterm from user PATH (optional)")
+		fmt.Println("  PS> $p=[Environment]::GetEnvironmentVariable(\"Path\",\"User\")")
+		fmt.Println("  PS> [Environment]::SetEnvironmentVariable(\"Path\",(($p -split ';' | ? { $_ -ne \"$env:LOCALAPPDATA\\dbterm\\bin\" }) -join ';'),\"User\")")
+	} else {
+		fmt.Println("\n  \033[33mStep 1:\033[0m Remove the binary")
+		fmt.Printf("  $ rm %s\n", binPath)
+		fmt.Println("\n  \033[33mStep 2:\033[0m Remove saved connections (optional)")
+		fmt.Printf("  $ rm -rf %s\n", cfgDir)
+		fmt.Println("\n  \033[33mStep 3:\033[0m Clean Go cache (optional, frees ~50MB)")
+		fmt.Println("  $ go clean -modcache")
+	}
 	fmt.Println("\n  \033[38;2;166;227;161m✓\033[0m That's everything. dbterm stores nothing else.")
 	fmt.Println()
 }
@@ -175,17 +185,6 @@ func configDir() string {
 
 func configPath() string {
 	return filepath.Join(configDir(), "connections.json")
-}
-
-func goInstallPath() string {
-	if gopath := os.Getenv("GOPATH"); gopath != "" {
-		return filepath.Join(gopath, "bin")
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "~/go/bin"
-	}
-	return filepath.Join(home, "go", "bin")
 }
 
 func fmtBytes(b int64) string {

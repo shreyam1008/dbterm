@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - "main"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -30,11 +31,12 @@ jobs:
       - name: Build Core Artifacts
         run: |
           mkdir -p dist
-          GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o dist/dbterm-linux-amd64 .
-          GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o dist/dbterm-linux-arm64 .
-          GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o dist/dbterm-darwin-amd64 .
-          GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o dist/dbterm-darwin-arm64 .
-          GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o dist/dbterm-windows-amd64.exe .
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o dist/dbterm-linux-amd64 .
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o dist/dbterm-linux-arm64 .
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o dist/dbterm-darwin-amd64 .
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o dist/dbterm-darwin-arm64 .
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o dist/dbterm-windows-amd64.exe .
+          CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o dist/dbterm-windows-arm64.exe .
 
       - name: Upload Core Artifacts
         uses: actions/upload-artifact@v4
