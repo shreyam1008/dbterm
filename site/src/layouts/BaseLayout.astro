@@ -1,16 +1,20 @@
 ---
+import oatScriptUrl from "@knadh/oat/oat.min.js?url";
 import "../styles/global.css";
 
 export interface Props {
   title: string;
   description: string;
+  keywords?: string;
   ogImage?: string;
-  jsonLd?: Record<string, unknown>;
+  jsonLd?: Record<string, unknown> | Record<string, unknown>[];
 }
 
 const {
   title,
   description,
+  keywords =
+    "dbterm, database terminal client, postgresql tui, mysql tui, sqlite tui, turso cli, cloudflare d1 client, open source",
   ogImage = "main_ui.png",
   jsonLd
 } = Astro.props;
@@ -18,6 +22,26 @@ const {
 const canonical = new URL(Astro.url.pathname, Astro.site).toString();
 const socialImage = new URL(ogImage, Astro.site).toString();
 const faviconHref = new URL("favicon.svg", Astro.site).pathname;
+const manifestHref = new URL("manifest.webmanifest", Astro.site).pathname;
+
+const baseUrl = import.meta.env.BASE_URL;
+const withBase = (path: string) => {
+  const trimmedBase = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
+  const trimmedPath = path.startsWith("/") ? path.slice(1) : path;
+  return `${trimmedBase}/${trimmedPath}`.replace(/\/{2,}/g, "/");
+};
+
+const navItems = [
+  { label: "Home", href: withBase("/") },
+  { label: "Guide", href: withBase("guide/") },
+  { label: "Open Source", href: withBase("open-source/") }
+];
+
+const normalizedPathname = Astro.url.pathname.endsWith("/")
+  ? Astro.url.pathname
+  : `${Astro.url.pathname}/`;
+
+const jsonLdBlocks = Array.isArray(jsonLd) ? jsonLd : jsonLd ? [jsonLd] : [];
 ---
 
 <!doctype html>
@@ -27,10 +51,18 @@ const faviconHref = new URL("favicon.svg", Astro.site).pathname;
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     <meta name="description" content={description} />
+    <meta name="keywords" content={keywords} />
+    <meta name="author" content="dbterm contributors" />
+    <meta name="application-name" content="dbterm" />
+    <meta name="theme-color" content="#0b5d52" />
+    <meta name="format-detection" content="telephone=no" />
     <meta name="robots" content="index,follow,max-image-preview:large" />
     <link rel="canonical" href={canonical} />
+    <link rel="manifest" href={manifestHref} />
 
     <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="dbterm" />
+    <meta property="og:locale" content="en_US" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonical} />
@@ -42,16 +74,100 @@ const faviconHref = new URL("favicon.svg", Astro.site).pathname;
     <meta name="twitter:image" content={socialImage} />
 
     <link rel="icon" type="image/svg+xml" href={faviconHref} />
-    {jsonLd ? (
-      <script type="application/ld+json" set:html={JSON.stringify(jsonLd)}></script>
-    ) : null}
+
+    {jsonLdBlocks.map((entry) => (
+      <script
+        is:inline
+        type="application/ld+json"
+        set:html={JSON.stringify(entry)}
+      ></script>
+    ))}
   </head>
   <body>
-    <slot />
-    <footer class="page-footer">
-      <p>
-        MIT License • <a href="https://github.com/shreyam1008/dbterm">github.com/shreyam1008/dbterm</a>
-      </p>
+    <a class="skip-link" href="#page-content">Skip to content</a>
+
+    <header class="site-header">
+      <div class="container nav-shell">
+        <a class="brand" href={withBase("/")} aria-label="dbterm home">
+          <span class="brand-mark" aria-hidden="true">db</span>
+          <span class="brand-copy">
+            <strong>dbterm</strong>
+            <small>Open-source terminal DB client</small>
+          </span>
+        </a>
+
+        <nav aria-label="Primary">
+          <ul class="top-nav">
+            {navItems.map((item) => (
+              <li>
+                <a
+                  href={item.href}
+                  class={normalizedPathname === item.href ? "is-active" : undefined}
+                  aria-current={normalizedPathname === item.href ? "page" : undefined}
+                >
+                  {item.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+
+        <a class="button outline small repo-button" href="https://github.com/shreyam1008/dbterm">
+          GitHub
+        </a>
+      </div>
+    </header>
+
+    <main id="page-content" class="container page-shell">
+      <slot />
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-shell">
+        <p>MIT License. Built with Go + Astro + Oat UI.</p>
+        <p>
+          <a href="https://github.com/shreyam1008/dbterm">Repository</a>
+          <span aria-hidden="true">•</span>
+          <a href="https://github.com/shreyam1008/dbterm/releases">Releases</a>
+          <span aria-hidden="true">•</span>
+          <a href="https://github.com/shreyam1008/dbterm/issues">Issues</a>
+        </p>
+      </div>
     </footer>
+
+    <script is:inline type="module" src={oatScriptUrl}></script>
+    <script is:inline>
+      const resetCopyButton = (button) => {
+        const defaultLabel = button.dataset.defaultLabel || "Copy";
+        button.textContent = defaultLabel;
+        button.dataset.state = "idle";
+      };
+
+      const copyText = async (text) => {
+        if (!navigator.clipboard || !navigator.clipboard.writeText) {
+          throw new Error("Clipboard API unavailable");
+        }
+        await navigator.clipboard.writeText(text);
+      };
+
+      document.querySelectorAll("[data-copy-target]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const source = document.getElementById(button.dataset.copyTarget || "");
+          if (!source) return;
+
+          const text = source.textContent?.trimEnd() || "";
+          try {
+            await copyText(text);
+            button.textContent = "Copied";
+            button.dataset.state = "copied";
+          } catch {
+            button.textContent = "Copy failed";
+            button.dataset.state = "error";
+          }
+
+          window.setTimeout(() => resetCopyButton(button), 1500);
+        });
+      });
+    </script>
   </body>
 </html>

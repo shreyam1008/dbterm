@@ -1,0 +1,17 @@
+{
+  "name": "dbterm",
+  "short_name": "dbterm",
+  "description": "Open-source terminal database client for PostgreSQL, MySQL, SQLite, Turso, and Cloudflare D1.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f4efe2",
+  "theme_color": "#0b5d52",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

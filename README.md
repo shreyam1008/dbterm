@@ -1,20 +1,20 @@
 # dbterm
 
-> **A modern, multi-database terminal client.**  
-> Manage PostgreSQL, MySQL, and SQLite databases from super lightweight(~10MB RAM) a beautiful, keyboard-driven TUI.  
-> **Standalone single binary.** No Java, no Python, no Node.js required.
+Open-source, keyboard-first terminal client for SQL workflows.
 
-![Main UI](assets/main_ui.png)
+`dbterm` is a single binary that lets you connect, query, and operate across multiple databases without heavyweight desktop tooling.
 
-## 🚀 How it works
+![dbterm main interface](assets/main_ui.png)
 
-`dbterm` is a single binary executable.
+## Why dbterm
 
-1. Download the binary for your OS.
-2. Run it.
-3. Manage your databases.
+- Single binary install for Linux, macOS, and Windows.
+- Keyboard-driven TUI with fast panel navigation.
+- Supports PostgreSQL, MySQL, SQLite, Turso (LibSQL), and Cloudflare D1.
+- Built-in service dashboard and backup flow for PostgreSQL/MySQL.
+- Low overhead runtime (roughly ~8-12 MB idle in typical use).
 
-## ⚡ Quick Install (No Go Required)
+## Quick install
 
 ### Linux / macOS
 
@@ -28,110 +28,83 @@ curl -fsSL https://raw.githubusercontent.com/shreyam1008/dbterm/main/install.sh 
 powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/shreyam1008/dbterm/main/install.ps1 | iex"
 ```
 
-> **Compatible with:**
->
-> - 🍎 **macOS** (Intel & Apple Silicon)
-> - 🐧 **Linux** (AMD64 & ARM64)
-> - 🪟 **Windows** (AMD64 & ARM64 via PowerShell)
+## Documentation
 
----
+- Website: <https://shreyam1008.github.io/dbterm/>
+- Product guide: <https://shreyam1008.github.io/dbterm/guide/>
+- Open-source handbook: <https://shreyam1008.github.io/dbterm/open-source/>
 
-## 🔁 Automatic Releases
+## Supported databases
 
-Releases are automated from `.github/workflows/release.yml` on every push to `main`.
+| Database | Status |
+| --- | --- |
+| PostgreSQL | Query + backup + service controls |
+| MySQL | Query + backup + service controls |
+| SQLite | Query and local file workflows |
+| Turso (LibSQL) | Cloud SQLite-compatible querying |
+| Cloudflare D1 | D1 API-backed SQL querying |
 
-The workflow reads the first non-comment line from `releases/versions.txt` in this format:
+## CLI reference
+
+| Command | Purpose |
+| --- | --- |
+| `dbterm` | Launch TUI |
+| `dbterm --help` | Show help |
+| `dbterm --version` | Show version/build info |
+| `dbterm --info` | Show install/config/runtime info |
+| `dbterm --update` | Update to latest release |
+| `dbterm --update X.Y.Z` | Update to a specific release |
+| `dbterm --uninstall` | Remove binary with confirmation |
+| `dbterm --uninstall --yes` | Remove binary without prompt |
+| `dbterm --uninstall --purge` | Remove binary + saved connections |
+
+## Core shortcuts
+
+| Shortcut | Action |
+| --- | --- |
+| `Alt + Q / T / R` | Focus Query / Tables / Results |
+| `Alt + Enter` | Execute query |
+| `Alt + H` | Open help + SQL cheatsheets |
+| `Alt + D` | Return to dashboard |
+| `Alt + S` | Open services dashboard |
+| `F5 / Ctrl + F5` | Refresh table / full refresh |
+| `F / B` | Fullscreen results / backup modal |
+| `Ctrl + C` | Quit |
+
+## Build locally
+
+```bash
+make build
+```
+
+Run tests:
+
+```bash
+make test
+```
+
+Build website:
+
+```bash
+cd site
+npm install
+npm run build
+```
+
+## Release automation
+
+GitHub Actions release workflow reads the first non-comment line in `releases/versions.txt`:
 
 ```text
 <version>|<release name>|<short description>
 ```
 
-Rules:
+On push to `main`, it builds artifacts, publishes release assets/checksums, and updates install targets.
 
-1. Add a new entry at the top for every release.
-2. Use SemVer without `v` (example: `0.3.4`).
-3. Push to `main`.
+## Contributing
 
-What happens automatically:
+Read `CONTRIBUTING.md` for starter-friendly guidance on submitting issues and pull requests.
 
-1. Build binaries for Linux/macOS/Windows (amd64 + arm64).
-2. Create tag `v<version>`.
-3. Publish GitHub release assets + checksums.
-4. Update the APT repository on `gh-pages`.
-5. Stamp binaries with the same manifest version/commit for `dbterm --version`.
+## License
 
-If the tag already exists, the workflow fails (prevents duplicate release tags).
-
-Install/update behavior:
-
-- `curl ... install.sh` / `install.ps1` installs from **latest GitHub Release**.
-- `go install github.com/shreyam1008/dbterm@latest` installs the **latest tagged release**.
-- So both pick up updates after the release workflow publishes a new tag.
-
----
-
-## ✨ Features
-
-- **Multi-Database**: PostgreSQL, MySQL, SQLite (no CGO required).
-- **Service Dashboard**: Manage system services (MySQL/PG) and monitor resources.
-- **Keyboard Driven**: Query editor, sortable results, and navigation—all without a mouse.
-- **Cross-Platform**: Works on Linux, macOS (Intel & Silicon), and Windows.
-
-## 📸 Screenshots
-
-|          Connection Manager          |        Query Results         |
-| :----------------------------------: | :--------------------------: |
-| ![Connect DB](assets/connect_db.png) | _Run queries & view results_ |
-
-## ⌨️ Key Shortcuts
-
-| Key                               | Action                                       |
-| --------------------------------- | -------------------------------------------- |
-| `Alt + H`                         | Toggle Help & SQL cheatsheets                |
-| `Alt + Enter`                     | Execute Query                                |
-| `F5` / `Ctrl + F5`                | Refresh current table / full refresh         |
-| `F` / `B`                         | Fullscreen results / backup modal (PG/MySQL) |
-| `Alt + Q` / `Alt + T` / `Alt + R` | Focus Query / Tables / Results               |
-| `Alt + =` / `Alt + -` / `Alt + 0` | Row preview limit controls                   |
-| `S` / `Enter` / `Space` (Results) | Sort column / open row details               |
-| `Alt + D` / `Esc` / `Backspace`   | Back to dashboard                            |
-| `Alt + S` (or `S` on Dashboard)   | Service Dashboard                            |
-| `Ctrl + C`                        | Quit                                         |
-
-> Press `Alt + H` inside the app for a full cheat sheet.
-
-## 📦 Other Installation Methods
-
-### Manual Download
-
-Download the binary for your system from the [Releases Page](https://github.com/shreyam1008/dbterm/releases).
-
-### Go Install (Optional)
-
-```bash
-go install github.com/shreyam1008/dbterm@latest
-```
-
-### In-App Update
-
-```bash
-dbterm --update
-```
-
-Optional specific version:
-
-```bash
-dbterm --update 0.3.4
-```
-
-### In-App Uninstall
-
-```bash
-dbterm --uninstall
-dbterm --uninstall --purge
-dbterm --uninstall --yes
-```
-
----
-
-**License**: MIT | **Repo**: [github.com/shreyam1008/dbterm](https://github.com/shreyam1008/dbterm)
+MIT. See `LICENSE`.
