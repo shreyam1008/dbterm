@@ -132,6 +132,27 @@ dbterm --uninstall --purge
 dbterm --uninstall --yes
 ```
 
+## 🌐 GitHub Pages Website (Astro)
+
+A minimal SEO-friendly website lives in `site/` and is published to the existing `gh-pages` branch.
+
+The workflow is in `.github/workflows/pages.yml` and intentionally preserves `apt/` in `gh-pages` so release APT publishing keeps working.
+
+### Local preview
+
+```bash
+cd site
+npm ci
+npm run dev
+```
+
+### Production build
+
+```bash
+cd site
+npm run build
+```
+
 ---
 
 **License**: MIT | **Repo**: [github.com/shreyam1008/dbterm](https://github.com/shreyam1008/dbterm)

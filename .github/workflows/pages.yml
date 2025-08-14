@@ -1,0 +1,101 @@
+name: Website
+
+on:
+  push:
+    branches:
+      - "main"
+    paths:
+      - "site/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: website-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy-site:
+    name: Build and Publish Site
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Install dependencies
+        working-directory: site
+        run: npm ci
+
+      - name: Build static site
+        working-directory: site
+        env:
+          PUBLIC_GITHUB_OWNER: ${{ github.repository_owner }}
+          PUBLIC_REPOSITORY_NAME: ${{ github.event.repository.name }}
+          PUBLIC_BASE_PATH: /${{ github.event.repository.name }}
+          PUBLIC_SITE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+        run: npm run build
+
+      - name: Publish to gh-pages (preserve apt/)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          REPO_URL="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          PAGES_DIR="/tmp/dbterm-gh-pages-site"
+
+          rm -rf "$PAGES_DIR"
+          if git ls-remote --exit-code --heads "$REPO_URL" gh-pages >/dev/null 2>&1; then
+            git clone --depth 1 --branch gh-pages "$REPO_URL" "$PAGES_DIR"
+          else
+            git clone --depth 1 "$REPO_URL" "$PAGES_DIR"
+            cd "$PAGES_DIR"
+            git checkout --orphan gh-pages
+            git rm -rf . >/dev/null 2>&1 || true
+            find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+            cd - >/dev/null
+          fi
+
+          rsync -av --delete \
+            --exclude 'apt/' \
+            --exclude '.git/' \
+            --exclude 'CNAME' \
+            site/dist/ "$PAGES_DIR/"
+          touch "$PAGES_DIR/.nojekyll"
+
+          cd "$PAGES_DIR"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "No website changes to publish."
+            exit 0
+          fi
+
+          SHORT_SHA="${GITHUB_SHA::7}"
+          git commit -m "site: publish ${SHORT_SHA}"
+
+          for attempt in 1 2 3; do
+            if git push origin gh-pages; then
+              echo "Site published to gh-pages."
+              exit 0
+            fi
+
+            echo "Push failed, rebasing and retrying (${attempt}/3)..."
+            git pull --rebase origin gh-pages
+          done
+
+          echo "Failed to push site after retries."
+          exit 1

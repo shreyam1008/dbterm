@@ -30,6 +30,9 @@ vendor/
 
 # Build output
 bin/
+site/dist/
+site/node_modules/
+site/.astro/
 
 # Test coverage
 coverage.txt
