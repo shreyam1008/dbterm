@@ -15,20 +15,22 @@ func (a *App) showHelp() {
   Alt + T ........... Focus Tables list
   Alt + Q ........... Focus Query editor
   Alt + R ........... Focus Results view
-  Alt + D ........... Back to Dashboard
+  Alt + D ........... Back to Dashboard (workspace/help)
   Alt + H ........... Toggle this Help
   Alt + S ........... Database Services
-  B ................. Backup current DB (PostgreSQL/MySQL)
   Tab ............... Cycle: Tables → Query → Results
   Esc ............... Close / Go back
+  Backspace ......... Back to Dashboard (outside Query editor)
   Ctrl+C ............ Quit
 
 [#a6e3a1]Query & Results ` + iconQuery + ` ` + iconResults + `[-]
   Alt + Enter ....... Execute query
   F5 ................ Refresh current table (keep sort/selection) ` + iconRefresh + `
   Ctrl + F5 ......... Refresh table list + current table ` + iconRefresh + `
-  F ................. Toggle fullscreen results
+  F ................. Toggle fullscreen results (outside Query editor)
+  B ................. Backup current DB (PostgreSQL/MySQL)
   S ................. Sort by current column (in Results)
+  Enter / Space ..... Open row details (in Results)
   Alt + = / - ....... Increase / decrease preview row limit
   Alt + 0 ........... Toggle preview limit (100 ↔ all rows)
   Status bar ........ Shows active sort + preview limit
@@ -42,12 +44,12 @@ func (a *App) showHelp() {
   W / B / Esc ....... Back to workspace (when connected) ` + iconBack + `
   H ................. Open Help ` + iconHelp + `
   Q ................. Quit
-  1-9 ............... Quick-select connection
+  1-9 / 0 ........... Quick-select first 10 connections
 
 [#a6e3a1]Services (Alt+S) ` + iconServices + `[-]
   1 ................. Toggle MySQL start/stop
   2 ................. Toggle PostgreSQL start/stop
-  C / Enter ......... Connect to selected service ` + iconConnect + `
+  C / Enter ......... Open connect modal ` + iconConnect + `
   R ................. Refresh service info ` + iconRefresh + `
   Esc ............... Go back ` + iconBack + `
 
