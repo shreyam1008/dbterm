@@ -5,14 +5,14 @@ Codename: stable
 Architectures: amd64 arm64
 Components: main
 Description: APT repository for dbterm
-Date: Fri, 13 Feb 2026 14:45:10 +0000
+Date: Sat, 14 Feb 2026 05:22:53 +0000
 MD5Sum:
- be054bb79ca8986cb8893eb296bf9582              520 main/binary-amd64/Packages
- 94aa4e98c832b45903fba5532229e4c8              400 main/binary-amd64/Packages.gz
- 79cf55606489884af55f0869fe1c5143              520 main/binary-arm64/Packages
- 91143d90b34755039a60c0a033cf54b9              400 main/binary-arm64/Packages.gz
+ 2d07ab77c7fe10b4007093539e323ebf              520 main/binary-amd64/Packages
+ a12fd4df751c65b5beeef6d5a1142406              399 main/binary-amd64/Packages.gz
+ 00b081df3d30745b804143d6e7fe7132              520 main/binary-arm64/Packages
+ f1f186016ea3a5a72b37dd2ce644cc81              398 main/binary-arm64/Packages.gz
 SHA256:
- 0ed70aeb500cc24194e6679212a7742681d988517aeff0cd68b0e5fb8bf92085              520 main/binary-amd64/Packages
- 7c605924080e4500484a9973d75895c2f870372dd3a42b222f3d86a9b933d61b              400 main/binary-amd64/Packages.gz
- a80fa41d788ebecdad7573ba0549a88114878c8c91e3c939be607474750d39ec              520 main/binary-arm64/Packages
- 8816c24b6cfede916d8bc72bbbe3e3bffed977d9611350cc46b1dec5ade37c19              400 main/binary-arm64/Packages.gz
+ 44ffa5a64b31f1484fbf02aa5c9359c538ff0ba008bf0d49f2a28d80bc676d20              520 main/binary-amd64/Packages
+ 414061cde912dc9c6c2b78d5f2c14e4449cadf8d48fc40fb74a4e74794092a93              399 main/binary-amd64/Packages.gz
+ 8d6ccb318cea06deee2590102d35917329a68d2ee1fb7376949380108093c4ab              520 main/binary-arm64/Packages
+ 35a579d68f205e88359770ddf5e57508b62157829ac4b7686489994de1eca4ba              398 main/binary-arm64/Packages.gz
