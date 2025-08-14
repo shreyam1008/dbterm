@@ -10,6 +10,7 @@
 # 5) If that tag already exists, the workflow fails (prevents duplicate releases).
 #
 # Newest entry first:
+0.3.6|Chakra|better installer experience.
 0.3.5|Bhakti|Download loader with dbterm, improved installer flow, and Windows ARM64 artifacts.
 0.3.4|Aarati|Cross-platform one-command installer flow, Windows ARM64 artifacts, shortcut/help sync, and direct dbterm uninstall support.
 0.3.3|Production Installer Rollout|Cross-platform one-command installer flow, Windows ARM64 artifacts, shortcut/help sync, and direct dbterm uninstall support.
