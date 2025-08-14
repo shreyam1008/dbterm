@@ -127,7 +127,16 @@ func printHelp() {
 }
 
 func printVersion() {
-	fmt.Printf("dbterm v%s (%s)\n", buildVersion(), buildCommit())
+	versionText := buildVersion()
+	releaseName := buildReleaseName(versionText)
+	commitText := buildCommit()
+
+	if releaseName != "" {
+		fmt.Printf("dbterm v%s \"%s\"\n", versionText, releaseName)
+	} else {
+		fmt.Printf("dbterm v%s\n", versionText)
+	}
+	fmt.Printf("Build %s\n", commitText)
 	fmt.Printf("Go %s, %s/%s\n", runtime.Version(), runtime.GOOS, runtime.GOARCH)
 }
 
@@ -152,7 +161,15 @@ func printInfo() {
 	fmt.Print(`
   ` + "\033[1;38;2;203;166;247m" + `dbterm` + "\033[0m" + ` — System Info
 `)
-	fmt.Printf("  \033[33mVersion\033[0m       %s (%s)\n", buildVersion(), buildCommit())
+	versionText := buildVersion()
+	releaseName := buildReleaseName(versionText)
+	commitText := buildCommit()
+	if releaseName != "" {
+		fmt.Printf("  \033[33mVersion\033[0m       %s (%s)\n", versionText, releaseName)
+	} else {
+		fmt.Printf("  \033[33mVersion\033[0m       %s\n", versionText)
+	}
+	fmt.Printf("  \033[33mBuild\033[0m         %s\n", commitText)
 	fmt.Printf("  \033[33mGo\033[0m            %s\n", runtime.Version())
 	fmt.Printf("  \033[33mOS / Arch\033[0m     %s / %s\n\n", runtime.GOOS, runtime.GOARCH)
 	fmt.Println("  \033[33mPATHS\033[0m")
@@ -640,8 +657,44 @@ func buildCommit() string {
 	return "dev"
 }
 
+func buildReleaseName(versionText string) string {
+	releases := manifestReleases()
+	if len(releases) == 0 {
+		return ""
+	}
+
+	target := normalizeVersion(versionText)
+	if target != "" {
+		for _, release := range releases {
+			if normalizeVersion(release.version) == target {
+				return release.name
+			}
+		}
+	}
+
+	return releases[0].name
+}
+
 func latestManifestRelease() (version, name, description string) {
+	releases := manifestReleases()
+	if len(releases) == 0 {
+		return "", "", ""
+	}
+
+	release := releases[0]
+	return release.version, release.name, release.description
+}
+
+type manifestRelease struct {
+	version     string
+	name        string
+	description string
+}
+
+func manifestReleases() []manifestRelease {
 	lines := strings.Split(embeddedVersionsManifest, "\n")
+	releases := make([]manifestRelease, 0, len(lines))
+
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
@@ -659,7 +712,16 @@ func latestManifestRelease() (version, name, description string) {
 		if v == "" || n == "" || d == "" {
 			continue
 		}
-		return v, n, d
+		releases = append(releases, manifestRelease{
+			version:     v,
+			name:        n,
+			description: d,
+		})
 	}
-	return "", "", ""
+
+	return releases
+}
+
+func normalizeVersion(value string) string {
+	return strings.TrimPrefix(strings.TrimSpace(value), "v")
 }

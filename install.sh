@@ -11,6 +11,8 @@ VERSION="${DBTERM_VERSION:-latest}"
 INSTALL_DIR="${DBTERM_INSTALL_DIR:-}"
 USE_SUDO=0
 TMP_DIR=""
+IS_TTY=0
+TOTAL_STEPS=6
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -21,6 +23,76 @@ NC='\033[0m'
 info() { echo -e "${CYAN}$*${NC}"; }
 warn() { echo -e "${YELLOW}$*${NC}"; }
 err() { echo -e "${RED}$*${NC}" >&2; }
+
+print_banner() {
+	echo -e "${GREEN}"
+	echo "==============================================="
+	echo "              dbterm installer"
+	echo "==============================================="
+	echo -e "${NC}Installs the standalone dbterm binary (no Go required)."
+}
+
+print_step() {
+	local idx="$1"
+	local text="$2"
+	echo
+	echo -e "${CYAN}[${idx}/${TOTAL_STEPS}]${NC} ${text}"
+}
+
+run_step_plain() {
+	local label="$1"
+	shift
+
+	printf "  - %s ... " "$label"
+	if "$@"; then
+		echo -e "${GREEN}ok${NC}"
+	else
+		echo -e "${RED}failed${NC}"
+		return 1
+	fi
+}
+
+run_step_spinner() {
+	local label="$1"
+	shift
+
+	local log_file pid rc i spinner
+	log_file="$(mktemp "${TMPDIR:-/tmp}/dbterm-step-XXXXXX")"
+	"$@" >"$log_file" 2>&1 &
+	pid=$!
+
+	printf "  - %s " "$label"
+	i=0
+	spinner='|/-\'
+	while kill -0 "$pid" 2>/dev/null; do
+		i=$(((i + 1) % 4))
+		printf "\r  - %s ${CYAN}%c${NC}" "$label" "${spinner:$i:1}"
+		sleep 0.1
+	done
+
+	wait "$pid"
+	rc=$?
+	if [[ "$rc" -eq 0 ]]; then
+		printf "\r  - %s ${GREEN}ok${NC}\n" "$label"
+	else
+		printf "\r  - %s ${RED}failed${NC}\n" "$label"
+		if [[ -s "$log_file" ]]; then
+			sed 's/^/    /' "$log_file" >&2
+		fi
+	fi
+	rm -f "$log_file"
+	return "$rc"
+}
+
+run_step() {
+	local label="$1"
+	shift
+	if [[ "$IS_TTY" -eq 1 ]]; then
+		run_step_spinner "$label" "$@"
+	else
+		run_step_plain "$label" "$@"
+	fi
+}
 
 cleanup() {
 	if [[ -n "$TMP_DIR" && -d "$TMP_DIR" ]]; then
@@ -38,7 +110,7 @@ download_file() {
 		wget -qO "$out" "$url"
 	else
 		err "Error: neither curl nor wget is installed."
-		exit 1
+		return 1
 	fi
 }
 
@@ -159,19 +231,46 @@ verify_checksum() {
 
 	if [[ "$expected" != "$actual" ]]; then
 		err "Checksum verification failed for $asset_name"
-		exit 1
+		return 1
 	fi
+	return 0
+}
 
-	info "Checksum verified."
+install_binary() {
+	local src_file="$1"
+	local target_name="$2"
+
+	if [[ "$USE_SUDO" -eq 1 ]]; then
+		sudo mkdir -p "$INSTALL_DIR"
+		sudo install -m 0755 "$src_file" "$INSTALL_DIR/$target_name"
+	else
+		mkdir -p "$INSTALL_DIR"
+		install -m 0755 "$src_file" "$INSTALL_DIR/$target_name"
+	fi
+}
+
+validate_binary() {
+	local target_path="$1"
+	"$target_path" --version >/dev/null 2>&1
 }
 
 main() {
-	local ext asset_name target_name base_url tmp_bin tmp_checksums
+	local ext asset_name target_name base_url tmp_bin tmp_checksums installed_version
 
-	echo -e "${GREEN}Installing dbterm...${NC}"
+	if [[ -t 1 ]]; then
+		IS_TTY=1
+	fi
+
+	print_banner
+
+	print_step 1 "Detecting platform"
 	detect_target
 	resolve_install_dir
 
+	info "Detected target: ${OS}/${ARCH}"
+	info "Install directory: ${INSTALL_DIR}"
+
+	print_step 2 "Resolving release artifact"
 	ext=""
 	target_name="$BINARY_NAME"
 	if [[ "$OS" == "windows" ]]; then
@@ -189,40 +288,46 @@ main() {
 		base_url="https://github.com/${REPO}/releases/download/${VERSION}"
 	fi
 
-	info "Detected target: ${OS}/${ARCH}"
-	info "Install directory: ${INSTALL_DIR}"
+	info "Release source: ${REPO}"
+	info "Requested version: ${VERSION}"
+	info "Artifact: ${asset_name}"
 
 	TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/${BINARY_NAME}-install-XXXXXX")"
 	tmp_bin="${TMP_DIR}/${asset_name}"
 	tmp_checksums="${TMP_DIR}/checksums.txt"
 
-	info "Downloading ${asset_name}..."
-	download_file "${base_url}/${asset_name}" "$tmp_bin"
+	print_step 3 "Downloading binary"
+	run_step "Downloading ${asset_name}" download_file "${base_url}/${asset_name}" "$tmp_bin"
 
-	if download_file "${base_url}/checksums.txt" "$tmp_checksums" 2>/dev/null; then
-		verify_checksum "$tmp_checksums" "$tmp_bin" "$asset_name"
+	print_step 4 "Verifying checksum"
+	if run_step "Downloading checksums.txt" download_file "${base_url}/checksums.txt" "$tmp_checksums"; then
+		run_step "Verifying ${asset_name}" verify_checksum "$tmp_checksums" "$tmp_bin" "$asset_name"
+		echo -e "  - Checksum ${GREEN}verified${NC}"
 	else
 		warn "checksums.txt not found; continuing without checksum verification."
 	fi
 
 	chmod +x "$tmp_bin"
 
+	print_step 5 "Installing binary"
 	if [[ "$USE_SUDO" -eq 1 ]]; then
-		sudo mkdir -p "$INSTALL_DIR"
-		sudo install -m 0755 "$tmp_bin" "$INSTALL_DIR/$target_name"
-	else
-		mkdir -p "$INSTALL_DIR"
-		install -m 0755 "$tmp_bin" "$INSTALL_DIR/$target_name"
+		info "Installing to ${INSTALL_DIR} (sudo may prompt for password)"
 	fi
+	run_step_plain "Installing to ${INSTALL_DIR}" install_binary "$tmp_bin" "$target_name"
 
-	if "$INSTALL_DIR/$target_name" --version >/dev/null 2>&1; then
-		info "Binary check passed."
+	print_step 6 "Final validation"
+	if run_step "Running binary check" validate_binary "$INSTALL_DIR/$target_name"; then
+		installed_version="$("$INSTALL_DIR/$target_name" --version 2>/dev/null | head -n1 || true)"
+		if [[ -n "$installed_version" ]]; then
+			info "Installed version: ${installed_version}"
+		fi
 	else
 		warn "Binary check failed, but install completed."
 	fi
 
 	add_path_hint
 
+	echo
 	echo -e "${GREEN}Success!${NC} Run ${YELLOW}dbterm${NC}."
 }
 
