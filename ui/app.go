@@ -64,6 +64,7 @@ type App struct {
 	tableExpanded bool // results fullscreen mode
 	lastScreenW   int
 	lastScreenH   int
+	focusedPanel  tview.Primitive // cached focus target (avoids lock-unsafe GetFocus calls)
 
 	// Column width / zoom state
 	tableZoom        int         // global zoom offset in steps (range: -5 to +10)
@@ -296,6 +297,7 @@ func (a *App) setFocusWithColor(target tview.Primitive) {
 	}
 
 	a.app.SetFocus(target)
+	a.focusedPanel = target
 	// Refresh status bar so context-sensitive footer hints update
 	a.updateStatusBar("", a.currentResultRowCount())
 }
@@ -935,7 +937,7 @@ func (a *App) applyResponsiveLayout(width, height int) {
 }
 
 func (a *App) statusActionText(width int) string {
-	inQuery := a.app.GetFocus() == a.queryInput
+	inQuery := a.focusedPanel == a.queryInput
 	switch {
 	case width < 72:
 		if inQuery {
