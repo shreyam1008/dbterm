@@ -116,9 +116,10 @@ func printHelp() {
 
   ` + "\033[33m" + `KEY BINDINGS` + "\033[0m" + `
     Alt+Q/T/R  Focus Query/Tables/Results
-    Alt+Enter  Execute query       F5  Refresh table
-    Ctrl+F5    Full refresh        F/B Toggle Fullscreen/Backup
-    Alt+H      Help panel          Alt+D  Dashboard
+    Enter      Execute query          F5  Refresh table
+    Ctrl+F5    Full refresh           F/B Toggle Fullscreen/Backup
+    Ctrl+/-/0  Zoom table columns     +/- Column width
+    Alt+H      Help panel             Alt+D  Dashboard
     Ctrl+C     Quit
 
   ` + "\033[38;2;108;112;134m" + `https://github.com/shreyam1008/dbterm
@@ -221,6 +222,10 @@ func runUpdate(requestedVersion string) error {
 		versionSpec = "latest"
 	}
 
+	// Capture the current version before updating
+	oldVersion := buildVersion()
+	oldReleaseName := buildReleaseName(oldVersion)
+
 	targetOS, targetArch, err := updateTargetForRuntime(runtime.GOOS, runtime.GOARCH)
 	if err != nil {
 		return err
@@ -232,6 +237,11 @@ func runUpdate(requestedVersion string) error {
 	}
 
 	fmt.Print("\n  \033[1;38;2;203;166;247mdbterm\033[0m — Update\n")
+	if oldReleaseName != "" {
+		fmt.Printf("  \033[33mCurrent\033[0m       v%s \"%s\"\n", oldVersion, oldReleaseName)
+	} else {
+		fmt.Printf("  \033[33mCurrent\033[0m       v%s\n", oldVersion)
+	}
 	fmt.Printf("  Target        %s/%s\n", targetOS, targetArch)
 	fmt.Printf("  Source        %s\n", repo)
 	fmt.Printf("  Version       %s\n", strings.TrimPrefix(versionSpec, "v"))
@@ -281,9 +291,9 @@ func runUpdate(requestedVersion string) error {
 	}
 
 	if runtime.GOOS == "windows" {
-		return replaceWindowsBinary(exePath, downloadPath)
+		return replaceWindowsBinary(exePath, downloadPath, oldVersion)
 	}
-	return replaceUnixBinary(exePath, downloadPath)
+	return replaceUnixBinary(exePath, downloadPath, oldVersion)
 }
 
 func updateTargetForRuntime(goos, goarch string) (string, string, error) {
@@ -379,7 +389,7 @@ func sha256File(path string) (string, error) {
 	return hex.EncodeToString(sum.Sum(nil)), nil
 }
 
-func replaceUnixBinary(exePath, downloadedPath string) error {
+func replaceUnixBinary(exePath, downloadedPath, oldVersion string) error {
 	targetDir := filepath.Dir(exePath)
 	stagedPath := filepath.Join(targetDir, fmt.Sprintf(".dbterm-update-%d", time.Now().UnixNano()))
 
@@ -399,12 +409,11 @@ func replaceUnixBinary(exePath, downloadedPath string) error {
 	}
 
 	fmt.Printf("  \033[38;2;166;227;161m✓\033[0m Updated: %s\n", exePath)
-	fmt.Println("  \033[38;2;166;227;161m✓\033[0m Update complete.")
-	fmt.Println()
+	printUpdateSummary(oldVersion)
 	return nil
 }
 
-func replaceWindowsBinary(exePath, downloadedPath string) error {
+func replaceWindowsBinary(exePath, downloadedPath, oldVersion string) error {
 	stagedPath := exePath + ".new"
 	if err := copyFile(downloadedPath, stagedPath, 0o755); err != nil {
 		if isPermissionErr(err) {
@@ -419,9 +428,39 @@ func replaceWindowsBinary(exePath, downloadedPath string) error {
 	}
 
 	fmt.Printf("  \033[38;2;166;227;161m✓\033[0m Downloaded update for %s\n", exePath)
+	printUpdateSummary(oldVersion)
 	fmt.Println("  \033[33mAction:\033[0m Close this terminal, then run dbterm again.")
 	fmt.Println()
 	return nil
+}
+
+// printUpdateSummary shows old→new version info and release notes after a successful update.
+func printUpdateSummary(oldVersion string) {
+	newVersion, newName, newDesc := latestManifestRelease()
+	if newVersion == "" {
+		fmt.Println("  \033[38;2;166;227;161m✓\033[0m Update complete.")
+		fmt.Println()
+		return
+	}
+
+	fmt.Println()
+	fmt.Println("  ╭─────────────────────────────────────────────╮")
+	if newName != "" {
+		fmt.Printf("  │  \033[38;2;166;227;161m✓\033[0m \033[1mInstalled\033[0m  v%s \"\033[38;2;249;226;175m%s\033[0m\"\n", newVersion, newName)
+	} else {
+		fmt.Printf("  │  \033[38;2;166;227;161m✓\033[0m \033[1mInstalled\033[0m  v%s\n", newVersion)
+	}
+	if oldVersion != "" && normalizeVersion(oldVersion) != normalizeVersion(newVersion) {
+		fmt.Printf("  │  \033[38;2;108;112;134mPrevious   v%s\033[0m\n", oldVersion)
+	}
+	if newDesc != "" {
+		fmt.Println("  │")
+		fmt.Printf("  │  \033[33mWhat's new:\033[0m %s\n", newDesc)
+	}
+	fmt.Println("  ╰─────────────────────────────────────────────╯")
+	fmt.Println()
+	fmt.Println("  \033[38;2;166;227;161m✓\033[0m Update complete. Thank you for using dbterm!")
+	fmt.Println()
 }
 
 func copyFile(src, dst string, mode os.FileMode) error {
