@@ -58,6 +58,7 @@ func (a *App) ExecuteQuery(query string) {
 		elapsed := time.Since(a.queryStart)
 		a.results.SetTitle(fmt.Sprintf(" %s Results [yellow](Alt+R)[-] — [green]%d rows[-] in [teal]%s[-] ", iconResults, rowCount, formatDuration(elapsed)))
 		a.results.ScrollToBeginning()
+		a.applyColumnWidths()
 		a.updateStatusBar(fmt.Sprintf("[teal]%s[-]", formatDuration(elapsed)), rowCount)
 		a.app.SetFocus(a.results)
 	} else {
