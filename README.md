@@ -2,6 +2,9 @@
 
 Open-source, keyboard-first terminal client for SQL workflows.
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/shreyam1008/dbterm.svg)](https://pkg.go.dev/github.com/shreyam1008/dbterm)
+[![License: MIT](https://img.shields.io/badge/License-MIT-success.svg)](LICENSE)
+
 `dbterm` is a single binary that lets you connect, query, and operate across multiple databases without heavyweight desktop tooling.
 
 ![dbterm main interface](assets/main_ui.png)
@@ -33,6 +36,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubus
 - Website: <https://shreyam1008.github.io/dbterm/>
 - Product guide: <https://shreyam1008.github.io/dbterm/guide/>
 - Open-source handbook: <https://shreyam1008.github.io/dbterm/open-source/>
+- Go package page: <https://pkg.go.dev/github.com/shreyam1008/dbterm>
 
 ## Supported databases
 
@@ -101,10 +105,20 @@ GitHub Actions release workflow reads the first non-comment line in `releases/ve
 
 On push to `main`, it builds artifacts, publishes release assets/checksums, and updates install targets.
 
+## Acknowledgments
+
+dbterm was initially inspired by [pgterm](https://github.com/nabsk911/pgterm) by @nabsk911.
+
+The project is now independently developed and has significantly expanded in scope and features.
+
 ## Contributing
 
 Read `CONTRIBUTING.md` for starter-friendly guidance on submitting issues and pull requests.
 
 ## License
 
-MIT. See `LICENSE`.
+dbterm is MIT licensed.
+
+- Canonical license file: `LICENSE`
+- Open-source + license references: <https://shreyam1008.github.io/dbterm/open-source/>
+- Package docs: <https://pkg.go.dev/github.com/shreyam1008/dbterm>

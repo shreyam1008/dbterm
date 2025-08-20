@@ -101,8 +101,11 @@ func printHelp() {
     Alt+H      Help panel             Alt+D  Dashboard
     Ctrl+C     Quit
 
-  ` + "\033[38;2;108;112;134m" + `https://github.com/shreyam1008/dbterm
-  Based on pgterm by @nabsk911` + "\033[0m" + `
+  ` + "\033[38;2;108;112;134m" + `Docs: https://shreyam1008.github.io/dbterm/
+  Open source: https://shreyam1008.github.io/dbterm/open-source/
+  Package docs: https://pkg.go.dev/github.com/shreyam1008/dbterm
+  Source: https://github.com/shreyam1008/dbterm
+  Inspired by pgterm by @nabsk911` + "\033[0m" + `
 `)
 }
 

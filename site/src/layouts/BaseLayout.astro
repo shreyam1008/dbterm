@@ -33,7 +33,8 @@ const withBase = (path: string) => {
 
 const navItems = [
   { label: "Home", href: withBase("/") },
-  { label: "Guide", href: withBase("guide/") }
+  { label: "Guide", href: withBase("guide/") },
+  { label: "Open Source", href: withBase("open-source/") }
 ];
 
 const normalizedPathname = Astro.url.pathname.endsWith("/")
@@ -125,7 +126,13 @@ const jsonLdBlocks = Array.isArray(jsonLd) ? jsonLd : jsonLd ? [jsonLd] : [];
       <div class="container footer-shell">
         <p>MIT License. Built with Go + Astro + Oat UI.</p>
         <p>
+          <a href="https://shreyam1008.github.io/dbterm/">Docs</a>
+          <span aria-hidden="true">•</span>
+          <a href="https://pkg.go.dev/github.com/shreyam1008/dbterm">pkg.go.dev</a>
+          <span aria-hidden="true">•</span>
           <a href="https://github.com/shreyam1008/dbterm">Repository</a>
+          <span aria-hidden="true">•</span>
+          <a href="https://github.com/shreyam1008/dbterm/blob/main/LICENSE">License</a>
           <span aria-hidden="true">•</span>
           <a href="https://github.com/shreyam1008/dbterm/releases">Releases</a>
           <span aria-hidden="true">•</span>

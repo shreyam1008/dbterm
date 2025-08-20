@@ -1,0 +1,127 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+
+const title = "dbterm Open Source | License, Attribution, and Project Links";
+const description =
+  "Open-source reference for dbterm covering MIT license details, project attribution, docs links, and package registry links.";
+const keywords =
+  "dbterm open source, dbterm license, dbterm MIT, dbterm pkg.go.dev, dbterm documentation";
+
+const projectLinks = [
+  {
+    name: "Documentation website",
+    href: "https://shreyam1008.github.io/dbterm/",
+    detail: "Primary documentation home for product overview, install commands, and workflows."
+  },
+  {
+    name: "Product guide",
+    href: "https://shreyam1008.github.io/dbterm/guide/",
+    detail: "Setup, keybindings, CLI usage, and troubleshooting."
+  },
+  {
+    name: "Go package documentation",
+    href: "https://pkg.go.dev/github.com/shreyam1008/dbterm",
+    detail: "Module and package page on pkg.go.dev."
+  },
+  {
+    name: "GitHub repository",
+    href: "https://github.com/shreyam1008/dbterm",
+    detail: "Source code, issues, releases, and contribution workflow."
+  },
+  {
+    name: "MIT license text",
+    href: "https://github.com/shreyam1008/dbterm/blob/main/LICENSE",
+    detail: "Canonical license file used by scanners and package registries."
+  }
+];
+
+const openSourceJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "AboutPage",
+  name: "dbterm open-source information",
+  description,
+  url: "https://shreyam1008.github.io/dbterm/open-source/",
+  about: {
+    "@type": "SoftwareSourceCode",
+    name: "dbterm",
+    codeRepository: "https://github.com/shreyam1008/dbterm",
+    license: "https://github.com/shreyam1008/dbterm/blob/main/LICENSE"
+  }
+};
+---
+
+<BaseLayout title={title} description={description} keywords={keywords} jsonLd={openSourceJsonLd}>
+  <section class="hero-panel">
+    <p class="eyebrow">Open source information</p>
+    <h1>License and project references</h1>
+    <p>
+      This page is the canonical open-source reference for dbterm. It centralizes license information,
+      attribution notes, documentation links, and package-index links.
+    </p>
+    <div class="page-meta">
+      <span>MIT licensed</span>
+      <span>Independent project</span>
+      <span>Registry friendly links</span>
+    </div>
+  </section>
+
+  <section class="panel" id="license">
+    <h2>License</h2>
+    <p>
+      dbterm is distributed under the MIT License. Use the exact root
+      <a href="https://github.com/shreyam1008/dbterm/blob/main/LICENSE">LICENSE</a> file as the
+      canonical legal text.
+    </p>
+    <p>
+      SPDX identifier: <code class="inline-code">MIT</code>
+    </p>
+    <p class="notice">
+      To keep `pkg.go.dev` and license scanners happy, keep the root `LICENSE` file unmodified from
+      standard MIT wording.
+    </p>
+  </section>
+
+  <section class="panel" id="attribution">
+    <h2>Attribution</h2>
+    <p>
+      dbterm was initially inspired by
+      <a href="https://github.com/nabsk911/pgterm">pgterm</a> by @nabsk911.
+    </p>
+    <p>
+      dbterm is independently developed and maintained, with expanded scope and feature set.
+    </p>
+  </section>
+
+  <section class="panel" id="links">
+    <h2>Canonical links</h2>
+    <p class="lead">
+      These links are intended for open-source catalogs, directories, and external references.
+    </p>
+    <div class="resource-grid">
+      {projectLinks.map((item) => (
+        <article class="resource-item">
+          <h3><a href={item.href}>{item.name}</a></h3>
+          <p>{item.detail}</p>
+        </article>
+      ))}
+    </div>
+  </section>
+
+  <section class="panel" id="community">
+    <h2>Community and maintenance</h2>
+    <ul class="list-tight">
+      <li>
+        Contributions guide:
+        <a href="https://github.com/shreyam1008/dbterm/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>
+      </li>
+      <li>
+        Issue tracker:
+        <a href="https://github.com/shreyam1008/dbterm/issues">github.com/shreyam1008/dbterm/issues</a>
+      </li>
+      <li>
+        Releases:
+        <a href="https://github.com/shreyam1008/dbterm/releases">github.com/shreyam1008/dbterm/releases</a>
+      </li>
+    </ul>
+  </section>
+</BaseLayout>
