@@ -49,17 +49,29 @@ func (a *App) ExecuteQuery(query string) {
 		}
 		defer rows.Close()
 
-		rowCount, err := populateTable(a.results, rows)
+		previewLimit := a.effectiveResultLimit()
+		rowCount, truncated, err := populateTableWithLimit(a.results, rows, previewLimit)
 		if err != nil {
 			a.ShowAlert(fmt.Sprintf("%s Error reading results:\n\n%v", iconWarn, err), "main")
 			return
 		}
 
 		elapsed := time.Since(a.queryStart)
-		a.results.SetTitle(fmt.Sprintf(" %s Results [yellow](Alt+R)[-] — [green]%d rows[-] in [teal]%s[-] ", iconResults, rowCount, formatDuration(elapsed)))
+		previewBadge := ""
+		if truncated && previewLimit > 0 {
+			previewBadge = fmt.Sprintf(" [#a6adc8](preview %d)[-]", previewLimit)
+		}
+		a.results.SetTitle(fmt.Sprintf(" %s Results [yellow](Alt+R)[-] — [green]%d rows[-]%s in [teal]%s[-] ", iconResults, rowCount, previewBadge, formatDuration(elapsed)))
 		a.results.ScrollToBeginning()
 		a.applyColumnWidths()
 		a.updateStatusBar(fmt.Sprintf("[teal]%s[-]", formatDuration(elapsed)), rowCount)
+		if truncated && previewLimit > 0 {
+			a.flashStatus(
+				fmt.Sprintf("[yellow]%s Showing first %d rows (%s). Press Alt+0 for all rows.[-]", iconInfo, rowCount, a.resultLimitReadable()),
+				rowCount,
+				1800*time.Millisecond,
+			)
+		}
 		a.app.SetFocus(a.results)
 	} else {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

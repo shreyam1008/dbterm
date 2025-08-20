@@ -96,8 +96,8 @@ func printHelp() {
   ` + "\033[33m" + `KEY BINDINGS` + "\033[0m" + `
     Alt+Q/T/R  Focus Query/Tables/Results
     Enter      Execute query          F5  Refresh table
-    Ctrl+F5    Full refresh           F/B Toggle Fullscreen/Backup
-    Ctrl+/-/0  Zoom table columns     +/- Column width
+    Ctrl+F5    Full refresh           Alt+F/Alt+B Fullscreen/Backup
+    Ctrl+/-/0  Zoom all columns       +/- Selected column width
     Alt+H      Help panel             Alt+D  Dashboard
     Ctrl+C     Quit
 

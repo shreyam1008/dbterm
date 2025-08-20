@@ -28,15 +28,16 @@ func (a *App) showHelp() {
   Shift + Enter ..... New line in query (multiline SQL)
   F5 ................ Refresh current table (keep sort/selection) ` + iconRefresh + `
   Ctrl + F5 ......... Refresh table list + current table ` + iconRefresh + `
-  F ................. Toggle fullscreen results (outside Query editor)
-  B ................. Backup current DB (PostgreSQL/MySQL)
+  Alt + F ........... Toggle fullscreen results
+  Alt + B ........... Backup current DB (PostgreSQL/MySQL)
   S ................. Sort by current column (in Results)
   Enter / Space ..... Open row details (in Results)
   Alt + = / - ....... Increase / decrease preview row limit
   Alt + 0 ........... Toggle preview limit (100 ↔ all rows)
-  Ctrl + = / - ...... Zoom table columns wider / narrower
+  Ctrl + = / - ...... Zoom all result columns wider / narrower
   Ctrl + 0 .......... Reset zoom to default
   + / - ............. Widen / narrow selected column (in Results)
+  Preview limit ..... Applies to table loads and read-query results
   Status bar ........ Shows active sort + preview limit
 
 [#a6e3a1]Dashboard ` + iconDashboard + `[-]

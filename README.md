@@ -17,6 +17,13 @@ Open-source, keyboard-first terminal client for SQL workflows.
 - Built-in service dashboard and backup flow for PostgreSQL/MySQL.
 - Low overhead runtime (roughly ~8-12 MB idle in typical use).
 
+## Highlights
+![Connections and services](assets/1.png)
+*Connection management + service controls in one terminal workflow.*
+
+![Table browsing and editing](assets/2.png)
+*SQL editing + result exploration with keyboard-first controls.*
+
 ## Quick install
 
 ### Linux / macOS
@@ -67,13 +74,26 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubus
 | Shortcut | Action |
 | --- | --- |
 | `Alt + Q / T / R` | Focus Query / Tables / Results |
-| `Alt + Enter` | Execute query |
+| `Enter` | Execute query (in Query panel) |
+| `Shift + Enter` | New line in Query panel |
 | `Alt + H` | Open help + SQL cheatsheets |
 | `Alt + D` | Return to dashboard |
 | `Alt + S` | Open services dashboard |
+| `Alt + F / Alt + B` | Toggle fullscreen results / open backup modal |
+| `Alt + = / - / 0` | Increase / decrease / toggle preview row limit |
+| `Ctrl + = / - / 0` | Zoom all result columns / reset zoom |
+| `+ / -` | Widen / narrow selected result column |
 | `F5 / Ctrl + F5` | Refresh table / full refresh |
-| `F / B` | Fullscreen results / backup modal |
 | `Ctrl + C` | Quit |
+
+## Performance footprint
+
+`dbterm` is tuned for small binary/runtime overhead while staying feature-complete:
+
+- Build strips debug and VCS metadata (`-trimpath -buildvcs=false -ldflags="-s -w -buildid="`).
+- DB pool is intentionally small (`max open=2`, `max idle=1`) for lower idle memory.
+- Read-query previews respect the active preview limit (default `100` rows).
+- `Alt + 0` switches preview to all rows when full result loading is required.
 
 ## Build locally
 

@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -67,7 +68,7 @@ type App struct {
 	focusedPanel  tview.Primitive // cached focus target (avoids lock-unsafe GetFocus calls)
 
 	// Column width / zoom state
-	tableZoom        int         // global zoom offset in steps (range: -5 to +10)
+	tableZoom         int         // global zoom offset in steps (range: -5 to +10)
 	colWidthOverrides map[int]int // per-column max-width overrides (col index → width)
 }
 
@@ -161,16 +162,6 @@ func (a *App) setupUI() {
 			}
 			a.results.Select(row, col)
 			return nil
-		case '+', '=':
-			// Widen current column
-			_, col := a.results.GetSelection()
-			a.adjustColumnWidth(col, 4)
-			return nil
-		case '-', '_':
-			// Narrow current column
-			_, col := a.results.GetSelection()
-			a.adjustColumnWidth(col, -4)
-			return nil
 		case ' ':
 			// Also support space for row details alongside Enter
 			row, _ := a.results.GetSelection()
@@ -179,6 +170,19 @@ func (a *App) setupUI() {
 				return nil
 			}
 		}
+
+		// + / - in Results adjusts the selected column width.
+		if isIncreaseKey(event) {
+			_, col := a.results.GetSelection()
+			a.adjustColumnWidth(col, colWidthStep)
+			return nil
+		}
+		if isDecreaseKey(event) {
+			_, col := a.results.GetSelection()
+			a.adjustColumnWidth(col, -colWidthStep)
+			return nil
+		}
+
 		if event.Key() == tcell.KeyEnter {
 			row, _ := a.results.GetSelection()
 			if row > 0 {
@@ -677,8 +681,8 @@ func (a *App) setupKeyBindings() {
 		}
 
 		if event.Modifiers()&tcell.ModAlt != 0 {
-			switch event.Rune() {
-			case 'h', 'H':
+			switch unicode.ToLower(event.Rune()) {
+			case 'h':
 				if page == "help" {
 					a.pages.RemovePage("help")
 					if a.db != nil {
@@ -690,13 +694,13 @@ func (a *App) setupKeyBindings() {
 					a.showHelp()
 				}
 				return nil
-			case 'd', 'D':
+			case 'd':
 				if page == "main" || page == "help" {
 					a.pages.HidePage(page)
 					a.showDashboard()
 				}
 				return nil
-			case 's', 'S':
+			case 's':
 				// Show service dashboard from anywhere
 				a.showServiceDashboard()
 				return nil
@@ -714,42 +718,47 @@ func (a *App) setupKeyBindings() {
 		}
 
 		// Ctrl+=/- for table zoom, Ctrl+0 for reset (any focus in main)
-		if event.Modifiers()&tcell.ModCtrl != 0 {
-			switch event.Rune() {
-			case '=', '+':
+		if event.Modifiers()&tcell.ModCtrl != 0 || event.Key() == tcell.KeyCtrlUnderscore {
+			switch {
+			case isIncreaseKey(event):
 				a.zoomTable(1)
 				return nil
-			case '-', '_':
+			case isDecreaseKey(event):
 				a.zoomTable(-1)
 				return nil
-			case '0':
+			case isZeroKey(event):
 				a.resetTableZoom()
 				return nil
 			}
 		}
 
-		// Global shortcuts (only if not typing in query input)
-		if a.app.GetFocus() != a.queryInput {
-			switch event.Rune() {
-			case 'f', 'F':
-				a.toggleExpandResults()
-				return nil
-			case 'b', 'B':
-				a.showBackupModal()
-				return nil
-			}
-		}
-
 		if event.Modifiers()&tcell.ModAlt != 0 {
-			switch event.Rune() {
-			case 't', 'T':
+			switch unicode.ToLower(event.Rune()) {
+			case 't':
 				a.setFocusWithColor(a.tables)
 				return nil
-			case 'q', 'Q':
+			case 'q':
+				// If query editor is already focused, let the event pass through.
+				// This helps international keyboard layouts that rely on AltGr combos.
+				if a.app.GetFocus() == a.queryInput {
+					return event
+				}
 				a.setFocusWithColor(a.queryInput)
 				return nil
-			case 'r', 'R':
+			case 'r':
 				a.setFocusWithColor(a.results)
+				return nil
+			case 'f':
+				if a.app.GetFocus() == a.queryInput {
+					return event
+				}
+				a.toggleExpandResults()
+				return nil
+			case 'b':
+				if a.app.GetFocus() == a.queryInput {
+					return event
+				}
+				a.showBackupModal()
 				return nil
 			case '=', '+':
 				a.increaseResultLimit()
@@ -764,6 +773,23 @@ func (a *App) setupKeyBindings() {
 		}
 		return event
 	})
+}
+
+func isIncreaseKey(event *tcell.EventKey) bool {
+	r := event.Rune()
+	return r == '+' || r == '='
+}
+
+func isDecreaseKey(event *tcell.EventKey) bool {
+	if event.Key() == tcell.KeyCtrlUnderscore {
+		return true
+	}
+	r := event.Rune()
+	return r == '-' || r == '_'
+}
+
+func isZeroKey(event *tcell.EventKey) bool {
+	return event.Rune() == '0'
 }
 
 // ── Column width / zoom helpers ──
@@ -882,6 +908,7 @@ func (a *App) Run() error {
 
 	return a.app.SetRoot(a.pages, true).
 		EnableMouse(true).
+		EnablePaste(true).
 		Run()
 }
 
@@ -954,14 +981,14 @@ func (a *App) statusActionText(width int) string {
 			return fmt.Sprintf("[yellow]Enter[-] Run ▶  │  [yellow]Shift+Enter[-] Newline  │  [yellow]F5[-] %s  │  [yellow]Alt+D/Esc[-] Dash %s",
 				iconRefresh, iconDashboard)
 		}
-		return fmt.Sprintf("[yellow]F5[-] %s  │  [yellow]F/B[-] Full/%s  │  [yellow]Enter[-] Detail  │  [yellow]Alt+D/Esc[-] Dash %s",
+		return fmt.Sprintf("[yellow]F5[-] %s  │  [yellow]Alt+F/B[-] Full/%s  │  [yellow]Enter[-] Detail  │  [yellow]Alt+D/Esc[-] Dash %s",
 			iconRefresh, iconBackup, iconDashboard)
 	default:
 		if inQuery {
 			return fmt.Sprintf("[yellow]Enter[-] Run ▶  │  [yellow]Shift+Enter[-] Newline  │  [yellow]F5[-] %s  │  [yellow]Alt+H[-] Help %s  │  [yellow]Esc/Bksp[-] Dashboard %s",
 				iconRefresh, iconHelp, iconDashboard)
 		}
-		return fmt.Sprintf("[yellow]F5[-] %s  │  [yellow]F[-] Full  │  [yellow]B[-] %s  │  [yellow]Enter[-] Detail  │  [yellow]Alt+H[-] Help %s  │  [yellow]Esc/Bksp[-] Dashboard %s",
+		return fmt.Sprintf("[yellow]F5[-] %s  │  [yellow]Alt+F[-] Full  │  [yellow]Alt+B[-] %s  │  [yellow]Enter[-] Detail  │  [yellow]Alt+H[-] Help %s  │  [yellow]Esc/Bksp[-] Dashboard %s",
 			iconRefresh, iconBackup, iconHelp, iconDashboard)
 	}
 }
