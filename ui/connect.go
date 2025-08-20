@@ -77,17 +77,18 @@ func cloneConnectionConfig(cfg *config.ConnectionConfig) *config.ConnectionConfi
 }
 
 const (
-	connLabelName     = "Name (*)"
-	connLabelType     = "Type (*) " + iconDropdown
-	connLabelDSN      = "Connection String (Optional)"
-	connLabelHost     = "Host"
-	connLabelPort     = "Port"
-	connLabelUser     = "User"
-	connLabelPassword = "Password"
-	connLabelDatabase = "Database"
-	connLabelFilePath = "File Path (SQLite)"
-	connLabelAuthToken = "Auth Token"
-	connLabelAccountID = "Account ID"
+	connLabelName       = "Name (*)"
+	connLabelType       = "Type (*) " + iconDropdown
+	connLabelReadOnly   = "Read-Only (block writes)"
+	connLabelDSN        = "Connection String (Optional)"
+	connLabelHost       = "Host"
+	connLabelPort       = "Port"
+	connLabelUser       = "User"
+	connLabelPassword   = "Password"
+	connLabelDatabase   = "Database"
+	connLabelFilePath   = "File Path (SQLite)"
+	connLabelAuthToken  = "Auth Token"
+	connLabelAccountID  = "Account ID"
 	connLabelDatabaseID = "Database ID (UUID)"
 )
 
@@ -96,12 +97,13 @@ func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex in
 	isEdit := editConn != nil
 
 	form := tview.NewForm()
-	
+
 	dbTypes := []string{"PostgreSQL", "MySQL", "SQLite", "Turso", "Cloudflare D1"}
 	initialType := 0
 	nameDefault := ""
 	connStringDefault := ""
 	hostDefault, portDefault, userDefault, passDefault, dbDefault, fileDefault := "localhost", "5432", "", "", "", ""
+	readOnlyDefault := false
 	authTokenDefault, accountIDDefault, dbIDDefault := "", "", ""
 	if isEdit {
 		nameDefault = editConn.Name
@@ -121,6 +123,7 @@ func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex in
 		passDefault = editConn.Password
 		dbDefault = editConn.Database
 		fileDefault = editConn.FilePath
+		readOnlyDefault = editConn.ReadOnly
 		authTokenDefault = editConn.AuthToken
 		accountIDDefault = editConn.AccountID
 		dbIDDefault = editConn.DatabaseID
@@ -128,6 +131,7 @@ func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex in
 
 	form.AddInputField(connLabelName, nameDefault, 30, nil, nil)
 	form.AddDropDown(connLabelType, dbTypes, initialType, nil)
+	form.AddCheckbox(connLabelReadOnly, readOnlyDefault, nil)
 
 	dynamicLabels := []string{
 		connLabelDSN,
@@ -142,15 +146,15 @@ func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex in
 		connLabelDatabaseID,
 	}
 	fieldValues := map[string]string{
-		connLabelDSN:      connStringDefault,
-		connLabelHost:     hostDefault,
-		connLabelPort:     portDefault,
-		connLabelUser:     userDefault,
-		connLabelPassword: passDefault,
-		connLabelDatabase: dbDefault,
-		connLabelFilePath: fileDefault,
-		connLabelAuthToken: authTokenDefault,
-		connLabelAccountID: accountIDDefault,
+		connLabelDSN:        connStringDefault,
+		connLabelHost:       hostDefault,
+		connLabelPort:       portDefault,
+		connLabelUser:       userDefault,
+		connLabelPassword:   passDefault,
+		connLabelDatabase:   dbDefault,
+		connLabelFilePath:   fileDefault,
+		connLabelAuthToken:  authTokenDefault,
+		connLabelAccountID:  accountIDDefault,
 		connLabelDatabaseID: dbIDDefault,
 	}
 
@@ -182,14 +186,14 @@ func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex in
 
 	addTursoFields := func() {
 		// Re-use 'Host' for the Database URL
-		form.AddInputField(connLabelHost + " (libsql://... or https://...)", fieldValues[connLabelHost], 60, nil, nil)
+		form.AddInputField(connLabelHost+" (libsql://... or https://...)", fieldValues[connLabelHost], 60, nil, nil)
 		form.AddPasswordField(connLabelAuthToken, fieldValues[connLabelAuthToken], 60, '*', nil)
 	}
 
 	addD1Fields := func() {
 		form.AddInputField(connLabelAccountID, fieldValues[connLabelAccountID], 40, nil, nil)
 		form.AddInputField(connLabelDatabaseID, fieldValues[connLabelDatabaseID], 40, nil, nil)
-		form.AddPasswordField(connLabelAuthToken + " (API Token)", fieldValues[connLabelAuthToken], 60, '*', nil)
+		form.AddPasswordField(connLabelAuthToken+" (API Token)", fieldValues[connLabelAuthToken], 60, '*', nil)
 	}
 
 	_, initialTypeName := form.GetFormItemByLabel(connLabelType).(*tview.DropDown).GetCurrentOption()
@@ -387,16 +391,17 @@ func (a *App) buildConfigFromForm(form *tview.Form) *config.ConnectionConfig {
 	dbType := dbTypeFromName(typeName)
 
 	cfg := &config.ConnectionConfig{
-		Name:     name,
-		Type:     dbType,
-		Host:     getText(connLabelHost),
-		Port:     getText(connLabelPort),
-		User:     getText(connLabelUser),
-		Password: getText(connLabelPassword),
-		Database: getText(connLabelDatabase),
-		FilePath: getText(connLabelFilePath),
-		AuthToken: getText(connLabelAuthToken),
-		AccountID: getText(connLabelAccountID),
+		Name:       name,
+		Type:       dbType,
+		Host:       getText(connLabelHost),
+		Port:       getText(connLabelPort),
+		User:       getText(connLabelUser),
+		Password:   getText(connLabelPassword),
+		Database:   getText(connLabelDatabase),
+		ReadOnly:   formCheckboxChecked(form, connLabelReadOnly),
+		FilePath:   getText(connLabelFilePath),
+		AuthToken:  getText(connLabelAuthToken),
+		AccountID:  getText(connLabelAccountID),
 		DatabaseID: getText(connLabelDatabaseID),
 	}
 
@@ -536,6 +541,14 @@ func formInputValue(form *tview.Form, label string) string {
 		return strings.TrimSpace(input.GetText())
 	}
 	return ""
+}
+
+func formCheckboxChecked(form *tview.Form, label string) bool {
+	item := form.GetFormItemByLabel(label)
+	if checkbox, ok := item.(*tview.Checkbox); ok {
+		return checkbox.IsChecked()
+	}
+	return false
 }
 
 func setFormInputValue(form *tview.Form, label, value string) {

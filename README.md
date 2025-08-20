@@ -14,7 +14,7 @@ Open-source, keyboard-first terminal client for SQL workflows.
 - Single binary install for Linux, macOS, and Windows.
 - Keyboard-driven TUI with fast panel navigation.
 - Supports PostgreSQL, MySQL, SQLite, Turso (LibSQL), and Cloudflare D1.
-- Built-in service dashboard and backup flow for PostgreSQL/MySQL.
+- Built-in service dashboard plus backup/import flows for PostgreSQL/MySQL.
 - Low overhead runtime (roughly ~8-12 MB idle in typical use).
 
 ## Highlights
@@ -49,8 +49,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubus
 
 | Database | Status |
 | --- | --- |
-| PostgreSQL | Query + backup + service controls |
-| MySQL | Query + backup + service controls |
+| PostgreSQL | Query + backup + import + service controls |
+| MySQL | Query + backup + import + service controls |
 | SQLite | Query and local file workflows |
 | Turso (LibSQL) | Cloud SQLite-compatible querying |
 | Cloudflare D1 | D1 API-backed SQL querying |
@@ -76,15 +76,34 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubus
 | `Alt + Q / T / R` | Focus Query / Tables / Results |
 | `Enter` | Execute query (in Query panel) |
 | `Shift + Enter` | New line in Query panel |
+| `Alt + Y` | Open query history (newest first) |
+| `Alt + , / Alt + G` | Open Settings page |
+| `Alt + A / Alt + C` | Select all result rows / clear selection |
 | `Alt + H` | Open help + SQL cheatsheets |
+| `G` (Dashboard) | Open Settings page from dashboard |
 | `Alt + D` | Return to dashboard |
 | `Alt + S` | Open services dashboard |
-| `Alt + F / Alt + B` | Toggle fullscreen results / open backup modal |
+| `Alt + F / Alt + B / Alt + I` | Toggle fullscreen results / open backup modal / open SQL import modal |
+| `Alt + E` | Export current results table to CSV |
 | `Alt + = / - / 0` | Increase / decrease / toggle preview row limit |
 | `Ctrl + = / - / 0` | Zoom all result columns / reset zoom |
 | `+ / -` | Widen / narrow selected result column |
 | `F5 / Ctrl + F5` | Refresh table / full refresh |
 | `Ctrl + C` | Quit |
+
+## SQL dump import (PostgreSQL/MySQL)
+
+- Press `Alt + I` while connected to a PostgreSQL or MySQL database.
+- Enter the `.sql` file path and keep `Stop on first error` enabled for safer imports.
+- dbterm runs the official client tools (`psql` for PostgreSQL, `mysql` for MySQL), streams output live, then shows success/failure.
+- Required binaries in `PATH`: `psql` (PostgreSQL) and/or `mysql` (MySQL).
+
+## Settings + keymap config
+
+- Open settings with `G` from Dashboard or `Alt + ,` / `Alt + G` in workspace.
+- Settings are persisted to `~/.config/dbterm/settings.json`.
+- Key bindings are validated before save (duplicate/invalid mappings are blocked).
+- Query history remains enabled per connection; saved-query snippet library is intentionally not included.
 
 ## Performance footprint
 

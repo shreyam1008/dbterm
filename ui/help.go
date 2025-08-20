@@ -26,12 +26,19 @@ func (a *App) showHelp() {
 [#a6e3a1]Query & Results ` + iconQuery + ` ` + iconResults + `[-]
   Enter ............. Execute query (in Query editor)
   Shift + Enter ..... New line in query (multiline SQL)
+  Alt + Y ........... Open query history (newest first)
+  Alt + , / Alt + G ... Open Settings page
+  Alt + A ........... Select all displayed result rows
+  Alt + C ........... Clear selected result rows
+  Alt + E ........... Export CSV (selected rows if any, else all displayed)
   F5 ................ Refresh current table (keep sort/selection) ` + iconRefresh + `
   Ctrl + F5 ......... Refresh table list + current table ` + iconRefresh + `
   Alt + F ........... Toggle fullscreen results
   Alt + B ........... Backup current DB (PostgreSQL/MySQL)
+  Alt + I ........... Import SQL dump (PostgreSQL/MySQL)
   S ................. Sort by current column (in Results)
-  Enter / Space ..... Open row details (in Results)
+  Enter ............. Open row details (in Results)
+  Space ............. Toggle current row selection (in Results)
   Alt + = / - ....... Increase / decrease preview row limit
   Alt + 0 ........... Toggle preview limit (100 ↔ all rows)
   Ctrl + = / - ...... Zoom all result columns wider / narrower
@@ -45,6 +52,7 @@ func (a *App) showHelp() {
   N ................. New connection
   E ................. Edit connection
   D ................. Delete connection
+  G ................. Open Settings
   R ................. Re-check saved connection reachability ` + iconRefresh + `
   W / B / Esc ....... Back to workspace (when connected) ` + iconBack + `
   H ................. Open Help ` + iconHelp + `

@@ -41,7 +41,7 @@ const workflows = [
   },
   {
     title: "Ops-ready actions",
-    body: "Open the services dashboard, trigger backups for PostgreSQL/MySQL, and reconnect from one interface."
+    body: "Open the services dashboard, trigger backup/import for PostgreSQL/MySQL, and reconnect from one interface."
   }
 ];
 
@@ -90,6 +90,12 @@ const shortcuts = [
   { key: "Enter", action: "Execute SQL query" },
   { key: "Shift + Enter", action: "New line in query editor" },
   { key: "Alt + Q / T / R", action: "Focus Query, Tables, or Results" },
+  { key: "Alt + Y", action: "Open per-connection query history" },
+  { key: "Alt + A / Alt + C", action: "Select all result rows / clear row selection" },
+  { key: "Space (Results)", action: "Toggle current result row selection" },
+  { key: "Alt + E", action: "Export selected rows to CSV (or all displayed if none selected)" },
+  { key: "Alt + I", action: "Import SQL dump (PostgreSQL/MySQL)" },
+  { key: "G (Dashboard) / Alt + ,", action: "Open keymap Settings page" },
   { key: "F5 / Ctrl + F5", action: "Refresh current table or full table list" },
   { key: "Alt + = / - / 0", action: "Adjust preview row limit (including all rows)" },
   { key: "Ctrl + = / -", action: "Zoom table columns wider / narrower" },
@@ -153,7 +159,9 @@ const softwareJsonLd = {
     "Keyboard-first TUI",
     "PostgreSQL, MySQL, SQLite, Turso, Cloudflare D1",
     "Service dashboard",
-    "Backup support for PostgreSQL and MySQL",
+    "Backup and import support for PostgreSQL and MySQL",
+    "Multi-row result export to CSV",
+    "Configurable keymap settings page",
     "Single binary installation",
     "Preview-limit controls for low-memory result browsing"
   ]

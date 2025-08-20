@@ -38,6 +38,23 @@ func (a *App) ExecuteQuery(query string) {
 		firstToken == "PRAGMA" ||
 		firstToken == "WITH"
 
+	if a.activeConn != nil && a.activeConn.ReadOnly && !isRead {
+		blockedToken := firstToken
+		if blockedToken == "" {
+			blockedToken = "UNKNOWN"
+		}
+		a.ShowAlert(
+			fmt.Sprintf(
+				"%s Read-only connection \"%s\" blocks write queries.\n\nBlocked statement: %s\n\nRun a read query (SELECT/SHOW/EXPLAIN/PRAGMA) or disable Read-Only in connection settings.",
+				iconWarn,
+				a.dbName,
+				blockedToken,
+			),
+			"main",
+		)
+		return
+	}
+
 	if isRead {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -65,6 +82,7 @@ func (a *App) ExecuteQuery(query string) {
 		a.results.ScrollToBeginning()
 		a.applyColumnWidths()
 		a.updateStatusBar(fmt.Sprintf("[teal]%s[-]", formatDuration(elapsed)), rowCount)
+		a.recordQueryHistory(query)
 		if truncated && previewLimit > 0 {
 			a.flashStatus(
 				fmt.Sprintf("[yellow]%s Showing first %d rows (%s). Press Alt+0 for all rows.[-]", iconInfo, rowCount, a.resultLimitReadable()),
@@ -85,6 +103,7 @@ func (a *App) ExecuteQuery(query string) {
 
 		rowsAffected, _ := res.RowsAffected()
 		elapsed := time.Since(a.queryStart)
+		a.recordQueryHistory(query)
 
 		a.ShowAlert(
 			fmt.Sprintf("%s Query executed successfully\n\nRows affected: %d\nTime: %s", iconSuccess, rowsAffected, formatDuration(elapsed)),

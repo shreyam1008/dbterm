@@ -44,8 +44,8 @@ const workspacePanels = [
   },
   {
     panel: "Results",
-    behavior: "Sort columns, inspect rows, adjust column widths, and switch fullscreen.",
-    keys: "Alt+R, S, Enter, Space, Alt+F, +/−"
+    behavior: "Sort columns, select multiple rows, export selected/all CSV, inspect rows, and switch fullscreen.",
+    keys: "Alt+R, S, Space, Alt+A/C/E, Enter, Alt+F, +/−"
   }
 ];
 
@@ -53,6 +53,12 @@ const shortcutRows = [
   { combo: "Alt + Q / T / R", action: "Focus Query, Tables, or Results panel" },
   { combo: "Enter", action: "Execute query (in Query panel)" },
   { combo: "Shift + Enter", action: "New line in query (multiline SQL)" },
+  { combo: "Alt + Y", action: "Open per-connection query history" },
+  { combo: "Alt + A / Alt + C", action: "Select all result rows / clear selection" },
+  { combo: "Space (Results)", action: "Toggle current row selection" },
+  { combo: "Alt + E", action: "Export selected rows to CSV (or all displayed rows)" },
+  { combo: "Alt + I", action: "Open SQL import modal (PostgreSQL/MySQL)" },
+  { combo: "G (Dashboard) / Alt + ,", action: "Open keymap settings page" },
   { combo: "Alt + H", action: "Toggle help + SQL cheatsheets" },
   { combo: "Alt + D", action: "Back to dashboard" },
   { combo: "Alt + S", action: "Open services dashboard" },
@@ -82,6 +88,10 @@ const serviceOps = [
   {
     title: "Backup active database",
     detail: "Press Alt+B from workspace to open backup flow for PostgreSQL/MySQL."
+  },
+  {
+    title: "Import SQL dumps safely",
+    detail: "Press Alt+I and provide a .sql file path. dbterm runs psql/mysql and streams import output."
   }
 ];
 

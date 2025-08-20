@@ -33,6 +33,7 @@ bin/
 site/dist/
 site/node_modules/
 site/.astro/
+_lazysql_ref/
 
 # Test coverage
 coverage.txt
