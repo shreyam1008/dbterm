@@ -10,6 +10,7 @@
 # 5) If that tag already exists, the workflow fails (prevents duplicate releases).
 #
 # Newest entry first:
+0.4.0|Hampi|Added support for PostgreSQL and MSSQL dump import.
 0.4.0|Ganpatipapa|Import sql dump, setting paage with custom key binds, and much more.
 0.3.9|Fakir|Crash tolerance.
 0.3.8|Eshwor|Dynamic column width management in results and added comprehensive project reference documentation.

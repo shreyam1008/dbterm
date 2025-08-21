@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
@@ -82,6 +83,12 @@ func printInfo() {
 	fmt.Println("  PostgreSQL    lib/pq")
 	fmt.Println("  MySQL         go-sql-driver/mysql")
 	fmt.Println("  SQLite        modernc.org/sqlite")
+	fmt.Println()
+	fmt.Println("  \033[33mCLIENT TOOLS\033[0m  Required for SQL dump import/backup")
+	fmt.Printf("  psql          %s\n", cliToolStatus("psql"))
+	fmt.Printf("  mysql         %s\n", cliToolStatus("mysql"))
+	fmt.Printf("  pg_dump       %s\n", cliToolStatus("pg_dump"))
+	fmt.Printf("  mysqldump     %s\n", cliToolStatus("mysqldump"))
 	fmt.Println()
 	fmt.Println("  \033[33mINSTALL\033[0m       No Go required")
 	fmt.Println("  macOS/Linux   curl -fsSL https://raw.githubusercontent.com/shreyam1008/dbterm/main/install.sh | bash")
@@ -221,4 +228,12 @@ func fmtBytes(b int64) string {
 	default:
 		return fmt.Sprintf("%d B", b)
 	}
+}
+
+func cliToolStatus(name string) string {
+	path, err := exec.LookPath(name)
+	if err != nil {
+		return "missing (install and add to PATH)"
+	}
+	return fmt.Sprintf("found (%s)", path)
 }
