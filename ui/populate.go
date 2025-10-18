@@ -15,6 +15,16 @@ const (
 	maxBinaryPreviewLen = 100
 )
 
+// bufferedRow holds one row of cell text+color pairs read from sql.Rows.
+type bufferedRow struct {
+	cells []bufferedCell
+}
+
+type bufferedCell struct {
+	text  string
+	color tcell.Color
+}
+
 // populateTable fills the tview.Table with rows from a sql.Rows result set.
 // Returns the number of data rows (excluding header).
 func populateTable(results *tview.Table, rows *sql.Rows) (int, error) {
@@ -22,17 +32,17 @@ func populateTable(results *tview.Table, rows *sql.Rows) (int, error) {
 	return rowCount, err
 }
 
-// populateTableWithLimit fills the table with at most maxRows data rows.
-// maxRows <= 0 means unlimited.
+// populateTableWithLimit reads rows into a buffer first, then populates the table.
+// This prevents data loss: the existing table is only cleared after all rows
+// have been successfully read. maxRows <= 0 means unlimited.
 func populateTableWithLimit(results *tview.Table, rows *sql.Rows, maxRows int) (int, bool, error) {
-	results.Clear()
-
 	columnNames, err := rows.Columns()
 	if err != nil {
 		return 0, false, fmt.Errorf("could not read columns: %w", err)
 	}
 
 	if len(columnNames) == 0 {
+		results.Clear()
 		results.SetCell(0, 0, &tview.TableCell{
 			Text:  iconInfo + " No columns returned",
 			Color: overlay0,
@@ -40,7 +50,44 @@ func populateTableWithLimit(results *tview.Table, rows *sql.Rows, maxRows int) (
 		return 0, false, nil
 	}
 
-	// Header row with column names
+	// ── Buffer all rows in memory before touching the table ──
+	values := make([]any, len(columnNames))
+	valuePtrs := make([]any, len(columnNames))
+	for i := range values {
+		valuePtrs[i] = &values[i]
+	}
+
+	var buf []bufferedRow
+	truncated := false
+	rowIndex := 0
+	for rows.Next() {
+		if maxRows > 0 && rowIndex >= maxRows {
+			truncated = true
+			break
+		}
+
+		if err := rows.Scan(valuePtrs...); err != nil {
+			return 0, false, fmt.Errorf("row %d scan error: %w", rowIndex+1, err)
+		}
+
+		row := bufferedRow{cells: make([]bufferedCell, len(columnNames))}
+		for colIndex, val := range values {
+			cellValue, cellColor := formatCellValue(val)
+			row.cells[colIndex] = bufferedCell{text: cellValue, color: cellColor}
+		}
+		buf = append(buf, row)
+		rowIndex++
+	}
+
+	if !truncated {
+		if err := rows.Err(); err != nil {
+			return 0, false, fmt.Errorf("result iteration error: %w", err)
+		}
+	}
+
+	// ── All rows read successfully — now safe to clear and populate ──
+	results.Clear()
+
 	hasMultipleColumns := len(columnNames) > 1
 	compactFirstCol := hasMultipleColumns && isLikelyCompactColumn(columnNames[0])
 	for i, name := range columnNames {
@@ -55,64 +102,38 @@ func populateTableWithLimit(results *tview.Table, rows *sql.Rows, maxRows int) (
 			SetBackgroundColor(mantle).
 			SetExpansion(expansion)
 
-		// Keep the first column compact (often ID/index), so data columns can stretch.
 		if compactFirstCol && i == 0 {
 			cell.SetMaxWidth(18)
 		}
 		results.SetCell(0, i, cell)
 	}
 
-	values := make([]any, len(columnNames))
-	valuePtrs := make([]any, len(columnNames))
-	for i := range values {
-		valuePtrs[i] = &values[i]
-	}
-
-	rowIndex := 1
-	truncated := false
-	for rows.Next() {
-		if maxRows > 0 && rowIndex > maxRows {
-			truncated = true
-			break
-		}
-
-		if err := rows.Scan(valuePtrs...); err != nil {
-			return rowIndex - 1, truncated, fmt.Errorf("row %d scan error: %w", rowIndex, err)
-		}
-
-		for colIndex, val := range values {
-			cellValue, cellColor := formatCellValue(val)
+	for r, bRow := range buf {
+		for c, bCell := range bRow.cells {
 			expansion := 0
-			if !hasMultipleColumns || colIndex > 0 {
+			if !hasMultipleColumns || c > 0 {
 				expansion = 1
 			}
 
-			cell := tview.NewTableCell(cellValue).
-				SetTextColor(cellColor).
+			cell := tview.NewTableCell(bCell.text).
+				SetTextColor(bCell.color).
 				SetExpansion(expansion)
-			if compactFirstCol && colIndex == 0 {
+			if compactFirstCol && c == 0 {
 				cell.SetMaxWidth(18)
 			}
-			results.SetCell(rowIndex, colIndex, cell)
-		}
-		rowIndex++
-	}
-
-	if !truncated {
-		if err := rows.Err(); err != nil {
-			return rowIndex - 1, truncated, fmt.Errorf("result iteration error: %w", err)
+			results.SetCell(r+1, c, cell)
 		}
 	}
 
 	// Empty result set
-	if rowIndex == 1 {
+	if len(buf) == 0 {
 		results.SetCell(1, 0, &tview.TableCell{
 			Text:  iconInfo + " No rows returned",
 			Color: overlay0,
 		})
 	}
 
-	return rowIndex - 1, truncated, nil
+	return len(buf), truncated, nil
 }
 
 // formatCellValue converts a database value to a display string and color

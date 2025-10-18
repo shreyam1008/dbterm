@@ -23,6 +23,7 @@ type serviceInfo struct {
 	ram       string // from /proc/<pid>/status VmRSS
 	version   string // from mysql --version / psql --version
 	databases string // listed databases
+	dbSizes   string // database sizes (estimated)
 	user      string // default user
 	unit      string // systemd unit name
 }
@@ -183,6 +184,9 @@ func writeServiceSection(sb *strings.Builder, info *serviceInfo) {
 	if info.databases != "" {
 		sb.WriteString(fmt.Sprintf("     [#a6adc8]Databases:[-]  %s\n", info.databases))
 	}
+	if info.dbSizes != "" {
+		sb.WriteString(fmt.Sprintf("     [#a6adc8]DB Sizes:[-]   %s\n", info.dbSizes))
+	}
 
 	if info.active {
 		sb.WriteString("     [#6c7086]Action: Press key to [red]stop[-][#6c7086] this service ■[-]\n")
@@ -284,6 +288,7 @@ func getServiceInfo(displayName, cmdName, processName, unitName string) *service
 	// Get databases (only if service is active)
 	if info.active {
 		info.databases = getServiceDatabases(displayName)
+		info.dbSizes = getServiceDatabaseSizes(displayName)
 	}
 
 	return info
@@ -345,25 +350,47 @@ func getServicePort(processName string) string {
 	return strings.Join(unique, ", ")
 }
 
-// getProcessRAM reads VmRSS from /proc/<pid>/status and formats it
+// getProcessRAM reads VmRSS from /proc/<pid>/status and also sums child
+// process RSS (important for PostgreSQL which forks worker processes).
 func getProcessRAM(pid string) string {
+	// First get the main process RSS
+	mainRSS := readVmRSS(pid)
+
+	// Sum RSS of child processes (pgrep -P <pid>)
+	childOut := runCmd("pgrep", "-P", pid)
+	totalKB := mainRSS
+	if childOut != "" {
+		for _, childPid := range strings.Fields(childOut) {
+			childPid = strings.TrimSpace(childPid)
+			if childPid != "" && childPid != pid {
+				totalKB += readVmRSS(childPid)
+			}
+		}
+	}
+
+	if totalKB == 0 {
+		return "—"
+	}
+	return utils.FormatBytes(totalKB * 1024)
+}
+
+// readVmRSS reads VmRSS in kB from /proc/<pid>/status.
+func readVmRSS(pid string) uint64 {
 	out := runCmd("cat", fmt.Sprintf("/proc/%s/status", pid))
 	if out == "" {
-		return "—"
+		return 0
 	}
 	for _, line := range strings.Split(out, "\n") {
 		if strings.HasPrefix(line, "VmRSS:") {
 			parts := strings.Fields(line)
 			if len(parts) >= 2 {
-				// Parse kB value
 				var val uint64
 				fmt.Sscanf(parts[1], "%d", &val)
-				// Convert to bytes (kB * 1024)
-				return utils.FormatBytes(val * 1024)
+				return val
 			}
 		}
 	}
-	return "—"
+	return 0
 }
 
 // getServiceDatabases lists databases for a running service
@@ -372,7 +399,6 @@ func getServiceDatabases(serviceName string) string {
 	case "MySQL":
 		out := runCmd("mysql", "-u", "root", "-e", "SHOW DATABASES;")
 		if out == "" {
-			// Try without auth
 			out = runCmd("mysql", "--defaults-file=/etc/mysql/debian.cnf", "-e", "SHOW DATABASES;")
 		}
 		if out != "" {
@@ -412,6 +438,64 @@ func getServiceDatabases(serviceName string) string {
 		return "[#6c7086]auth required[-]"
 	}
 	return ""
+}
+
+// getServiceDatabaseSizes returns a formatted string of database sizes.
+func getServiceDatabaseSizes(serviceName string) string {
+	switch serviceName {
+	case "MySQL":
+		out := runCmd("mysql", "-u", "root", "-N", "-e",
+			"SELECT table_schema, SUM(data_length + index_length) FROM information_schema.tables GROUP BY table_schema ORDER BY SUM(data_length + index_length) DESC;")
+		if out == "" {
+			out = runCmd("mysql", "--defaults-file=/etc/mysql/debian.cnf", "-N", "-e",
+				"SELECT table_schema, SUM(data_length + index_length) FROM information_schema.tables GROUP BY table_schema ORDER BY SUM(data_length + index_length) DESC;")
+		}
+		return parseDBSizeOutput(out)
+	case "PostgreSQL":
+		out := runCmd("sudo", "-u", "postgres", "psql", "-t", "-A", "-c",
+			"SELECT datname, pg_database_size(datname) FROM pg_database WHERE datistemplate = false ORDER BY pg_database_size(datname) DESC")
+		return parseDBSizeOutput(out)
+	}
+	return ""
+}
+
+func parseDBSizeOutput(out string) string {
+	if out == "" {
+		return ""
+	}
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	var entries []string
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		// Try pipe separator (psql) or tab separator (mysql)
+		var name, sizeStr string
+		if parts := strings.SplitN(line, "|", 2); len(parts) == 2 {
+			name = strings.TrimSpace(parts[0])
+			sizeStr = strings.TrimSpace(parts[1])
+		} else if parts := strings.SplitN(line, "\t", 2); len(parts) == 2 {
+			name = strings.TrimSpace(parts[0])
+			sizeStr = strings.TrimSpace(parts[1])
+		} else {
+			continue
+		}
+		if name == "" || name == "template0" || name == "template1" {
+			continue
+		}
+		var sizeBytes uint64
+		fmt.Sscanf(sizeStr, "%d", &sizeBytes)
+		if sizeBytes > 0 {
+			entries = append(entries, fmt.Sprintf("%s (%s)", name, utils.FormatBytes(sizeBytes)))
+		} else {
+			entries = append(entries, name)
+		}
+	}
+	if len(entries) > 6 {
+		return strings.Join(entries[:6], ", ") + fmt.Sprintf(" (+%d more)", len(entries)-6)
+	}
+	return strings.Join(entries, ", ")
 }
 
 // toggleService starts or stops a database service
@@ -630,7 +714,8 @@ func getQuickStatus(unitName string) string {
 	return fmt.Sprintf("[#6c7086]○ %s (n/a)[-]", name)
 }
 
-// showConnectServiceModal displays a modal to connect to a database service
+// showConnectServiceModal displays a modal to connect to a database service.
+// It includes a Browse button to discover databases in the running instance.
 func (a *App) showConnectServiceModal() {
 	form := tview.NewForm()
 	form.SetTitle(fmt.Sprintf(" %s Connect to Database Service ", iconConnect))
@@ -641,11 +726,11 @@ func (a *App) showConnectServiceModal() {
 	// Service Type
 	form.AddDropDown("Service", []string{"MySQL", "PostgreSQL"}, 0, nil)
 
-	// Database Name (default based on selection?)
+	// Database Name
 	form.AddInputField("Database", "", 20, nil, nil)
 
 	// User
-	form.AddInputField("User", "root", 20, nil, nil) // Default to root for MySQL
+	form.AddInputField("User", "root", 20, nil, nil)
 
 	// Password
 	form.AddPasswordField("Password", "", 20, '*', nil)
@@ -662,57 +747,26 @@ func (a *App) showConnectServiceModal() {
 	})
 
 	form.AddButton("Connect", func() {
-		// Get values
 		_, service := serviceDropDown.GetCurrentOption()
 		dbName := strings.TrimSpace(form.GetFormItemByLabel("Database").(*tview.InputField).GetText())
 		user := strings.TrimSpace(form.GetFormItemByLabel("User").(*tview.InputField).GetText())
 		password := strings.TrimSpace(form.GetFormItemByLabel("Password").(*tview.InputField).GetText())
 
-		// Map to config.DBType
 		var dbType config.DBType
+		var dsn string
 		if service == "PostgreSQL" {
 			dbType = config.PostgreSQL
+			dsn = fmt.Sprintf("postgres://%s:%s@localhost:5432/%s?sslmode=disable", user, password, dbName)
 		} else {
 			dbType = config.MySQL
+			dsn = fmt.Sprintf("%s:%s@tcp(localhost:3306)/%s", user, password, dbName)
 		}
-
-		// Attempt connection
-		// Note: We need a way to construct the DSN.
-		// For now we can assume standard ports.
-		// Ideally we should use the existing connection logic in connect.go or similar.
-		// Since we don't have a direct "ConnectWithParams" exposed nicely without config,
-		// we might need to create a temporary config entry or just call OpenDatabase directly.
-
-		// Let's create a connection string
-		var dsn string
-		if dbType == config.MySQL {
-			// user:password@tcp(localhost:3306)/dbname
-			port := "3306" // Todo: could parse from service info if we had it handy
-			dsn = fmt.Sprintf("%s:%s@tcp(localhost:%s)/%s", user, password, port, dbName)
-		} else {
-			// postgres://user:password@localhost:5432/dbname?sslmode=disable
-			port := "5432"
-			dsn = fmt.Sprintf("postgres://%s:%s@localhost:%s/%s?sslmode=disable", user, password, port, dbName)
-		}
-
-		// We need to call a method to set the DB.
-		// Looking at app.go, there isn't a direct "Connect" method exposed that takes DSN string directly without config store interaction?
-		// Actually App struct has `db *sql.DB`.
-		// We probably want to reuse `ConnectToDatabase` if it exists.
-		// Let's assume we can set it manually for now or use `a.connectToDB`.
-		// But I need to check `connect.go` to be sure.
-		// For now, I'll put a placeholder and we might need to fix it in next step.
-		// actually, let's check `connect.go` first?
-		// Too late, I'm already in tool call.
-		// usage of `config` package is fine.
-		// I will try to use a generic open (sql.Open) and set it.
 
 		a.pages.RemovePage("connectService")
 		a.showLoadingModal(fmt.Sprintf("Connecting to %s...", dbName))
 
 		go func() {
-			err := a.DirectConnect(dbType, dsn, dbName) // I will implement this method in connect.go
-
+			err := a.DirectConnect(dbType, dsn, dbName)
 			a.app.QueueUpdateDraw(func() {
 				a.pages.RemovePage("loading")
 				if err != nil {
@@ -726,6 +780,11 @@ func (a *App) showConnectServiceModal() {
 		}()
 	})
 
+	form.AddButton("Browse DBs", func() {
+		_, service := serviceDropDown.GetCurrentOption()
+		a.showDatabasePicker(service, form)
+	})
+
 	form.AddButton("Cancel", func() {
 		a.pages.RemovePage("connectService")
 		a.pages.ShowPage("services")
@@ -736,6 +795,14 @@ func (a *App) showConnectServiceModal() {
 	form.SetButtonBackgroundColor(surface1)
 	form.SetButtonTextColor(green)
 	form.SetLabelColor(text)
+	form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEscape {
+			a.pages.RemovePage("connectService")
+			a.pages.ShowPage("services")
+			return nil
+		}
+		return event
+	})
 
 	modalW, modalH := a.modalSize(50, 80, 14, 18)
 	grid := tview.NewGrid().
@@ -745,4 +812,91 @@ func (a *App) showConnectServiceModal() {
 
 	a.pages.AddPage("connectService", grid, true, true)
 	a.app.SetFocus(form)
+}
+
+// showDatabasePicker fetches the list of databases from a running service
+// and shows a selection list so the user can pick one.
+func (a *App) showDatabasePicker(serviceName string, parentForm *tview.Form) {
+	var dbs []string
+	switch serviceName {
+	case "MySQL":
+		out := runCmd("mysql", "-u", "root", "-N", "-e", "SHOW DATABASES;")
+		if out == "" {
+			out = runCmd("mysql", "--defaults-file=/etc/mysql/debian.cnf", "-N", "-e", "SHOW DATABASES;")
+		}
+		if out != "" {
+			for _, l := range strings.Split(strings.TrimSpace(out), "\n") {
+				l = strings.TrimSpace(l)
+				if l != "" {
+					dbs = append(dbs, l)
+				}
+			}
+		}
+	case "PostgreSQL":
+		out := runCmd("sudo", "-u", "postgres", "psql", "-t", "-A", "-c",
+			"SELECT datname FROM pg_database WHERE datistemplate = false ORDER BY datname")
+		if out != "" {
+			for _, l := range strings.Split(strings.TrimSpace(out), "\n") {
+				l = strings.TrimSpace(l)
+				if l != "" {
+					dbs = append(dbs, l)
+				}
+			}
+		}
+	}
+
+	if len(dbs) == 0 {
+		a.ShowAlert(fmt.Sprintf("%s Could not discover databases for %s.\n\nThe service may not be running, or authentication is required.", iconWarn, serviceName), "connectService")
+		return
+	}
+
+	// Show a picker list
+	list := tview.NewList().ShowSecondaryText(false)
+	list.SetBorder(true).
+		SetTitle(fmt.Sprintf(" %s Select Database (%s) ", iconConnect, serviceName)).
+		SetBorderColor(blue).
+		SetTitleColor(mauve).
+		SetBackgroundColor(bg)
+	list.SetMainTextColor(text)
+	list.SetSelectedBackgroundColor(surface0)
+	list.SetSelectedTextColor(green)
+
+	for _, db := range dbs {
+		dbName := db
+		list.AddItem(fmt.Sprintf("  %s  %s", iconConnect, dbName), "", 0, func() {
+			// Set the database field in the parent form
+			dbInput := parentForm.GetFormItemByLabel("Database").(*tview.InputField)
+			dbInput.SetText(dbName)
+			a.pages.RemovePage("dbPicker")
+			a.app.SetFocus(parentForm)
+		})
+	}
+
+	list.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEscape {
+			a.pages.RemovePage("dbPicker")
+			a.app.SetFocus(parentForm)
+			return nil
+		}
+		return event
+	})
+
+	footer := tview.NewTextView().
+		SetDynamicColors(true).
+		SetTextAlign(tview.AlignCenter).
+		SetText(fmt.Sprintf("  [yellow]Enter[-] Select  │  [yellow]Esc[-] Back %s  │  [#6c7086]%d databases found[-]", iconBack, len(dbs)))
+	footer.SetBackgroundColor(crust)
+
+	pickerFlex := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(list, 0, 1, true).
+		AddItem(footer, 1, 0, false)
+
+	modalW, modalH := a.modalSize(40, 60, 10, 20)
+	grid := tview.NewGrid().
+		SetColumns(0, modalW, 0).
+		SetRows(0, modalH, 0).
+		AddItem(pickerFlex, 1, 1, 1, 1, 0, 0, true)
+
+	a.pages.AddPage("dbPicker", grid, true, true)
+	a.app.SetFocus(list)
 }
