@@ -8,6 +8,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+	"github.com/shreyam1008/dbterm/config"
 	"github.com/shreyam1008/dbterm/utils"
 )
 
@@ -118,26 +119,45 @@ func (a *App) onDatabaseObjectSelected(objType utils.DBObjectType, name string) 
 // showObjectInfo displays a read-only modal with details about a database object.
 func (a *App) showObjectInfo(objType utils.DBObjectType, name string) {
 	var query string
+	namespace, objectName := splitQualifiedIdentifier(name)
+	namespace = a.defaultObjectNamespace(namespace)
 	switch a.dbType {
 	case "postgresql":
 		switch objType {
 		case utils.ObjFunctions:
-			query = fmt.Sprintf(`SELECT pg_get_functiondef(p.oid) FROM pg_proc p JOIN pg_namespace n ON p.pronamespace = n.oid WHERE n.nspname = 'public' AND p.proname = '%s' LIMIT 1`, escapeSQLString(name))
+			query = fmt.Sprintf(`SELECT pg_get_functiondef(p.oid)
+FROM pg_proc p
+JOIN pg_namespace n ON p.pronamespace = n.oid
+WHERE n.nspname = '%s' AND p.proname = '%s'
+LIMIT 1`, escapeSQLString(namespace), escapeSQLString(objectName))
 		case utils.ObjTriggers:
-			query = fmt.Sprintf(`SELECT pg_get_triggerdef(t.oid) FROM pg_trigger t JOIN pg_class c ON t.tgrelid = c.oid JOIN pg_namespace n ON c.relnamespace = n.oid WHERE n.nspname = 'public' AND t.tgname = '%s' LIMIT 1`, escapeSQLString(name))
+			query = fmt.Sprintf(`SELECT pg_get_triggerdef(t.oid)
+FROM pg_trigger t
+JOIN pg_class c ON t.tgrelid = c.oid
+JOIN pg_namespace n ON c.relnamespace = n.oid
+WHERE n.nspname = '%s' AND t.tgname = '%s'
+LIMIT 1`, escapeSQLString(namespace), escapeSQLString(objectName))
 		case utils.ObjStoredProcedures:
-			query = fmt.Sprintf(`SELECT pg_get_functiondef(p.oid) FROM pg_proc p JOIN pg_namespace n ON p.pronamespace = n.oid WHERE n.nspname = 'public' AND p.proname = '%s' LIMIT 1`, escapeSQLString(name))
+			query = fmt.Sprintf(`SELECT pg_get_functiondef(p.oid)
+FROM pg_proc p
+JOIN pg_namespace n ON p.pronamespace = n.oid
+WHERE n.nspname = '%s' AND p.proname = '%s'
+LIMIT 1`, escapeSQLString(namespace), escapeSQLString(objectName))
 		case utils.ObjExtensions:
-			query = fmt.Sprintf(`SELECT e.extname, e.extversion, n.nspname AS schema, d.description FROM pg_extension e LEFT JOIN pg_namespace n ON e.extnamespace = n.oid LEFT JOIN pg_description d ON e.oid = d.objoid WHERE e.extname = '%s'`, escapeSQLString(name))
+			query = fmt.Sprintf(`SELECT e.extname, e.extversion, n.nspname AS schema, d.description
+FROM pg_extension e
+LEFT JOIN pg_namespace n ON e.extnamespace = n.oid
+LEFT JOIN pg_description d ON e.oid = d.objoid
+WHERE e.extname = '%s'`, escapeSQLString(objectName))
 		}
 	case "mysql":
 		switch objType {
 		case utils.ObjFunctions:
-			query = fmt.Sprintf(`SHOW CREATE FUNCTION %s`, quoteIdentifier(a.dbType, name))
+			query = fmt.Sprintf(`SHOW CREATE FUNCTION %s`, quoteIdentifier(a.dbType, qualifiedIdentifier(namespace, objectName)))
 		case utils.ObjTriggers:
-			query = fmt.Sprintf(`SHOW CREATE TRIGGER %s`, quoteIdentifier(a.dbType, name))
+			query = fmt.Sprintf(`SHOW CREATE TRIGGER %s`, quoteIdentifier(a.dbType, qualifiedIdentifier(namespace, objectName)))
 		case utils.ObjStoredProcedures:
-			query = fmt.Sprintf(`SHOW CREATE PROCEDURE %s`, quoteIdentifier(a.dbType, name))
+			query = fmt.Sprintf(`SHOW CREATE PROCEDURE %s`, quoteIdentifier(a.dbType, qualifiedIdentifier(namespace, objectName)))
 		}
 	}
 
@@ -242,4 +262,42 @@ func objectTypeIcon(objType utils.DBObjectType) string {
 
 func escapeSQLString(s string) string {
 	return strings.ReplaceAll(s, "'", "''")
+}
+
+func splitQualifiedIdentifier(identifier string) (string, string) {
+	parts := strings.SplitN(strings.TrimSpace(identifier), ".", 2)
+	if len(parts) == 2 {
+		return parts[0], parts[1]
+	}
+	return "", strings.TrimSpace(identifier)
+}
+
+func qualifiedIdentifier(namespace, name string) string {
+	namespace = strings.TrimSpace(namespace)
+	name = strings.TrimSpace(name)
+	if namespace == "" {
+		return name
+	}
+	if name == "" {
+		return namespace
+	}
+	return namespace + "." + name
+}
+
+func (a *App) defaultObjectNamespace(namespace string) string {
+	namespace = strings.TrimSpace(namespace)
+	if namespace != "" {
+		return namespace
+	}
+	switch a.dbType {
+	case config.PostgreSQL:
+		return "public"
+	case config.MySQL:
+		if cfg := a.currentConnectionConfig(); cfg != nil {
+			return strings.TrimSpace(cfg.Database)
+		}
+		return strings.TrimSpace(a.dbName)
+	default:
+		return ""
+	}
 }

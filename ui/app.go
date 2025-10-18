@@ -55,10 +55,11 @@ type App struct {
 	statusBar     *tview.TextView
 	tableCount    int
 	queryStart    time.Time
-	resultLimit   int // >0 preview rows, -1 means no limit (all rows)
+	resultLimit   int // >0 preview rows, -1 means adaptive safe max
 
 	// Pagination state
 	pageOffset    int // current OFFSET for paginated table browsing
+	pageSize      int // actual rows shown per page after safety limits
 	totalRowCount int // cached COUNT(*) for the selected table (-1 = unknown)
 
 	// Layout components for scaling
@@ -474,11 +475,22 @@ func (a *App) effectiveResultLimit() int {
 	return a.resultLimit
 }
 
+func (a *App) currentPageLimit() int {
+	if a.pageSize > 0 {
+		return a.pageSize
+	}
+	limit := a.effectiveResultLimit()
+	if limit > 0 {
+		return limit
+	}
+	return 0
+}
+
 func (a *App) setResultLimit(limit int) {
 	if limit == 0 {
 		limit = defaultTablePreviewLimit
 	}
-	if limit != unlimitedTablePreviewLimit && limit < tablePreviewSteps[0] {
+	if limit != adaptiveTablePreviewLimit && limit < tablePreviewSteps[0] {
 		limit = tablePreviewSteps[0]
 	}
 	if a.resultLimit == limit {
@@ -503,10 +515,10 @@ func (a *App) setResultLimit(limit int) {
 
 func (a *App) increaseResultLimit() {
 	current := a.effectiveResultLimit()
-	if current == unlimitedTablePreviewLimit {
+	if current == adaptiveTablePreviewLimit {
 		return
 	}
-	next := unlimitedTablePreviewLimit
+	next := adaptiveTablePreviewLimit
 	for _, step := range tablePreviewSteps {
 		if step > current {
 			next = step
@@ -518,7 +530,7 @@ func (a *App) increaseResultLimit() {
 
 func (a *App) decreaseResultLimit() {
 	current := a.effectiveResultLimit()
-	if current == unlimitedTablePreviewLimit {
+	if current == adaptiveTablePreviewLimit {
 		a.setResultLimit(tablePreviewSteps[len(tablePreviewSteps)-1])
 		return
 	}
@@ -533,17 +545,17 @@ func (a *App) decreaseResultLimit() {
 	a.setResultLimit(prev)
 }
 
-func (a *App) toggleUnlimitedResultLimit() {
-	if a.effectiveResultLimit() == unlimitedTablePreviewLimit {
+func (a *App) toggleAdaptiveResultLimit() {
+	if a.effectiveResultLimit() == adaptiveTablePreviewLimit {
 		a.setResultLimit(defaultTablePreviewLimit)
 		return
 	}
-	a.setResultLimit(unlimitedTablePreviewLimit)
+	a.setResultLimit(adaptiveTablePreviewLimit)
 }
 
 func (a *App) resultLimitReadable() string {
-	if a.effectiveResultLimit() == unlimitedTablePreviewLimit {
-		return "all rows"
+	if a.effectiveResultLimit() == adaptiveTablePreviewLimit {
+		return "safe max"
 	}
 	return fmt.Sprintf("%d rows", a.effectiveResultLimit())
 }
@@ -551,20 +563,20 @@ func (a *App) resultLimitReadable() string {
 func (a *App) resultLimitStatus(width int) string {
 	limit := a.effectiveResultLimit()
 	if width < 120 {
-		if limit == unlimitedTablePreviewLimit {
-			return "[#a6adc8]lim[-]:[yellow]all[-]"
+		if limit == adaptiveTablePreviewLimit {
+			return "[#a6adc8]lim[-]:[yellow]auto[-]"
 		}
 		return fmt.Sprintf("[#a6adc8]lim[-]:[yellow]%d[-]", limit)
 	}
 
-	if limit == unlimitedTablePreviewLimit {
-		return "[#a6adc8]preview[-] [yellow]all[-]"
+	if limit == adaptiveTablePreviewLimit {
+		return "[#a6adc8]preview[-] [yellow]auto[-]"
 	}
 	return fmt.Sprintf("[#a6adc8]preview[-] [yellow]%d[-]", limit)
 }
 
 func (a *App) paginationStatus(width int) string {
-	limit := a.effectiveResultLimit()
+	limit := a.currentPageLimit()
 	if limit <= 0 {
 		return ""
 	}
@@ -866,6 +878,12 @@ func (a *App) setupKeyBindings() {
 			case actionImportDump:
 				a.showImportModal()
 				return nil
+			case actionInspectSchema:
+				if a.app.GetFocus() == a.queryInput {
+					return event
+				}
+				a.showSelectedTableMetadata()
+				return nil
 			case actionSelectAll:
 				if a.app.GetFocus() == a.queryInput {
 					return event
@@ -902,7 +920,7 @@ func (a *App) setupKeyBindings() {
 				a.decreaseResultLimit()
 				return nil
 			case '0':
-				a.toggleUnlimitedResultLimit()
+				a.toggleAdaptiveResultLimit()
 				return nil
 			}
 		}

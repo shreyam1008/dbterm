@@ -24,6 +24,7 @@ const (
 	ActionHistory        = "history"
 	ActionSettings       = "settings"
 	ActionImportDump     = "import_dump"
+	ActionInspectSchema  = "inspect_schema"
 	ActionSelectAll      = "select_all"
 	ActionClearSelection = "clear_selection"
 )
@@ -41,6 +42,7 @@ var defaultKeymapBindings = map[string][]string{
 	ActionHistory:        {"alt+y"},
 	ActionSettings:       {"alt+,", "alt+g"},
 	ActionImportDump:     {"alt+i"},
+	ActionInspectSchema:  {"alt+m"},
 	ActionSelectAll:      {"alt+a"},
 	ActionClearSelection: {"alt+c"},
 }

@@ -49,9 +49,17 @@ func ConnectDB(cfg *config.ConnectionConfig) (*sql.DB, error) {
 func ListTablesQuery(dbType config.DBType) string {
 	switch dbType {
 	case config.PostgreSQL:
-		return `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name`
+		return `SELECT table_schema || '.' || table_name AS table_name
+FROM information_schema.tables
+WHERE table_type = 'BASE TABLE'
+  AND table_schema NOT IN ('pg_catalog', 'information_schema')
+ORDER BY table_schema, table_name`
 	case config.MySQL:
-		return `SHOW TABLES`
+		return `SELECT CONCAT(table_schema, '.', table_name) AS table_name
+FROM information_schema.tables
+WHERE table_type = 'BASE TABLE'
+  AND table_schema NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys')
+ORDER BY table_schema, table_name`
 	case config.SQLite, config.Turso, config.CloudflareD1:
 		return `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name`
 	default:
@@ -63,11 +71,11 @@ func ListTablesQuery(dbType config.DBType) string {
 type DBObjectType string
 
 const (
-	ObjViews              DBObjectType = "Views"
-	ObjFunctions          DBObjectType = "Functions"
-	ObjTriggers           DBObjectType = "Triggers"
-	ObjStoredProcedures   DBObjectType = "Procedures"
-	ObjExtensions         DBObjectType = "Extensions"
+	ObjViews            DBObjectType = "Views"
+	ObjFunctions        DBObjectType = "Functions"
+	ObjTriggers         DBObjectType = "Triggers"
+	ObjStoredProcedures DBObjectType = "Procedures"
+	ObjExtensions       DBObjectType = "Extensions"
 )
 
 // ListObjectsQuery returns the SQL to list objects of a given type, or "" if unsupported.
@@ -76,26 +84,54 @@ func ListObjectsQuery(dbType config.DBType, objType DBObjectType) string {
 	case config.PostgreSQL:
 		switch objType {
 		case ObjViews:
-			return `SELECT table_name FROM information_schema.views WHERE table_schema = 'public' ORDER BY table_name`
+			return `SELECT table_schema || '.' || table_name AS name
+FROM information_schema.views
+WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
+ORDER BY table_schema, table_name`
 		case ObjFunctions:
-			return `SELECT routine_name FROM information_schema.routines WHERE routine_schema = 'public' AND routine_type = 'FUNCTION' ORDER BY routine_name`
+			return `SELECT routine_schema || '.' || routine_name AS name
+FROM information_schema.routines
+WHERE routine_schema NOT IN ('pg_catalog', 'information_schema')
+  AND routine_type = 'FUNCTION'
+ORDER BY routine_schema, routine_name`
 		case ObjTriggers:
-			return `SELECT trigger_name FROM information_schema.triggers WHERE trigger_schema = 'public' ORDER BY trigger_name`
+			return `SELECT trigger_schema || '.' || trigger_name AS name
+FROM information_schema.triggers
+WHERE trigger_schema NOT IN ('pg_catalog', 'information_schema')
+ORDER BY trigger_schema, trigger_name`
 		case ObjStoredProcedures:
-			return `SELECT routine_name FROM information_schema.routines WHERE routine_schema = 'public' AND routine_type = 'PROCEDURE' ORDER BY routine_name`
+			return `SELECT routine_schema || '.' || routine_name AS name
+FROM information_schema.routines
+WHERE routine_schema NOT IN ('pg_catalog', 'information_schema')
+  AND routine_type = 'PROCEDURE'
+ORDER BY routine_schema, routine_name`
 		case ObjExtensions:
 			return `SELECT extname FROM pg_extension WHERE extname != 'plpgsql' ORDER BY extname`
 		}
 	case config.MySQL:
 		switch objType {
 		case ObjViews:
-			return `SELECT table_name FROM information_schema.views WHERE table_schema = DATABASE() ORDER BY table_name`
+			return `SELECT CONCAT(table_schema, '.', table_name) AS name
+FROM information_schema.views
+WHERE table_schema NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys')
+ORDER BY table_schema, table_name`
 		case ObjFunctions:
-			return `SELECT routine_name FROM information_schema.routines WHERE routine_schema = DATABASE() AND routine_type = 'FUNCTION' ORDER BY routine_name`
+			return `SELECT CONCAT(routine_schema, '.', routine_name) AS name
+FROM information_schema.routines
+WHERE routine_schema NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys')
+  AND routine_type = 'FUNCTION'
+ORDER BY routine_schema, routine_name`
 		case ObjTriggers:
-			return `SELECT trigger_name FROM information_schema.triggers WHERE trigger_schema = DATABASE() ORDER BY trigger_name`
+			return `SELECT CONCAT(trigger_schema, '.', trigger_name) AS name
+FROM information_schema.triggers
+WHERE trigger_schema NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys')
+ORDER BY trigger_schema, trigger_name`
 		case ObjStoredProcedures:
-			return `SELECT routine_name FROM information_schema.routines WHERE routine_schema = DATABASE() AND routine_type = 'PROCEDURE' ORDER BY routine_name`
+			return `SELECT CONCAT(routine_schema, '.', routine_name) AS name
+FROM information_schema.routines
+WHERE routine_schema NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys')
+  AND routine_type = 'PROCEDURE'
+ORDER BY routine_schema, routine_name`
 		}
 	case config.SQLite, config.Turso, config.CloudflareD1:
 		switch objType {

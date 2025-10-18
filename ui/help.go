@@ -28,14 +28,15 @@ func (a *App) showHelp() {
   Shift + Enter ..... New line in query (multiline SQL)
   Alt + Y ........... Open query history (newest first)
   Alt + , / Alt + G ... Open Settings page
+  Alt + M ........... Inspect selected table schema
   Alt + A ........... Select all displayed result rows
   Alt + C ........... Clear selected result rows
   Alt + E ........... Export CSV (selected rows if any, else all displayed)
   F5 ................ Refresh current table (keep sort/selection) ` + iconRefresh + `
   Ctrl + F5 ......... Refresh table list + current table ` + iconRefresh + `
   Alt + F ........... Toggle fullscreen results
-  Alt + B ........... Backup current DB (PostgreSQL/MySQL)
-  Alt + I ........... Import SQL dump for active connection (PostgreSQL/MySQL)
+  Alt + B ........... Backup current DB (engine-aware format)
+  Alt + I ........... Import dump for active connection (MySQL .sql, PostgreSQL .sql/.dump)
   Esc (import run) .. Cancel running SQL import
   S ................. Sort by current column (in Results)
   Enter ............. Open row details (in Results)
@@ -45,11 +46,12 @@ func (a *App) showHelp() {
   Home .............. First page of results
   End ............... Last page of results
   Alt + = / - ....... Increase / decrease preview row limit
-  Alt + 0 ........... Toggle preview limit (100 ↔ all rows)
+  Alt + 0 ........... Toggle preview limit (100 ↔ safe max)
   Ctrl + = / - ...... Zoom all result columns wider / narrower
   Ctrl + 0 .......... Reset zoom to default
   + / - ............. Widen / narrow selected column (in Results)
   Preview limit ..... Applies to table loads and read-query results
+  Safe max .......... Auto-caps rows by table width to keep memory low
   Status bar ........ Shows active sort + preview limit
 
 [#a6e3a1]Dashboard ` + iconDashboard + `[-]

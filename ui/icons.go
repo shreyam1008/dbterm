@@ -6,6 +6,7 @@ const (
 	iconConnect   = "🔌"
 	iconHelp      = "❓"
 	iconServices  = "🛠"
+	iconDatabase  = "🗄"
 	iconTables    = "📚"
 	iconQuery     = "📝"
 	iconResults   = "📊"

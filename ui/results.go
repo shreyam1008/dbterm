@@ -16,11 +16,16 @@ import (
 
 const (
 	defaultTablePreviewLimit   = 100
-	unlimitedTablePreviewLimit = -1
+	adaptiveTablePreviewLimit  = -1
 	resultSelectionTitlePrefix = " [#f9e2af](selected "
+
+	maxResultRows           = 1000
+	maxResultCells          = 12000
+	maxEstimatedResultBytes = 2 * 1024 * 1024
+	estimatedCellOverhead   = 96
 )
 
-var tablePreviewSteps = []int{50, 100, 250, 500, 1000, 2500, 5000, 10000}
+var tablePreviewSteps = []int{50, 100, 250, 500, 1000}
 
 type resultRowSelectionRef string
 
@@ -51,10 +56,14 @@ func (a *App) LoadResults() error {
 
 	// DB-specific quoting for identifiers
 	quotedTable := quoteIdentifier(a.dbType, a.selectedTable)
-	limit := a.effectiveResultLimit()
+	requestedLimit := a.effectiveResultLimit()
+	queryLimit := requestedLimit
+	if queryLimit == adaptiveTablePreviewLimit || queryLimit > maxResultRows {
+		queryLimit = maxResultRows
+	}
 	query := fmt.Sprintf("SELECT * FROM %s", quotedTable)
-	if limit > 0 {
-		query = fmt.Sprintf("%s LIMIT %d OFFSET %d", query, limit, a.pageOffset)
+	if queryLimit > 0 {
+		query = fmt.Sprintf("%s LIMIT %d OFFSET %d", query, queryLimit, a.pageOffset)
 	}
 
 	a.queryStart = time.Now()
@@ -71,7 +80,15 @@ func (a *App) LoadResults() error {
 	}
 	defer rows.Close()
 
-	rowCount, err := populateTable(a.results, rows)
+	columnNames, err := rows.Columns()
+	if err != nil {
+		return fmt.Errorf("could not read columns: %w", err)
+	}
+
+	pageLimit := resolvedResultLimit(requestedLimit, len(columnNames))
+	a.pageSize = pageLimit
+
+	rowCount, _, err := populateTableWithLimit(a.results, rows, pageLimit)
 	if err != nil {
 		return err
 	}
@@ -116,7 +133,7 @@ func (a *App) fetchTotalRowCount(quotedTable string) {
 
 // paginatedResultTitle builds the results panel title with page info.
 func (a *App) paginatedResultTitle(rowCount int, elapsed time.Duration) string {
-	limit := a.effectiveResultLimit()
+	limit := a.currentPageLimit()
 	base := fmt.Sprintf(" %s [yellow]%s[-] — [green]%d rows[-] in [teal]%s[-]",
 		iconResults, a.selectedTable, rowCount, formatDuration(elapsed))
 
@@ -138,12 +155,13 @@ func (a *App) paginatedResultTitle(rowCount int, elapsed time.Duration) string {
 // resetPagination resets page offset and cached total (call when switching tables).
 func (a *App) resetPagination() {
 	a.pageOffset = 0
+	a.pageSize = 0
 	a.totalRowCount = -1
 }
 
 // nextPage advances to the next page of results.
 func (a *App) nextPage() {
-	limit := a.effectiveResultLimit()
+	limit := a.currentPageLimit()
 	if limit <= 0 {
 		return
 	}
@@ -160,7 +178,7 @@ func (a *App) nextPage() {
 
 // prevPage goes back one page of results.
 func (a *App) prevPage() {
-	limit := a.effectiveResultLimit()
+	limit := a.currentPageLimit()
 	if limit <= 0 || a.pageOffset <= 0 {
 		return
 	}
@@ -186,7 +204,7 @@ func (a *App) firstPage() {
 
 // lastPage jumps to the last page.
 func (a *App) lastPage() {
-	limit := a.effectiveResultLimit()
+	limit := a.currentPageLimit()
 	if limit <= 0 || a.totalRowCount < 0 {
 		return
 	}
@@ -287,13 +305,52 @@ func findMatchingRow(table *tview.Table, signature []string, rowCount, colCount 
 	return 0
 }
 
-func quoteIdentifier(dbType config.DBType, identifier string) string {
-	switch dbType {
-	case config.MySQL:
-		return "`" + strings.ReplaceAll(identifier, "`", "``") + "`"
-	default:
-		return `"` + strings.ReplaceAll(identifier, `"`, `""`) + `"`
+func resolvedResultLimit(requestedLimit, columnCount int) int {
+	if columnCount < 1 {
+		columnCount = 1
 	}
+
+	limit := maxResultRows
+	if requestedLimit > 0 && requestedLimit < limit {
+		limit = requestedLimit
+	}
+
+	rowsByCells := maxResultCells / columnCount
+	if rowsByCells > 0 && rowsByCells < limit {
+		limit = rowsByCells
+	}
+
+	perCellEstimate := maxCellPreviewRunes + estimatedCellOverhead
+	rowsByMemory := maxEstimatedResultBytes / max(1, columnCount*perCellEstimate)
+	if rowsByMemory > 0 && rowsByMemory < limit {
+		limit = rowsByMemory
+	}
+
+	if limit < 1 {
+		return 1
+	}
+	return limit
+}
+
+func quoteIdentifier(dbType config.DBType, identifier string) string {
+	parts := strings.Split(identifier, ".")
+	quoted := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		switch dbType {
+		case config.MySQL:
+			quoted = append(quoted, "`"+strings.ReplaceAll(part, "`", "``")+"`")
+		default:
+			quoted = append(quoted, `"`+strings.ReplaceAll(part, `"`, `""`)+`"`)
+		}
+	}
+	if len(quoted) == 0 {
+		return identifier
+	}
+	return strings.Join(quoted, ".")
 }
 
 func (a *App) hasResultDataRows() bool {

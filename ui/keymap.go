@@ -26,6 +26,7 @@ const (
 	actionHistory        keymapAction = config.ActionHistory
 	actionSettings       keymapAction = config.ActionSettings
 	actionImportDump     keymapAction = config.ActionImportDump
+	actionInspectSchema  keymapAction = config.ActionInspectSchema
 	actionSelectAll      keymapAction = config.ActionSelectAll
 	actionClearSelection keymapAction = config.ActionClearSelection
 )
@@ -43,6 +44,7 @@ var knownKeymapActions = map[keymapAction]struct{}{
 	actionHistory:        {},
 	actionSettings:       {},
 	actionImportDump:     {},
+	actionInspectSchema:  {},
 	actionSelectAll:      {},
 	actionClearSelection: {},
 }

@@ -82,6 +82,12 @@ func TestActionKeymapResolve(t *testing.T) {
 	if !ok || action != actionImportDump {
 		t.Fatalf("Resolve(Alt+I) = (%q,%v), want (%q,true)", action, ok, actionImportDump)
 	}
+
+	schemaEvent := tcell.NewEventKey(tcell.KeyRune, 'm', tcell.ModAlt)
+	action, ok = resolver.Resolve(schemaEvent)
+	if !ok || action != actionInspectSchema {
+		t.Fatalf("Resolve(Alt+M) = (%q,%v), want (%q,true)", action, ok, actionInspectSchema)
+	}
 }
 
 func TestActionKeymapResolveNilSafe(t *testing.T) {

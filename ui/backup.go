@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"bufio"
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"os/exec"
@@ -17,7 +19,13 @@ import (
 
 const backupTimestampLayout = "20060102_150405"
 
-// showBackupModal opens a modal for creating timestamped SQL dumps.
+type backupPlan struct {
+	formatLabel string
+	toolLabel   string
+	extension   string
+}
+
+// showBackupModal opens a modal for creating timestamped database backups.
 func (a *App) showBackupModal() {
 	returnPage, _ := a.pages.GetFrontPage()
 	if returnPage == "" {
@@ -25,7 +33,7 @@ func (a *App) showBackupModal() {
 	}
 
 	if a.db == nil {
-		a.ShowAlert(fmt.Sprintf("%s No active database connection.\n\nConnect to PostgreSQL or MySQL first.", iconInfo), returnPage)
+		a.ShowAlert(fmt.Sprintf("%s No active database connection.\n\nConnect to a database first.", iconInfo), returnPage)
 		return
 	}
 
@@ -35,8 +43,9 @@ func (a *App) showBackupModal() {
 		return
 	}
 
-	if cfg.Type != config.PostgreSQL && cfg.Type != config.MySQL {
-		a.ShowAlert(fmt.Sprintf("%s Backup dumps are supported for PostgreSQL and MySQL only.", iconInfo), returnPage)
+	plan, err := backupPlanFor(cfg)
+	if err != nil {
+		a.ShowAlert(fmt.Sprintf("%s %v", iconInfo, err), returnPage)
 		return
 	}
 
@@ -72,8 +81,8 @@ func (a *App) showBackupModal() {
 			fileName = defaultFile
 		}
 
-		if filepath.Ext(strings.ToLower(fileName)) != ".sql" {
-			fileName += ".sql"
+		if filepath.Ext(strings.ToLower(fileName)) == "" {
+			fileName += plan.extension
 		}
 
 		if err := os.MkdirAll(outputDir, 0o755); err != nil {
@@ -104,12 +113,10 @@ func (a *App) showBackupModal() {
 		SetTextAlign(tview.AlignCenter)
 	footer.SetBackgroundColor(crust)
 	footer.SetText(fmt.Sprintf(
-		" [#a6adc8]%s %s@%s:%s/%s[-]  │  [yellow]Esc[-] Cancel  │  [green]Backup[-] writes timestamped .sql",
-		cfg.TypeLabel(),
-		nonEmptyOr(cfg.User, "user"),
-		nonEmptyOr(cfg.Host, "localhost"),
-		defaultPortFor(cfg),
-		nonEmptyOr(cfg.Database, "database"),
+		" [#a6adc8]%s[-]  │  [green]%s[-]  │  [#a6adc8]%s[-]  │  [yellow]Esc[-] Cancel",
+		backupTargetLabel(cfg),
+		plan.formatLabel,
+		plan.toolLabel,
 	))
 
 	container := tview.NewFlex().
@@ -128,7 +135,13 @@ func (a *App) showBackupModal() {
 }
 
 func (a *App) runDatabaseBackup(cfg *config.ConnectionConfig, outputPath, returnPage string) {
-	a.showLoadingModal(fmt.Sprintf("%s Creating %s dump...", iconBackup, cfg.TypeLabel()))
+	plan, err := backupPlanFor(cfg)
+	if err != nil {
+		a.ShowAlert(fmt.Sprintf("%s %v", iconWarn, err), returnPage)
+		return
+	}
+
+	a.showLoadingModal(fmt.Sprintf("%s Creating %s...", iconBackup, plan.formatLabel))
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
@@ -157,7 +170,7 @@ func (a *App) runDatabaseBackup(cfg *config.ConnectionConfig, outputPath, return
 			if infoErr == nil {
 				sizeLine = fmt.Sprintf("\nSize: %s", fileSize)
 			}
-			a.ShowAlert(fmt.Sprintf("%s Backup created\n\nType: %s\nPath: %s%s", iconSuccess, cfg.TypeLabel(), outputPath, sizeLine), returnPage)
+			a.ShowAlert(fmt.Sprintf("%s Backup created\n\nType: %s\nFormat: %s\nPath: %s%s", iconSuccess, cfg.TypeLabel(), plan.formatLabel, outputPath, sizeLine), returnPage)
 		})
 	}()
 }
@@ -168,6 +181,10 @@ func runDatabaseDump(ctx context.Context, cfg *config.ConnectionConfig, outputPa
 		return runPostgresDump(ctx, cfg, outputPath)
 	case config.MySQL:
 		return runMySQLDump(ctx, cfg, outputPath)
+	case config.SQLite:
+		return runSQLiteSnapshot(ctx, cfg, outputPath)
+	case config.Turso, config.CloudflareD1:
+		return runSQLiteCompatibleDump(ctx, cfg, outputPath)
 	default:
 		return fmt.Errorf("backup is not supported for %s", cfg.TypeLabel())
 	}
@@ -182,8 +199,11 @@ func runPostgresDump(ctx context.Context, cfg *config.ConnectionConfig, outputPa
 		"--host", nonEmptyOr(cfg.Host, "localhost"),
 		"--port", defaultPortFor(cfg),
 		"--username", cfg.User,
-		"--format=plain",
+		"--format=custom",
 		"--encoding=UTF8",
+		"--compress=6",
+		"--no-owner",
+		"--no-privileges",
 		"--file", outputPath,
 		cfg.Database,
 	}
@@ -254,6 +274,274 @@ func runMySQLDump(ctx context.Context, cfg *config.ConnectionConfig, outputPath 
 	return nil
 }
 
+func runSQLiteSnapshot(ctx context.Context, cfg *config.ConnectionConfig, outputPath string) error {
+	if strings.TrimSpace(cfg.FilePath) == "" {
+		return fmt.Errorf("sqlite backup requires a file-backed database")
+	}
+	if _, err := os.Stat(outputPath); err == nil {
+		return fmt.Errorf("backup file already exists: %s", outputPath)
+	}
+
+	db, err := utils.ConnectDB(cfg)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	_, err = db.ExecContext(ctx, fmt.Sprintf("VACUUM INTO %s", sqliteStringLiteral(outputPath)))
+	if err != nil {
+		return fmt.Errorf("sqlite backup failed: %w", err)
+	}
+	return nil
+}
+
+func runSQLiteCompatibleDump(ctx context.Context, cfg *config.ConnectionConfig, outputPath string) error {
+	db, err := utils.ConnectDB(cfg)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	return writeSQLiteCompatibleDump(ctx, db, cfg, outputPath)
+}
+
+func writeSQLiteCompatibleDump(ctx context.Context, db *sql.DB, cfg *config.ConnectionConfig, outputPath string) error {
+	file, err := os.Create(outputPath)
+	if err != nil {
+		return fmt.Errorf("could not create backup file %s: %w", outputPath, err)
+	}
+	defer file.Close()
+
+	writer := bufio.NewWriter(file)
+	defer writer.Flush()
+
+	if err := writeDumpLine(writer, "PRAGMA foreign_keys=OFF;"); err != nil {
+		return err
+	}
+	if err := writeDumpLine(writer, "BEGIN TRANSACTION;"); err != nil {
+		return err
+	}
+
+	tables, err := sqliteDumpTables(ctx, db)
+	if err != nil {
+		return err
+	}
+	for _, table := range tables {
+		if err := writeDumpLine(writer, table.createSQL+";"); err != nil {
+			return err
+		}
+	}
+	for _, table := range tables {
+		if err := sqliteDumpTableData(ctx, db, writer, cfg.Type, table); err != nil {
+			return err
+		}
+	}
+
+	extraObjects, err := sqliteDumpExtraObjects(ctx, db)
+	if err != nil {
+		return err
+	}
+	for _, ddl := range extraObjects {
+		if err := writeDumpLine(writer, ddl+";"); err != nil {
+			return err
+		}
+	}
+
+	if err := writeDumpLine(writer, "COMMIT;"); err != nil {
+		return err
+	}
+
+	return writer.Flush()
+}
+
+type sqliteDumpTable struct {
+	name      string
+	createSQL string
+	columns   []string
+}
+
+func sqliteDumpTables(ctx context.Context, db *sql.DB) ([]sqliteDumpTable, error) {
+	rows, err := db.QueryContext(ctx, `SELECT name, sql
+FROM sqlite_master
+WHERE type = 'table'
+  AND name NOT LIKE 'sqlite_%'
+  AND sql IS NOT NULL
+ORDER BY name`)
+	if err != nil {
+		return nil, fmt.Errorf("could not read sqlite tables: %w", err)
+	}
+	defer rows.Close()
+
+	var tables []sqliteDumpTable
+	for rows.Next() {
+		var name, createSQL string
+		if err := rows.Scan(&name, &createSQL); err != nil {
+			return nil, fmt.Errorf("could not scan sqlite table metadata: %w", err)
+		}
+
+		columns, err := sqliteDumpColumns(ctx, db, name)
+		if err != nil {
+			return nil, err
+		}
+		tables = append(tables, sqliteDumpTable{name: name, createSQL: createSQL, columns: columns})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("could not iterate sqlite tables: %w", err)
+	}
+	return tables, nil
+}
+
+func sqliteDumpColumns(ctx context.Context, db *sql.DB, tableName string) ([]string, error) {
+	rows, err := db.QueryContext(ctx, fmt.Sprintf("PRAGMA table_info(%s)", quoteIdentifier(config.SQLite, tableName)))
+	if err != nil {
+		return nil, fmt.Errorf("could not read columns for %s: %w", tableName, err)
+	}
+	defer rows.Close()
+
+	var columns []string
+	for rows.Next() {
+		var cid, notNull, pk int
+		var name, dataType string
+		var defaultValue sql.NullString
+		if err := rows.Scan(&cid, &name, &dataType, &notNull, &defaultValue, &pk); err != nil {
+			return nil, fmt.Errorf("could not scan column metadata for %s: %w", tableName, err)
+		}
+		columns = append(columns, name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("could not iterate columns for %s: %w", tableName, err)
+	}
+	return columns, nil
+}
+
+func sqliteDumpTableData(ctx context.Context, db *sql.DB, writer *bufio.Writer, dbType config.DBType, table sqliteDumpTable) error {
+	if len(table.columns) == 0 {
+		return nil
+	}
+
+	selectParts := make([]string, 0, len(table.columns))
+	insertColumns := make([]string, 0, len(table.columns))
+	for _, column := range table.columns {
+		quotedColumn := quoteIdentifier(dbType, column)
+		selectParts = append(selectParts, fmt.Sprintf("quote(%s)", quotedColumn))
+		insertColumns = append(insertColumns, quoteIdentifier(dbType, column))
+	}
+
+	query := fmt.Sprintf("SELECT %s FROM %s", strings.Join(selectParts, ", "), quoteIdentifier(dbType, table.name))
+	rows, err := db.QueryContext(ctx, query)
+	if err != nil {
+		return fmt.Errorf("could not dump rows for %s: %w", table.name, err)
+	}
+	defer rows.Close()
+
+	values := make([]sql.NullString, len(table.columns))
+	scanTargets := make([]any, len(table.columns))
+	for i := range values {
+		scanTargets[i] = &values[i]
+	}
+
+	insertPrefix := fmt.Sprintf("INSERT INTO %s (%s) VALUES(", quoteIdentifier(dbType, table.name), strings.Join(insertColumns, ", "))
+	for rows.Next() {
+		if err := rows.Scan(scanTargets...); err != nil {
+			return fmt.Errorf("could not scan dump row for %s: %w", table.name, err)
+		}
+
+		literals := make([]string, len(values))
+		for i, value := range values {
+			if value.Valid {
+				literals[i] = value.String
+				continue
+			}
+			literals[i] = "NULL"
+		}
+		if err := writeDumpLine(writer, insertPrefix+strings.Join(literals, ", ")+");"); err != nil {
+			return err
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("could not iterate rows for %s: %w", table.name, err)
+	}
+	return nil
+}
+
+func sqliteDumpExtraObjects(ctx context.Context, db *sql.DB) ([]string, error) {
+	rows, err := db.QueryContext(ctx, `SELECT sql
+FROM sqlite_master
+WHERE type IN ('view', 'index', 'trigger')
+  AND name NOT LIKE 'sqlite_%'
+  AND sql IS NOT NULL
+ORDER BY CASE type
+  WHEN 'view' THEN 0
+  WHEN 'index' THEN 1
+  WHEN 'trigger' THEN 2
+  ELSE 3
+END, name`)
+	if err != nil {
+		return nil, fmt.Errorf("could not read sqlite objects: %w", err)
+	}
+	defer rows.Close()
+
+	var objects []string
+	for rows.Next() {
+		var ddl string
+		if err := rows.Scan(&ddl); err != nil {
+			return nil, fmt.Errorf("could not scan sqlite object definition: %w", err)
+		}
+		objects = append(objects, ddl)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("could not iterate sqlite objects: %w", err)
+	}
+	return objects, nil
+}
+
+func writeDumpLine(writer *bufio.Writer, line string) error {
+	if writer == nil {
+		return fmt.Errorf("dump writer is not available")
+	}
+	if _, err := writer.WriteString(line + "\n"); err != nil {
+		return fmt.Errorf("could not write dump output: %w", err)
+	}
+	return nil
+}
+
+func backupPlanFor(cfg *config.ConnectionConfig) (backupPlan, error) {
+	switch cfg.Type {
+	case config.PostgreSQL:
+		return backupPlan{
+			formatLabel: "pg_dump custom archive (.dump)",
+			toolLabel:   "pg_dump / pg_restore",
+			extension:   ".dump",
+		}, nil
+	case config.MySQL:
+		return backupPlan{
+			formatLabel: "mysqldump SQL (.sql)",
+			toolLabel:   "mysqldump / mysql",
+			extension:   ".sql",
+		}, nil
+	case config.SQLite:
+		return backupPlan{
+			formatLabel: "SQLite snapshot (.sqlite3)",
+			toolLabel:   "VACUUM INTO",
+			extension:   ".sqlite3",
+		}, nil
+	case config.Turso:
+		return backupPlan{
+			formatLabel: "SQLite-compatible SQL dump (.sql)",
+			toolLabel:   "dbterm logical exporter",
+			extension:   ".sql",
+		}, nil
+	case config.CloudflareD1:
+		return backupPlan{
+			formatLabel: "SQLite-compatible SQL dump (.sql)",
+			toolLabel:   "dbterm logical exporter",
+			extension:   ".sql",
+		}, nil
+	default:
+		return backupPlan{}, fmt.Errorf("backup is not supported for %s", cfg.TypeLabel())
+	}
+}
+
 func (a *App) currentConnectionConfig() *config.ConnectionConfig {
 	if a.activeConn != nil {
 		return cloneConnectionConfig(a.activeConn)
@@ -275,9 +563,52 @@ func (a *App) currentConnectionConfig() *config.ConnectionConfig {
 }
 
 func defaultBackupFilename(cfg *config.ConnectionConfig) string {
-	base := sanitizeBackupName(nonEmptyOr(cfg.Database, cfg.Name))
+	plan, err := backupPlanFor(cfg)
+	if err != nil {
+		return "database_backup"
+	}
+
+	base := sanitizeBackupName(backupBaseName(cfg))
 	timestamp := time.Now().Format(backupTimestampLayout)
-	return fmt.Sprintf("%s_%s_%s.sql", base, strings.ToLower(string(cfg.Type)), timestamp)
+	return fmt.Sprintf("%s_%s_%s%s", base, strings.ToLower(string(cfg.Type)), timestamp, plan.extension)
+}
+
+func backupBaseName(cfg *config.ConnectionConfig) string {
+	if cfg == nil {
+		return "database"
+	}
+	switch cfg.Type {
+	case config.SQLite:
+		if strings.TrimSpace(cfg.FilePath) != "" {
+			return strings.TrimSuffix(filepath.Base(cfg.FilePath), filepath.Ext(cfg.FilePath))
+		}
+	case config.CloudflareD1:
+		if strings.TrimSpace(cfg.DatabaseID) != "" {
+			return cfg.DatabaseID
+		}
+	}
+	return nonEmptyOr(cfg.Database, cfg.Name)
+}
+
+func backupTargetLabel(cfg *config.ConnectionConfig) string {
+	if cfg == nil {
+		return "database"
+	}
+	switch cfg.Type {
+	case config.SQLite:
+		return nonEmptyOr(cfg.FilePath, cfg.Name)
+	case config.Turso:
+		return nonEmptyOr(cfg.Host, cfg.Name)
+	case config.CloudflareD1:
+		return nonEmptyOr(cfg.DatabaseID, cfg.Name)
+	default:
+		return fmt.Sprintf("%s@%s:%s/%s",
+			nonEmptyOr(cfg.User, "user"),
+			nonEmptyOr(cfg.Host, "localhost"),
+			defaultPortFor(cfg),
+			nonEmptyOr(cfg.Database, "database"),
+		)
+	}
 }
 
 func sanitizeBackupName(value string) string {
@@ -325,4 +656,8 @@ func nonEmptyOr(value, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func sqliteStringLiteral(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "''") + "'"
 }
