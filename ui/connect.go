@@ -11,7 +11,8 @@ func (a *App) connectDB(form *tview.Form) error {
 
 	connStr := a.GetFormData(form)
 	if connStr == "" {
-		return nil
+		a.ShowAlert("Please fill out all the fields", "connectModal")
+		return fmt.Errorf("Error connecting to database")
 	}
 
 	db, err := utils.ConnectDB(connStr)
