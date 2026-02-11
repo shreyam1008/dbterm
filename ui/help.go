@@ -28,6 +28,9 @@ func (a *App) showHelp() {
   Ctrl + F5 ......... Refresh table list + current table ` + iconRefresh + `
   Alt + F ........... Toggle fullscreen results
   S ................. Sort by current column (in Results)
+  Alt + = / - ....... Increase / decrease preview row limit
+  Alt + 0 ........... Toggle preview limit (100 ↔ all rows)
+  Status bar ........ Shows active sort + preview limit
 
 [#a6e3a1]Dashboard ` + iconDashboard + `[-]
   Enter ............. Connect to selected ` + iconConnect + `
