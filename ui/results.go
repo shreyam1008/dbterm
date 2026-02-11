@@ -3,9 +3,11 @@ package ui
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/rivo/tview"
+	"github.com/shreyam1008/dbterm/config"
 )
 
 const tablePreviewLimit = 100
@@ -30,13 +32,8 @@ func (a *App) LoadResults() error {
 	}
 
 	// DB-specific quoting for identifiers
-	var query string
-	switch a.dbType {
-	case "mysql":
-		query = fmt.Sprintf("SELECT * FROM `%s` LIMIT %d", a.selectedTable, tablePreviewLimit)
-	default:
-		query = fmt.Sprintf(`SELECT * FROM "%s" LIMIT %d`, a.selectedTable, tablePreviewLimit)
-	}
+	quotedTable := quoteIdentifier(a.dbType, a.selectedTable)
+	query := fmt.Sprintf("SELECT * FROM %s LIMIT %d", quotedTable, tablePreviewLimit)
 
 	a.queryStart = time.Now()
 
@@ -155,4 +152,13 @@ func findMatchingRow(table *tview.Table, signature []string, rowCount, colCount 
 		}
 	}
 	return 0
+}
+
+func quoteIdentifier(dbType config.DBType, identifier string) string {
+	switch dbType {
+	case config.MySQL:
+		return "`" + strings.ReplaceAll(identifier, "`", "``") + "`"
+	default:
+		return `"` + strings.ReplaceAll(identifier, `"`, `""`) + `"`
+	}
 }

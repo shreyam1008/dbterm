@@ -27,16 +27,16 @@ func (a *App) ExecuteQuery(query string) {
 		return
 	}
 
-	queryUpper := strings.ToUpper(query)
+	firstToken := firstSQLToken(query)
 
 	// Detect read queries (SELECT, SHOW, DESCRIBE, EXPLAIN, PRAGMA, WITH)
-	isRead := strings.HasPrefix(queryUpper, "SELECT") ||
-		strings.HasPrefix(queryUpper, "SHOW") ||
-		strings.HasPrefix(queryUpper, "DESCRIBE") ||
-		strings.HasPrefix(queryUpper, "DESC ") ||
-		strings.HasPrefix(queryUpper, "EXPLAIN") ||
-		strings.HasPrefix(queryUpper, "PRAGMA") ||
-		strings.HasPrefix(queryUpper, "WITH")
+	isRead := firstToken == "SELECT" ||
+		firstToken == "SHOW" ||
+		firstToken == "DESCRIBE" ||
+		firstToken == "DESC" ||
+		firstToken == "EXPLAIN" ||
+		firstToken == "PRAGMA" ||
+		firstToken == "WITH"
 
 	if isRead {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -111,7 +111,13 @@ func (a *App) showQueryError(err error, query string) {
 		hint = "\n\n💡 Hint: Connection issue. Press Alt+D to check your connection."
 	}
 
-	a.ShowAlert(fmt.Sprintf("Query error:\n\n%s%s", errMsg, hint), "main")
+	message := fmt.Sprintf("Query error:\n\n%s", errMsg)
+	if displayQuery != "" {
+		message += fmt.Sprintf("\n\nQuery: %s", displayQuery)
+	}
+	message += hint
+
+	a.ShowAlert(message, "main")
 }
 
 // formatDuration formats a duration in a human-friendly way
@@ -123,4 +129,39 @@ func formatDuration(d time.Duration) string {
 		return fmt.Sprintf("%.1fms", float64(d.Microseconds())/1000)
 	}
 	return fmt.Sprintf("%.2fs", d.Seconds())
+}
+
+func firstSQLToken(query string) string {
+	remaining := strings.TrimSpace(query)
+	for remaining != "" {
+		switch {
+		case strings.HasPrefix(remaining, "--"):
+			nextLine := strings.IndexByte(remaining, '\n')
+			if nextLine < 0 {
+				return ""
+			}
+			remaining = strings.TrimSpace(remaining[nextLine+1:])
+		case strings.HasPrefix(remaining, "/*"):
+			commentEnd := strings.Index(remaining, "*/")
+			if commentEnd < 0 {
+				return ""
+			}
+			remaining = strings.TrimSpace(remaining[commentEnd+2:])
+		default:
+			end := 0
+			for end < len(remaining) {
+				ch := remaining[end]
+				if (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') {
+					end++
+					continue
+				}
+				break
+			}
+			if end == 0 {
+				return ""
+			}
+			return strings.ToUpper(remaining[:end])
+		}
+	}
+	return ""
 }

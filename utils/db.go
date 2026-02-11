@@ -28,8 +28,9 @@ func ConnectDB(cfg *config.ConnectionConfig) (*sql.DB, error) {
 	}
 
 	// Connection pool defaults — keep it light for a TUI
-	db.SetMaxOpenConns(5)
-	db.SetMaxIdleConns(2)
+	db.SetMaxOpenConns(3)
+	db.SetMaxIdleConns(1)
+	db.SetConnMaxIdleTime(2 * time.Minute)
 	db.SetConnMaxLifetime(5 * time.Minute)
 
 	pingCtx, cancel := context.WithTimeout(context.Background(), 8*time.Second)

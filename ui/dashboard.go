@@ -101,14 +101,15 @@ func (a *App) showDashboard() {
 		SetTextAlign(tview.AlignCenter)
 	actions.SetBackgroundColor(crust)
 
-	if connCount > 0 {
-		actions.SetText("  [green]Enter[-] Connect  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [#94e2d5]S[-] Services  │  [teal]H[-] Help  │  [#cba6f7]Q[-] Quit")
-	} else {
-		actions.SetText("  [yellow]N[-] New Connection  │  [#94e2d5]S[-] Services  │  [teal]H[-] Help  │  [#cba6f7]Q[-] Quit")
-	}
-
 	// ── Layout ──
 	screenW, screenH := a.getScreenSize()
+
+	if connCount > 0 {
+		actions.SetText(dashboardFooterText(true, screenW))
+	} else {
+		actions.SetText(dashboardFooterText(false, screenW))
+	}
+
 	headerHeight := 8
 	if screenW < 100 || screenH < 30 {
 		headerHeight = 6
@@ -193,7 +194,11 @@ func (a *App) confirmDelete(index int) {
 		AddButtons([]string{"  Delete  ", "  Cancel  "}).
 		SetDoneFunc(func(buttonIndex int, buttonLabel string) {
 			if buttonIndex == 0 {
-				a.store.Delete(index)
+				if err := a.store.Delete(index); err != nil {
+					a.pages.RemovePage("confirmDelete")
+					a.ShowAlert(fmt.Sprintf("Could not delete connection:\n\n%v", err), "dashboard")
+					return
+				}
 			}
 			a.pages.RemovePage("confirmDelete")
 			a.pages.RemovePage("dashboard")
@@ -240,4 +245,27 @@ func formatTimeAgo(t time.Time) string {
 	default:
 		return t.Format("Jan 02, 2006")
 	}
+}
+
+func dashboardFooterText(hasConnections bool, width int) string {
+	if hasConnections {
+		switch {
+		case width < 70:
+			return "  [yellow]N[-] New  │  [teal]H[-] Help  │  [#cba6f7]Q[-] Quit"
+		case width < 85:
+			return "  [yellow]Enter[-] Connect  │  [yellow]N[-] New  │  [teal]H[-] Help  │  [#cba6f7]Q[-] Quit"
+		case width < 118:
+			return "  [yellow]Enter[-] Connect  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [teal]H[-] Help  │  [#cba6f7]Q[-] Quit"
+		default:
+			return "  [green]Enter[-] Connect  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [#94e2d5]S[-] Services  │  [teal]H[-] Help  │  [#cba6f7]Q[-] Quit"
+		}
+	}
+
+	if width < 70 {
+		return "  [yellow]N[-] New  │  [#cba6f7]Q[-] Quit"
+	}
+	if width < 85 {
+		return "  [yellow]N[-] New  │  [teal]H[-] Help  │  [#cba6f7]Q[-] Quit"
+	}
+	return "  [yellow]N[-] New Connection  │  [#94e2d5]S[-] Services  │  [teal]H[-] Help  │  [#cba6f7]Q[-] Quit"
 }
