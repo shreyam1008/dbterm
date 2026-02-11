@@ -7,11 +7,11 @@ import (
 )
 
 func (a *App) showHelp() {
-	helpText := `[::b][#cba6f7]━━━ dbterm Help ━━━[-][-]
+	helpText := `[::b][#cba6f7]━━━ ` + iconHelp + ` dbterm Help ━━━[-][-]
 
 [#f9e2af]KEYBOARD SHORTCUTS[-]
 
-[#a6e3a1]Navigation[-]
+[#a6e3a1]Navigation ` + iconDashboard + `[-]
   Alt + T ........... Focus Tables list
   Alt + Q ........... Focus Query editor
   Alt + R ........... Focus Results view
@@ -22,27 +22,29 @@ func (a *App) showHelp() {
   Esc ............... Close / Go back
   Ctrl+C ............ Quit
 
-[#a6e3a1]Query & Results[-]
+[#a6e3a1]Query & Results ` + iconQuery + ` ` + iconResults + `[-]
   Alt + Enter ....... Execute query
-  F5 ................ Refresh current table (keep sort/selection)
-  Ctrl + F5 ......... Refresh table list + current table
+  F5 ................ Refresh current table (keep sort/selection) ` + iconRefresh + `
+  Ctrl + F5 ......... Refresh table list + current table ` + iconRefresh + `
   Alt + F ........... Toggle fullscreen results
   S ................. Sort by current column (in Results)
 
-[#a6e3a1]Dashboard[-]
-  Enter ............. Connect to selected
+[#a6e3a1]Dashboard ` + iconDashboard + `[-]
+  Enter ............. Connect to selected ` + iconConnect + `
   N ................. New connection
   E ................. Edit connection
   D ................. Delete connection
-  H ................. Open Help
+  R ................. Re-check saved connection reachability ` + iconRefresh + `
+  W / B / Esc ....... Back to workspace (when connected) ` + iconBack + `
+  H ................. Open Help ` + iconHelp + `
   Q ................. Quit
   1-9 ............... Quick-select connection
 
-[#a6e3a1]Services (Alt+S)[-]
+[#a6e3a1]Services (Alt+S) ` + iconServices + `[-]
   1 ................. Toggle MySQL start/stop
   2 ................. Toggle PostgreSQL start/stop
-  R ................. Refresh service info
-  Esc ............... Go back
+  R ................. Refresh service info ` + iconRefresh + `
+  Esc ............... Go back ` + iconBack + `
 
 
 `
@@ -157,7 +159,7 @@ func (a *App) showHelp() {
 		SetText(content).
 		SetScrollable(true)
 	helpView.SetBorder(true).
-		SetTitle(" Help & Cheatsheets [yellow](Esc / Alt+H to close)[-] ").
+		SetTitle(" " + iconHelp + " Help & Cheatsheets [yellow](Esc / Alt+H to close)[-] ").
 		SetBorderColor(surface1).
 		SetTitleColor(mauve)
 

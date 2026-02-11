@@ -32,7 +32,7 @@ func (a *App) showServiceDashboard() {
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignCenter)
 	header.SetBackgroundColor(bg)
-	header.SetText(` [::b][#cba6f7]Database Services[-][-]  [#a6adc8]System status & management[-]`)
+	header.SetText(fmt.Sprintf(" [::b][#cba6f7]%s Database Services[-][-]  [#a6adc8]System status & management[-]", iconServices))
 
 	// ── Content ──
 	content := tview.NewTextView().
@@ -44,7 +44,7 @@ func (a *App) showServiceDashboard() {
 		SetTitleColor(mauve)
 
 	// Initial loading state
-	content.SetText("\n\n\n\n          [::b][#89b4fa]Loading service information...[-][-]")
+	content.SetText(fmt.Sprintf("\n\n\n\n          [::b][#89b4fa]%s Loading service information...[-][-]", iconRefresh))
 
 	// ── Footer ──
 	footer := tview.NewTextView().
@@ -54,9 +54,9 @@ func (a *App) showServiceDashboard() {
 	screenW, _ := a.getScreenSize()
 	switch {
 	case screenW < 95:
-		footer.SetText("  [yellow]1[-] MySQL  │  [yellow]2[-] PG  │  [yellow]R[-] Refresh  │  [yellow]Esc[-] Back")
+		footer.SetText(fmt.Sprintf("  [yellow]1[-] MySQL  │  [yellow]2[-] PG  │  [yellow]R[-] %s  │  [yellow]Esc[-] Back %s", iconRefresh, iconBack))
 	default:
-		footer.SetText("  [yellow]1[-] Toggle MySQL  │  [yellow]2[-] Toggle PostgreSQL  │  [yellow]R[-] Refresh  │  [yellow]Esc[-] Back")
+		footer.SetText(fmt.Sprintf("  [yellow]1[-] Toggle MySQL  │  [yellow]2[-] Toggle PostgreSQL  │  [yellow]R[-] %s  │  [yellow]Esc[-] Back %s", iconRefresh, iconBack))
 	}
 
 	// ── Layout ──
@@ -128,8 +128,8 @@ func (a *App) showServiceDashboard() {
 			// PostgreSQL section
 			writeServiceSection(&sb, pInfo)
 
-			sb.WriteString("\n\n[#6c7086]Press [yellow]1[-][#6c7086] to toggle MySQL  │  [yellow]2[-][#6c7086] to toggle PostgreSQL[-]")
-			sb.WriteString("\n[#6c7086]Press [yellow]R[-][#6c7086] to refresh  │  [yellow]Esc[-][#6c7086] to go back[-]")
+			sb.WriteString(fmt.Sprintf("\n\n[#6c7086]Press [yellow]1[-][#6c7086] to toggle MySQL  │  [yellow]2[-][#6c7086] to toggle PostgreSQL[-]"))
+			sb.WriteString(fmt.Sprintf("\n[#6c7086]Press [yellow]R[-][#6c7086] to refresh %s  │  [yellow]Esc[-][#6c7086] to go back %s[-]", iconRefresh, iconBack))
 
 			content.SetText(sb.String())
 		})
@@ -177,9 +177,9 @@ func writeServiceSection(sb *strings.Builder, info *serviceInfo) {
 	}
 
 	if info.active {
-		sb.WriteString("     [#6c7086]Action: Press key to [red]stop[-][#6c7086] this service[-]\n")
+		sb.WriteString("     [#6c7086]Action: Press key to [red]stop[-][#6c7086] this service ■[-]\n")
 	} else {
-		sb.WriteString("     [#6c7086]Action: Press key to [green]start[-][#6c7086] this service[-]\n")
+		sb.WriteString("     [#6c7086]Action: Press key to [green]start[-][#6c7086] this service ▶[-]\n")
 	}
 }
 
@@ -405,7 +405,8 @@ func getServiceDatabases(serviceName string) string {
 // toggleService starts or stops a database service
 func (a *App) toggleService(info *serviceInfo) {
 	if !info.installed {
-		a.ShowAlert(fmt.Sprintf("%s is not installed.\n\nInstall it first:\n  sudo apt install %s-server",
+		a.ShowAlert(fmt.Sprintf("%s %s is not installed.\n\nInstall it first:\n  sudo apt install %s-server",
+			iconWarn,
 			info.name, strings.ToLower(info.name)), "services")
 		return
 	}
@@ -430,7 +431,7 @@ func (a *App) showSudoPasswordPrompt(action string, info *serviceInfo) {
 	form := tview.NewForm()
 
 	actionTitle := strings.ToUpper(action[:1]) + action[1:]
-	form.SetTitle(fmt.Sprintf(" Sudo Password Required for %s %s ", actionTitle, info.name))
+	form.SetTitle(fmt.Sprintf(" %s Sudo Password Required for %s %s ", iconWarn, actionTitle, info.name))
 	form.SetTitleColor(red)
 	form.SetBorder(true)
 	form.SetBorderColor(red)
@@ -441,12 +442,12 @@ func (a *App) showSudoPasswordPrompt(action string, info *serviceInfo) {
 		passwordItem := form.GetFormItemByLabel("Password")
 		passwordField, ok := passwordItem.(*tview.InputField)
 		if !ok {
-			a.ShowAlert("Could not read sudo password input.", "services")
+			a.ShowAlert(fmt.Sprintf("%s Could not read sudo password input.", iconWarn), "services")
 			return
 		}
 		password := strings.TrimSpace(passwordField.GetText())
 		if password == "" {
-			a.ShowAlert("Sudo password is required to continue.", "sudoPrompt")
+			a.ShowAlert(fmt.Sprintf("%s Sudo password is required to continue.", iconInfo), "sudoPrompt")
 			return
 		}
 
@@ -487,8 +488,8 @@ func (a *App) showSudoPasswordPrompt(action string, info *serviceInfo) {
 func (a *App) confirmAndRunServiceCmd(action string, info *serviceInfo, password string) {
 	actionTitle := strings.ToUpper(action[:1]) + action[1:]
 	modal := tview.NewModal().
-		SetText(fmt.Sprintf("%s %s?\n\nThis will run:\n  sudo systemctl %s %s",
-			actionTitle, info.name, action, info.unit)).
+		SetText(fmt.Sprintf("%s %s %s?\n\nThis will run:\n  sudo systemctl %s %s",
+			iconServices, actionTitle, info.name, action, info.unit)).
 		AddButtons([]string{"  Yes  ", "  No  "}).
 		SetDoneFunc(func(buttonIndex int, buttonLabel string) {
 			a.pages.RemovePage("serviceConfirm")
@@ -511,7 +512,7 @@ func (a *App) confirmAndRunServiceCmd(action string, info *serviceInfo, password
 // runServiceCmdWithSudo executes the systemctl command, piping password if provided
 func (a *App) runServiceCmdWithSudo(action string, info *serviceInfo, password string) {
 	actionTitle := strings.ToUpper(action[:1]) + action[1:]
-	a.showLoadingModal(fmt.Sprintf("%s %s...", actionTitle, info.name))
+	a.showLoadingModal(fmt.Sprintf("%s %s %s...", iconServices, actionTitle, info.name))
 
 	go func() {
 		// Create a context with timeout to prevent hanging
@@ -551,14 +552,14 @@ func (a *App) runServiceCmdWithSudo(action string, info *serviceInfo, password s
 					outStr = "(no output)"
 				}
 
-				a.ShowAlert(fmt.Sprintf("Failed to %s %s:\n\n%s\n%s",
-					action, info.name, errMsg, outStr), "services")
+				a.ShowAlert(fmt.Sprintf("%s Failed to %s %s:\n\n%s\n%s",
+					iconFail, action, info.name, errMsg, outStr), "services")
 				return
 			}
 
 			a.pages.RemovePage("services")
 			a.showServiceDashboard()
-			a.ShowAlert(fmt.Sprintf("✓ %s %s succeeded.", info.name, action), "services")
+			a.ShowAlert(fmt.Sprintf("%s %s %s succeeded.", iconSuccess, info.name, action), "services")
 		})
 	}()
 }
@@ -566,7 +567,7 @@ func (a *App) runServiceCmdWithSudo(action string, info *serviceInfo, password s
 // showLoadingModal displays a non-interactive loading spinner
 func (a *App) showLoadingModal(message string) {
 	modal := tview.NewModal().
-		SetText(fmt.Sprintf("\n⏳ %s\n\nPlease wait...", message)).
+		SetText(fmt.Sprintf("\n%s %s\n\nPlease wait...", iconRefresh, message)).
 		SetBackgroundColor(bg).
 		SetTextColor(text)
 

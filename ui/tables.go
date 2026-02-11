@@ -60,11 +60,11 @@ func (a *App) LoadTables() error {
 	a.tables.SetSelectedBackgroundColor(blue)
 
 	// Update title with count
-	a.tables.SetTitle(fmt.Sprintf(" Tables (%d) [yellow](Alt+T)[-] ", count))
+	a.tables.SetTitle(fmt.Sprintf(" %s Tables (%d) [yellow](Alt+T)[-] ", iconTables, count))
 
 	if count == 0 {
 		a.selectedTable = ""
-		a.tables.AddItem("[gray]No tables found[-]", "", 0, nil)
+		a.tables.AddItem(fmt.Sprintf("[gray]%s No tables found[-]", iconInfo), "", 0, nil)
 	} else {
 		a.tables.SetCurrentItem(selectedIndex)
 		if tableName, _ := a.tables.GetItemText(selectedIndex); !strings.HasPrefix(tableName, "[") {
@@ -78,7 +78,7 @@ func (a *App) LoadTables() error {
 		}
 		a.selectedTable = selectedTable
 		if err := a.LoadResults(); err != nil {
-			a.ShowAlert(fmt.Sprintf("Could not load table \"%s\":\n\n%v", selectedTable, err), "main")
+			a.ShowAlert(fmt.Sprintf("%s Could not load table \"%s\":\n\n%v", iconWarn, selectedTable, err), "main")
 		}
 	})
 

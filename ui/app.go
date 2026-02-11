@@ -94,14 +94,14 @@ func (a *App) setupUI() {
 		SetFixed(1, 0). // ★ Freeze header row
 		SetSelectedStyle(tcell.StyleDefault.Background(blue).Foreground(crust))
 	a.results.SetBorder(true).
-		SetTitle(" Results [yellow](Alt+R)[-] ").
+		SetTitle(fmt.Sprintf(" %s Results [yellow](Alt+R)[-] ", iconResults)).
 		SetBorderColor(surface1).
 		SetTitleColor(peach)
 
 	// ── Tables List ──
 	a.tables = tview.NewList().ShowSecondaryText(false)
 	a.tables.SetBorder(true).
-		SetTitle(" Tables [yellow](Alt+T)[-] ").
+		SetTitle(fmt.Sprintf(" %s Tables [yellow](Alt+T)[-] ", iconTables)).
 		SetBorderColor(surface1).
 		SetTitleColor(peach)
 
@@ -110,7 +110,7 @@ func (a *App) setupUI() {
 		SetPlaceholder("  Write SQL here — Alt+Enter to execute").
 		SetPlaceholderStyle(tcell.StyleDefault.Foreground(overlay0))
 	a.queryInput.SetBorder(true).
-		SetTitle(" Query [yellow](Alt+Q)[-] ").
+		SetTitle(fmt.Sprintf(" %s Query [yellow](Alt+Q)[-] ", iconQuery)).
 		SetBorderColor(surface1).
 		SetTitleColor(peach)
 
@@ -162,7 +162,7 @@ func (a *App) setupUI() {
 		if event.Key() == tcell.KeyEnter && event.Modifiers()&tcell.ModAlt != 0 {
 			query := a.queryInput.GetText()
 			if query == "" {
-				a.ShowAlert("No query to execute.\n\nType a SQL query and press Alt+Enter.", "main")
+				a.ShowAlert(fmt.Sprintf("%s No query to execute.\n\nType a SQL query and press Alt+Enter.", iconInfo), "main")
 				return nil
 			}
 			a.queryStart = time.Now()
@@ -180,14 +180,14 @@ func (a *App) updateStatusBar(extra string, rowCount int) {
 
 	if a.db == nil {
 		if width < 58 {
-			a.statusBar.SetText("  [gray]●[-]  [yellow]H[-]  [yellow]Q[-]")
+			a.statusBar.SetText("  [gray]○[-]  [yellow]H[-]  [yellow]Q[-]")
 			return
 		}
 		if width < 80 {
-			a.statusBar.SetText("  [gray]● Disconnected[-]  │  [yellow]H[-] Help  │  [yellow]Q[-] Quit")
+			a.statusBar.SetText("  [gray]○ offline[-]  │  [yellow]H[-] Help  │  [yellow]Q[-] Quit")
 			return
 		}
-		a.statusBar.SetText("  [gray]● Disconnected[-]  │  [yellow]Alt+H[-] Help  │  [yellow]Q[-] Quit")
+		a.statusBar.SetText(fmt.Sprintf("  [gray]○ offline[-]  │  %s no DB  │  [yellow]Alt+H[-] Help  │  [yellow]Q[-] Quit", iconConnect))
 		return
 	}
 
@@ -215,11 +215,11 @@ func (a *App) updateStatusBar(extra string, rowCount int) {
 	}
 
 	parts := []string{
-		fmt.Sprintf("%s [green]●[-] [white]%s[-]", dbIcon, truncateForDisplay(a.dbName, nameMax)),
+		fmt.Sprintf("%s [green]●[-] %s [white]%s[-]", dbIcon, iconConnect, truncateForDisplay(a.dbName, nameMax)),
 	}
 
 	if width < 90 {
-		parts[0] = fmt.Sprintf("%s [green]●[-] [white]%s[-]", dbShort, truncateForDisplay(a.dbName, nameMax))
+		parts[0] = fmt.Sprintf("%s [green]●[-] %s [white]%s[-]", dbShort, iconConnect, truncateForDisplay(a.dbName, nameMax))
 	}
 
 	if width >= 90 {
@@ -305,8 +305,8 @@ func (a *App) refreshData() error {
 	if a.tableCount == 0 {
 		a.selectedTable = ""
 		a.results.Clear()
-		a.results.SetTitle(" Results [yellow](Alt+R)[-] ")
-		a.updateStatusBar("[green]↻ DB Refreshed[-]", 0)
+		a.results.SetTitle(fmt.Sprintf(" %s Results [yellow](Alt+R)[-] ", iconResults))
+		a.updateStatusBar(fmt.Sprintf("[green]%s DB Refreshed[-]", iconRefresh), 0)
 		return nil
 	}
 
@@ -329,7 +329,7 @@ func (a *App) refreshData() error {
 		rowCount = a.currentResultRowCount()
 	}
 
-	a.updateStatusBar("[green]↻ DB Refreshed[-]", rowCount)
+	a.updateStatusBar(fmt.Sprintf("[green]%s DB Refreshed[-]", iconRefresh), rowCount)
 	return nil
 }
 
@@ -440,7 +440,7 @@ func (a *App) setupKeyBindings() {
 				if err := a.refreshData(); err != nil {
 					a.ShowAlert(fmt.Sprintf("Error refreshing database: %v", err), "main")
 				} else {
-					a.flashStatus("[green]↻ DB Refreshed[-]", a.currentResultRowCount(), 1200*time.Millisecond)
+					a.flashStatus(fmt.Sprintf("[green]%s DB Refreshed[-]", iconRefresh), a.currentResultRowCount(), 1200*time.Millisecond)
 				}
 				return nil
 			}
@@ -448,7 +448,7 @@ func (a *App) setupKeyBindings() {
 				if err := a.LoadResults(); err != nil {
 					a.ShowAlert(fmt.Sprintf("Error refreshing table: %v", err), "main")
 				} else {
-					a.flashStatus("[green]↻ Table Refreshed[-]", a.currentResultRowCount(), 1200*time.Millisecond)
+					a.flashStatus(fmt.Sprintf("[green]%s Table Refreshed[-]", iconRefresh), a.currentResultRowCount(), 1200*time.Millisecond)
 				}
 				return nil
 			}
@@ -593,11 +593,12 @@ func (a *App) statusActionText(width int) string {
 	case width < 72:
 		return "[yellow]F5[-]  [yellow]H[-]"
 	case width < 90:
-		return "[yellow]F5[-] Refresh  │  [yellow]H[-] Help"
+		return fmt.Sprintf("[yellow]F5[-] %s Refresh  │  [yellow]H[-] Help %s", iconRefresh, iconHelp)
 	case width < 120:
-		return "[yellow]F5[-] Tbl  │  [yellow]Ctrl+F5[-] DB  │  [yellow]Alt+H[-] Help  │  [yellow]Alt+D[-] Dash"
+		return fmt.Sprintf("[yellow]F5[-] Tbl %s  │  [yellow]Ctrl+F5[-] DB %s  │  [yellow]Alt+H[-] Help  │  [yellow]Alt+D[-] Dash %s", iconRefresh, iconRefresh, iconDashboard)
 	default:
-		return "[yellow]F5[-] Table Refresh  │  [yellow]Ctrl+F5[-] DB Refresh  │  [yellow]Alt+H[-] Help  │  [yellow]Alt+D[-] Dashboard  │  [yellow]Alt+S[-] Services"
+		return fmt.Sprintf("[yellow]F5[-] Table %s  │  [yellow]Ctrl+F5[-] DB %s  │  [yellow]Alt+H[-] Help %s  │  [yellow]Alt+D[-] Dashboard %s  │  [yellow]Alt+S[-] Services %s",
+			iconRefresh, iconRefresh, iconHelp, iconDashboard, iconServices)
 	}
 }
 
@@ -607,7 +608,7 @@ func (a *App) currentResultRowCount() int {
 	}
 
 	if a.results.GetRowCount() == 2 {
-		if cell := a.results.GetCell(1, 0); cell != nil && cell.Text == "No rows returned" {
+		if cell := a.results.GetCell(1, 0); cell != nil && strings.Contains(cell.Text, "No rows returned") {
 			return 0
 		}
 	}

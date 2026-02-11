@@ -27,7 +27,7 @@ func populateTable(results *tview.Table, rows *sql.Rows) (int, error) {
 
 	if len(columnNames) == 0 {
 		results.SetCell(0, 0, &tview.TableCell{
-			Text:  "No columns returned",
+			Text:  iconInfo + " No columns returned",
 			Color: overlay0,
 		})
 		return 0, nil
@@ -92,7 +92,7 @@ func populateTable(results *tview.Table, rows *sql.Rows) (int, error) {
 	// Empty result set
 	if rowIndex == 1 {
 		results.SetCell(1, 0, &tview.TableCell{
-			Text:  "No rows returned",
+			Text:  iconInfo + " No rows returned",
 			Color: overlay0,
 		})
 	}
