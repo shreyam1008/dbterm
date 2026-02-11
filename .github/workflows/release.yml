@@ -43,43 +43,12 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
-  build-ios:
-    name: Build iOS Artifact
-    runs-on: macos-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-          cache-dependency-path: go.sum
-
-      - name: Build iOS arm64 C archive
-        run: |
-          mkdir -p dist
-          SDKROOT="$(xcrun --sdk iphoneos --show-sdk-path)"
-          CC="$(xcrun --sdk iphoneos --find clang)"
-          GOOS=ios GOARCH=arm64 CGO_ENABLED=1 CC="$CC" SDKROOT="$SDKROOT" \
-          CGO_CFLAGS="-isysroot $SDKROOT -miphoneos-version-min=13.0" \
-          CGO_LDFLAGS="-isysroot $SDKROOT -miphoneos-version-min=13.0" \
-          go build -trimpath -buildmode=c-archive -ldflags="-s -w" -o dist/dbterm-ios-arm64.a .
-
-      - name: Upload iOS Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist-ios
-          path: |
-            dist/dbterm-ios-arm64.a
-            dist/dbterm-ios-arm64.h
-          if-no-files-found: error
 
   release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: [build-core, build-ios]
+    needs: [build-core]
     steps:
       - name: Checkout code (tags)
         uses: actions/checkout@v4
@@ -97,7 +66,7 @@ jobs:
       - name: Generate Next Version
         id: bump_version
         run: |
-          LATEST_TAG=$(git tag -l "v*" --sort=-v:refname | head -n1)
+          LATEST_TAG=$(git tag -l "v[0-9]*.[0-9]*.[0-9]*" --sort=-v:refname | head -n1)
           if [ -z "$LATEST_TAG" ]; then
             LATEST_TAG="v0.0.0"
           fi
