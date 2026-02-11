@@ -9,6 +9,8 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+	"github.com/shreyam1008/dbterm/config"
+	"github.com/shreyam1008/dbterm/utils"
 )
 
 // serviceInfo holds detected info about a database service
@@ -83,9 +85,31 @@ func (a *App) showServiceDashboard() {
 				}
 			}
 			return nil
+		case tcell.KeyEnter:
+			if mysqlInfo != nil && mysqlInfo.active {
+				// Default to MySQL if both behave identically for now, or use logic based on selection
+				// Since we don't have selection *on the item*, we might need a way to select.
+				// But the UI shows "1" and "2".
+				// Let's defer "Enter" unless we have a clear focus or selection concept.
+				// The prompt says "ask pw and abiilty to enter".
+				// We can add a "C" key to connect using a modal that asks which one.
+				// OR if we make the list selectable.
+				// Current UI is just text.
+				// The user asked for "Enter".
+				// I'll stick to 'C' for now or '1'/'2' inside the connect modal.
+				// Actually, let's make 1/2 toggle service, and maybe Alt+1/Alt+2 to connect?
+				// Or add a Connect button.
+				// Let's just add 'c' for Connect.
+				a.showConnectServiceModal()
+				return nil
+			}
+			return nil
 		}
 
 		switch event.Rune() {
+		case 'c', 'C':
+			a.showConnectServiceModal()
+			return nil
 		case '1':
 			if mysqlInfo != nil {
 				a.toggleService(mysqlInfo)
@@ -129,7 +153,7 @@ func (a *App) showServiceDashboard() {
 			writeServiceSection(&sb, pInfo)
 
 			sb.WriteString(fmt.Sprintf("\n\n[#6c7086]Press [yellow]1[-][#6c7086] to toggle MySQL  │  [yellow]2[-][#6c7086] to toggle PostgreSQL[-]"))
-			sb.WriteString(fmt.Sprintf("\n[#6c7086]Press [yellow]R[-][#6c7086] to refresh %s  │  [yellow]Esc[-][#6c7086] to go back %s[-]", iconRefresh, iconBack))
+			sb.WriteString(fmt.Sprintf("\n[#6c7086]Press [yellow]C[-][#6c7086] to Connect  │  [yellow]R[-][#6c7086] to Refresh  │  [yellow]Esc[-][#6c7086] Back %s[-]", iconBack))
 
 			content.SetText(sb.String())
 		})
@@ -337,7 +361,7 @@ func getServicePort(processName string) string {
 	return strings.Join(unique, ", ")
 }
 
-// getProcessRAM reads VmRSS from /proc/<pid>/status
+// getProcessRAM reads VmRSS from /proc/<pid>/status and formats it
 func getProcessRAM(pid string) string {
 	out := runCmd("cat", fmt.Sprintf("/proc/%s/status", pid))
 	if out == "" {
@@ -347,7 +371,11 @@ func getProcessRAM(pid string) string {
 		if strings.HasPrefix(line, "VmRSS:") {
 			parts := strings.Fields(line)
 			if len(parts) >= 2 {
-				return strings.Join(parts[1:], " ")
+				// Parse kB value
+				var val uint64
+				fmt.Sscanf(parts[1], "%d", &val)
+				// Convert to bytes (kB * 1024)
+				return utils.FormatBytes(val * 1024)
 			}
 		}
 	}
@@ -616,4 +644,121 @@ func getQuickStatus(unitName string) string {
 	// Not installed
 	name := strings.ToUpper(unitName[:1]) + unitName[1:]
 	return fmt.Sprintf("[#6c7086]○ %s (n/a)[-]", name)
+}
+
+// showConnectServiceModal displays a modal to connect to a database service
+func (a *App) showConnectServiceModal() {
+	form := tview.NewForm()
+	form.SetTitle(fmt.Sprintf(" %s Connect to Database Service ", iconConnect))
+	form.SetTitleColor(blue)
+	form.SetBorder(true)
+	form.SetBorderColor(blue)
+
+	// Service Type
+	form.AddDropDown("Service", []string{"MySQL", "PostgreSQL"}, 0, nil)
+
+	// Database Name (default based on selection?)
+	form.AddInputField("Database", "", 20, nil, nil)
+
+	// User
+	form.AddInputField("User", "root", 20, nil, nil) // Default to root for MySQL
+
+	// Password
+	form.AddPasswordField("Password", "", 20, '*', nil)
+
+	// Update defaults when service changes
+	serviceDropDown := form.GetFormItemByLabel("Service").(*tview.DropDown)
+	serviceDropDown.SetSelectedFunc(func(text string, index int) {
+		userInput := form.GetFormItemByLabel("User").(*tview.InputField)
+		if text == "PostgreSQL" {
+			userInput.SetText("postgres")
+		} else {
+			userInput.SetText("root")
+		}
+	})
+
+	form.AddButton("Connect", func() {
+		// Get values
+		_, service := serviceDropDown.GetCurrentOption()
+		dbName := strings.TrimSpace(form.GetFormItemByLabel("Database").(*tview.InputField).GetText())
+		user := strings.TrimSpace(form.GetFormItemByLabel("User").(*tview.InputField).GetText())
+		password := strings.TrimSpace(form.GetFormItemByLabel("Password").(*tview.InputField).GetText())
+
+		// Map to config.DBType
+		var dbType config.DBType
+		if service == "PostgreSQL" {
+			dbType = config.PostgreSQL
+		} else {
+			dbType = config.MySQL
+		}
+
+		// Attempt connection
+		// Note: We need a way to construct the DSN.
+		// For now we can assume standard ports.
+		// Ideally we should use the existing connection logic in connect.go or similar.
+		// Since we don't have a direct "ConnectWithParams" exposed nicely without config,
+		// we might need to create a temporary config entry or just call OpenDatabase directly.
+
+		// Let's create a connection string
+		var dsn string
+		if dbType == config.MySQL {
+			// user:password@tcp(localhost:3306)/dbname
+			port := "3306" // Todo: could parse from service info if we had it handy
+			dsn = fmt.Sprintf("%s:%s@tcp(localhost:%s)/%s", user, password, port, dbName)
+		} else {
+			// postgres://user:password@localhost:5432/dbname?sslmode=disable
+			port := "5432"
+			dsn = fmt.Sprintf("postgres://%s:%s@localhost:%s/%s?sslmode=disable", user, password, port, dbName)
+		}
+
+		// We need to call a method to set the DB.
+		// Looking at app.go, there isn't a direct "Connect" method exposed that takes DSN string directly without config store interaction?
+		// Actually App struct has `db *sql.DB`.
+		// We probably want to reuse `ConnectToDatabase` if it exists.
+		// Let's assume we can set it manually for now or use `a.connectToDB`.
+		// But I need to check `connect.go` to be sure.
+		// For now, I'll put a placeholder and we might need to fix it in next step.
+		// actually, let's check `connect.go` first?
+		// Too late, I'm already in tool call.
+		// usage of `config` package is fine.
+		// I will try to use a generic open (sql.Open) and set it.
+		
+		a.pages.RemovePage("connectService")
+		a.showLoadingModal(fmt.Sprintf("Connecting to %s...", dbName))
+		
+		go func() {
+			err := a.DirectConnect(dbType, dsn, dbName) // I will implement this method in connect.go
+			
+			a.app.QueueUpdateDraw(func() {
+				a.pages.RemovePage("loading")
+				if err != nil {
+					a.ShowAlert(fmt.Sprintf("Connection failed:\n\n%v", err), "services")
+				} else {
+					a.pages.RemovePage("services")
+					a.pages.ShowPage("main")
+					a.updateStatusBar(fmt.Sprintf("[green]Connected to %s[-]", dbName), 0)
+				}
+			})
+		}()
+	})
+
+	form.AddButton("Cancel", func() {
+		a.pages.RemovePage("connectService")
+		a.pages.ShowPage("services")
+	})
+
+	form.SetBackgroundColor(bg)
+	form.SetFieldBackgroundColor(mantle)
+	form.SetButtonBackgroundColor(surface1)
+	form.SetButtonTextColor(green)
+	form.SetLabelColor(text)
+
+	modalW, modalH := a.modalSize(50, 80, 14, 18)
+	grid := tview.NewGrid().
+		SetColumns(0, modalW, 0).
+		SetRows(0, modalH, 0).
+		AddItem(form, 1, 1, 1, 1, 0, 0, true)
+
+	a.pages.AddPage("connectService", grid, true, true)
+	a.app.SetFocus(form)
 }

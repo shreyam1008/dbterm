@@ -155,6 +155,20 @@ func (a *App) setupUI() {
 			}
 			a.results.Select(row, col)
 			return nil
+		case ' ':
+			// Also support space for row details alongside Enter
+			row, _ := a.results.GetSelection()
+			if row > 0 {
+				a.showRowDetail(row)
+				return nil
+			}
+		}
+		if event.Key() == tcell.KeyEnter {
+			row, _ := a.results.GetSelection()
+			if row > 0 {
+				a.showRowDetail(row)
+				return nil
+			}
 		}
 		return event
 	})
@@ -564,11 +578,57 @@ func (a *App) setupKeyBindings() {
 	a.app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		page, _ := a.pages.GetFrontPage()
 
-		// Ctrl+C always quits
+
+		// Ctrl+C always quits, unless we are in a modal that uses it (like row details)
 		if event.Key() == tcell.KeyCtrlC {
+			// Check if row_details is the front page.
+			// However, pages.GetFrontPage() returns the name of the *visible* page.
+			// Since we add row_details as a layer on top, we need to see if it's there.
+			// But GetFrontPage might return the last added visible page?
+			// Let's assume if "row_details" is visible, we let it handle Ctrl+C.
+			if a.pages.HasPage("row_details") {
+				// We also need to know if it's actually visible/front.
+				// TView doesn't have a simple "IsPageVisible" but we can check name.
+				if p, _ := a.pages.GetFrontPage(); p == "row_details" {
+					return event
+				}
+			}
+
 			a.cleanup()
 			a.app.Stop()
 			return nil
+		}
+
+		// Escape Handling
+		if event.Key() == tcell.KeyEscape {
+			current := a.app.GetFocus()
+			// If in query input, unfocus to tables
+			if current == a.queryInput {
+				a.setFocusWithColor(a.tables)
+				return nil
+			}
+			// If anywhere else in main view, go back to dashboard
+			if page == "main" {
+				a.pages.HidePage("main")
+				a.showDashboard()
+				return nil
+			}
+			return event
+		}
+
+		// Backspace Handling
+		if event.Key() == tcell.KeyBackspace || event.Key() == tcell.KeyBackspace2 {
+			current := a.app.GetFocus()
+			// If in query input, let it delete text
+			if current == a.queryInput {
+				return event
+			}
+			// If anywhere else (tables/results), go back to dashboard
+			if page == "main" {
+				a.pages.HidePage("main")
+				a.showDashboard()
+				return nil
+			}
 		}
 
 		// F5 — Refresh currently selected table results (preserve selection/sort)
@@ -738,15 +798,15 @@ func (a *App) applyResponsiveLayout(width, height int) {
 func (a *App) statusActionText(width int) string {
 	switch {
 	case width < 72:
-		return "[yellow]F5[-]  [yellow]H[-]"
+		return "[yellow]Esc[-] Back  │  [yellow]F5[-] Refresh  │  [yellow]H[-]"
 	case width < 90:
-		return fmt.Sprintf("[yellow]F5[-] %s Refresh  │  [yellow]H[-] Help %s", iconRefresh, iconHelp)
+		return fmt.Sprintf("[yellow]F5[-] %s Refresh  │  [yellow]Esc[-] Back  │  [yellow]H[-] Help %s", iconRefresh, iconHelp)
 	case width < 120:
-		return fmt.Sprintf("[yellow]F5[-] Tbl %s  │  [yellow]Ctrl+F5[-] DB %s  │  [yellow]Alt+=/-[-] Rows  │  [yellow]Alt+H[-] Help  │  [yellow]Alt+D[-] Dash %s",
-			iconRefresh, iconRefresh, iconDashboard)
+		return fmt.Sprintf("[yellow]F5[-] %s  │  [yellow]Alt+F[-] Full  │  [yellow]Enter[-] Detail  │  [yellow]Alt+D/Esc[-] Dash %s",
+			iconRefresh, iconDashboard)
 	default:
-		return fmt.Sprintf("[yellow]F5[-] Table %s  │  [yellow]Ctrl+F5[-] DB %s  │  [yellow]Alt+=/-[-] Preview  │  [yellow]Alt+0[-] All  │  [yellow]Alt+H[-] Help %s  │  [yellow]Alt+D[-] Dashboard %s  │  [yellow]Alt+S[-] Services %s",
-			iconRefresh, iconRefresh, iconHelp, iconDashboard, iconServices)
+		return fmt.Sprintf("[yellow]F5[-] %s  │  [yellow]Alt+F[-] Full  │  [yellow]Enter[-] Detail  │  [yellow]Alt+H[-] Help %s  │  [yellow]Esc/Bksp[-] Dashboard %s",
+			iconRefresh, iconHelp, iconDashboard)
 	}
 }
 
