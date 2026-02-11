@@ -22,13 +22,13 @@ func (a *App) DirectConnect(dbType config.DBType, dsn, name string) error {
 		Name: name,
 		Type: dbType,
 	}
-	
-	// For DirectConnect, we need to handle DSN differently since utils.ConnectDB expects 
+
+	// For DirectConnect, we need to handle DSN differently since utils.ConnectDB expects
 	// specific fields for some DBs, or we can patch it to use DSN if available.
 	// But looking at ui/connect.go, parseConnectionString fills the fields.
 	// Since we constructed the DSN in services.go, let's parse it back to config fields!
 	// This ensures utils.ConnectDB (which uses fields) works correctly.
-	
+
 	parsed, err := parseConnectionString(dbType, dsn)
 	if err != nil {
 		return err
@@ -52,6 +52,7 @@ func (a *App) DirectConnect(dbType config.DBType, dsn, name string) error {
 	a.db = db
 	a.dbType = cfg.Type
 	a.dbName = cfg.Name
+	a.activeConn = cloneConnectionConfig(cfg)
 
 	// Load tables
 	if err := a.LoadTables(); err != nil {
@@ -63,8 +64,16 @@ func (a *App) DirectConnect(dbType config.DBType, dsn, name string) error {
 
 	// Reset page title for results
 	a.results.SetTitle(fmt.Sprintf(" %s Results [yellow](Alt+R)[-] ", iconResults))
-	
+
 	return nil
+}
+
+func cloneConnectionConfig(cfg *config.ConnectionConfig) *config.ConnectionConfig {
+	if cfg == nil {
+		return nil
+	}
+	copyCfg := *cfg
+	return &copyCfg
 }
 
 const (
@@ -719,6 +728,7 @@ func (a *App) connectWithConfig(cfg *config.ConnectionConfig, storeIndex int) {
 			a.db = db
 			a.dbType = cfg.Type
 			a.dbName = cfg.Name
+			a.activeConn = cloneConnectionConfig(cfg)
 
 			if storeIndex >= 0 {
 				if err := a.store.MarkUsed(storeIndex); err != nil {

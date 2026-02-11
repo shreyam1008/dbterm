@@ -34,12 +34,13 @@ var (
 
 // App holds all TUI state for the dbterm application
 type App struct {
-	app    *tview.Application
-	db     *sql.DB
-	pages  *tview.Pages
-	store  *config.Store
-	dbType config.DBType
-	dbName string // name of current connection (from config)
+	app        *tview.Application
+	db         *sql.DB
+	pages      *tview.Pages
+	store      *config.Store
+	dbType     config.DBType
+	dbName     string // name of current connection (from config)
+	activeConn *config.ConnectionConfig
 
 	// Main UI components
 	tables        *tview.List
@@ -578,7 +579,6 @@ func (a *App) setupKeyBindings() {
 	a.app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		page, _ := a.pages.GetFrontPage()
 
-
 		// Ctrl+C always quits, unless we are in a modal that uses it (like row details)
 		if event.Key() == tcell.KeyCtrlC {
 			// Check if row_details is the front page.
@@ -677,6 +677,9 @@ func (a *App) setupKeyBindings() {
 				// Show service dashboard from anywhere
 				a.showServiceDashboard()
 				return nil
+			case 'b', 'B':
+				a.showBackupModal()
+				return nil
 			}
 		}
 
@@ -725,6 +728,7 @@ func (a *App) cleanup() {
 		a.db.Close()
 		a.db = nil
 	}
+	a.activeConn = nil
 }
 
 // Run starts the application
@@ -802,11 +806,11 @@ func (a *App) statusActionText(width int) string {
 	case width < 90:
 		return fmt.Sprintf("[yellow]F5[-] %s Refresh  │  [yellow]Esc[-] Back  │  [yellow]H[-] Help %s", iconRefresh, iconHelp)
 	case width < 120:
-		return fmt.Sprintf("[yellow]F5[-] %s  │  [yellow]Alt+F[-] Full  │  [yellow]Enter[-] Detail  │  [yellow]Alt+D/Esc[-] Dash %s",
-			iconRefresh, iconDashboard)
+		return fmt.Sprintf("[yellow]F5[-] %s  │  [yellow]Alt+F/B[-] Full/%s  │  [yellow]Enter[-] Detail  │  [yellow]Alt+D/Esc[-] Dash %s",
+			iconRefresh, iconBackup, iconDashboard)
 	default:
-		return fmt.Sprintf("[yellow]F5[-] %s  │  [yellow]Alt+F[-] Full  │  [yellow]Enter[-] Detail  │  [yellow]Alt+H[-] Help %s  │  [yellow]Esc/Bksp[-] Dashboard %s",
-			iconRefresh, iconHelp, iconDashboard)
+		return fmt.Sprintf("[yellow]F5[-] %s  │  [yellow]Alt+F[-] Full  │  [yellow]Alt+B[-] %s  │  [yellow]Enter[-] Detail  │  [yellow]Alt+H[-] Help %s  │  [yellow]Esc/Bksp[-] Dashboard %s",
+			iconRefresh, iconBackup, iconHelp, iconDashboard)
 	}
 }
 

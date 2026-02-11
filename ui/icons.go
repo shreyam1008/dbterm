@@ -9,6 +9,7 @@ const (
 	iconTables    = "📚"
 	iconQuery     = "📝"
 	iconResults   = "📊"
+	iconBackup    = "💾"
 
 	iconBack     = "←"
 	iconRefresh  = "↻"
