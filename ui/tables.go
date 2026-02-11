@@ -1,16 +1,16 @@
 package ui
 
+import (
+	"github.com/shreyam1008/dbterm/utils"
+)
+
 func (a *App) LoadTables() error {
-	// Clear existing items
 	a.tables.Clear()
 
-	// Query to get all tables from public schema
-	query := `
-		SELECT table_name 
-		FROM information_schema.tables 
-		WHERE table_schema = 'public'
-		ORDER BY table_name
-	`
+	query := utils.ListTablesQuery(a.dbType)
+	if query == "" {
+		return nil
+	}
 
 	rows, err := a.db.Query(query)
 	if err != nil {
@@ -18,14 +18,14 @@ func (a *App) LoadTables() error {
 	}
 	defer rows.Close()
 
-	// Add each table to the list
 	for rows.Next() {
 		var tableName string
 		if err := rows.Scan(&tableName); err != nil {
 			return err
 		}
-		a.tables.AddItem(tableName, "", 0, nil).SetMainTextColor(peach).SetSelectedBackgroundColor(blue)
-
+		a.tables.AddItem(tableName, "", 0, nil).
+			SetMainTextColor(peach).
+			SetSelectedBackgroundColor(blue)
 	}
 
 	a.tables.SetSelectedFunc(func(_ int, selectedTable string, _ string, _ rune) {
