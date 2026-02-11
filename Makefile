@@ -1,7 +1,8 @@
 BINARY_NAME=dbterm
 GO_BUILD_FLAGS=-trimpath -ldflags="-s -w"
+VERSION?=0.0.0
 
-.PHONY: all build clean test release release-core release-ios
+.PHONY: all build clean test release release-core release-ios deb apt-repo
 
 all: build
 
@@ -16,6 +17,12 @@ test:
 	go test ./...
 
 release: release-core release-ios
+
+deb: release-core
+	./scripts/build-deb.sh $(VERSION) dist
+
+apt-repo: deb
+	./scripts/build-apt-repo.sh dist/apt dist
 
 release-core:
 	mkdir -p dist
