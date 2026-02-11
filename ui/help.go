@@ -17,13 +17,16 @@ func (a *App) showHelp() {
   Alt + R ........... Focus Results view
   Alt + D ........... Back to Dashboard
   Alt + H ........... Toggle this Help
-  Tab ............... Navigate forward
-  Shift+Tab ......... Navigate backward
+  Alt + S ........... Database Services
+  Tab ............... Cycle: Tables → Query → Results
   Esc ............... Close / Go back
   Ctrl+C ............ Quit
 
-[#a6e3a1]Query[-]
+[#a6e3a1]Query & Results[-]
   Alt + Enter ....... Execute query
+  F5 ................ Refresh tables & data
+  Alt + F ........... Toggle fullscreen results
+  S ................. Sort by current column (in Results)
 
 [#a6e3a1]Dashboard[-]
   Enter ............. Connect to selected
@@ -33,6 +36,12 @@ func (a *App) showHelp() {
   H ................. Open Help
   Q ................. Quit
   1-9 ............... Quick-select connection
+
+[#a6e3a1]Services (Alt+S)[-]
+  1 ................. Toggle MySQL start/stop
+  2 ................. Toggle PostgreSQL start/stop
+  R ................. Refresh service info
+  Esc ............... Go back
 
 
 `
