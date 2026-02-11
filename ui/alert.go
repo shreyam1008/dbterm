@@ -2,20 +2,23 @@ package ui
 
 import "github.com/rivo/tview"
 
-// ShowAlert displays a modal alert message and returns to the given page when dismissed
+// ShowAlert displays a modal alert and returns to returnPage when dismissed
 func (a *App) ShowAlert(message string, returnPage string) {
-	alertModal := tview.NewModal().
+	modal := tview.NewModal().
 		SetText(message).
 		AddButtons([]string{"  OK  "}).
 		SetDoneFunc(func(buttonIndex int, buttonLabel string) {
 			a.pages.RemovePage("alert")
-			a.pages.ShowPage(returnPage)
+			if returnPage != "" {
+				a.pages.ShowPage(returnPage)
+			}
 		})
 
-	alertModal.SetBackgroundColor(bg).
+	modal.SetBackgroundColor(bg).
 		SetButtonBackgroundColor(surface1).
 		SetButtonTextColor(green).
-		SetTextColor(red)
+		SetTextColor(text)
 
-	a.pages.AddPage("alert", alertModal, true, true)
+	a.pages.AddPage("alert", modal, true, true)
+	a.app.SetFocus(modal)
 }

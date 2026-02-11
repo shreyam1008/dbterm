@@ -5,30 +5,44 @@ import (
 	"time"
 )
 
+// LoadResults loads data from the selected table into the results view
 func (a *App) LoadResults() error {
-	// Use backtick quoting for MySQL, double-quote for PG, and plain for SQLite
+	if a.selectedTable == "" {
+		return nil
+	}
+
+	if a.db == nil {
+		return fmt.Errorf("not connected")
+	}
+
+	// DB-specific quoting for identifiers
 	var query string
 	switch a.dbType {
 	case "mysql":
 		query = fmt.Sprintf("SELECT * FROM `%s` LIMIT 100", a.selectedTable)
-	case "sqlite":
-		query = fmt.Sprintf("SELECT * FROM \"%s\" LIMIT 100", a.selectedTable)
 	default:
-		query = fmt.Sprintf("SELECT * FROM %q LIMIT 100", a.selectedTable)
+		query = fmt.Sprintf(`SELECT * FROM "%s" LIMIT 100`, a.selectedTable)
 	}
 
 	a.queryStart = time.Now()
 
 	rows, err := a.db.Query(query)
 	if err != nil {
+		a.results.SetTitle(fmt.Sprintf(" Results — [red]error[-] "))
 		return err
 	}
 	defer rows.Close()
 
-	if err := populateTable(a.results, rows); err != nil {
+	rowCount, err := populateTable(a.results, rows)
+	if err != nil {
 		return err
 	}
 
+	elapsed := time.Since(a.queryStart)
+	a.results.SetTitle(fmt.Sprintf(" [yellow]%s[-] — [green]%d rows[-] in [teal]%s[-] ",
+		a.selectedTable, rowCount, formatDuration(elapsed)))
 	a.results.ScrollToBeginning()
+	a.updateStatusBar("", rowCount)
+
 	return nil
 }
