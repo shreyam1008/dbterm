@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
@@ -89,10 +90,16 @@ func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex in
 			return
 		}
 		if isEdit {
-			a.store.Update(editIndex, *cfg)
+			if err := a.store.Update(editIndex, *cfg); err != nil {
+				a.ShowAlert(fmt.Sprintf("Could not update connection:\n\n%v", err), "connectModal")
+				return
+			}
 			a.connectWithConfig(cfg, editIndex)
 		} else {
-			a.store.Add(*cfg)
+			if err := a.store.Add(*cfg); err != nil {
+				a.ShowAlert(fmt.Sprintf("Could not save connection:\n\n%v", err), "connectModal")
+				return
+			}
 			idx := len(a.store.Connections) - 1
 			a.connectWithConfig(cfg, idx)
 		}
@@ -104,9 +111,15 @@ func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex in
 			return
 		}
 		if isEdit {
-			a.store.Update(editIndex, *cfg)
+			if err := a.store.Update(editIndex, *cfg); err != nil {
+				a.ShowAlert(fmt.Sprintf("Could not update connection:\n\n%v", err), "connectModal")
+				return
+			}
 		} else {
-			a.store.Add(*cfg)
+			if err := a.store.Add(*cfg); err != nil {
+				a.ShowAlert(fmt.Sprintf("Could not save connection:\n\n%v", err), "connectModal")
+				return
+			}
 		}
 		a.pages.RemovePage("connectModal")
 		a.pages.RemovePage("dashboard")
@@ -160,9 +173,10 @@ func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex in
 		return event
 	})
 
+	modalW, modalH := a.modalSize(56, 88, 18, 28)
 	connectModal := tview.NewGrid().
-		SetColumns(0, 70, 0).
-		SetRows(0, 24, 0).
+		SetColumns(0, modalW, 0).
+		SetRows(0, modalH, 0).
 		AddItem(formWithFooter, 1, 1, 1, 1, 0, 0, true)
 
 	a.pages.AddPage("connectModal", connectModal, true, true)
@@ -171,15 +185,25 @@ func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex in
 
 // testConnection tries to connect and shows a result toast
 func (a *App) testConnection(cfg *config.ConnectionConfig) {
-	db, err := utils.ConnectDB(cfg)
-	if err != nil {
-		a.ShowAlert(fmt.Sprintf("✗ Connection failed\n\n%s\n\n%s",
-			err.Error(), connectionHint(err, cfg)), "connectModal")
-		return
-	}
-	db.Close()
-	a.ShowAlert(fmt.Sprintf("✓ Connection successful!\n\n%s → %s",
-		cfg.TypeLabel(), cfg.Name), "connectModal")
+	a.showLoadingModal(fmt.Sprintf("Testing %s connection...", cfg.TypeLabel()))
+
+	go func() {
+		db, err := utils.ConnectDB(cfg)
+		if db != nil {
+			db.Close()
+		}
+
+		a.app.QueueUpdateDraw(func() {
+			a.pages.RemovePage("loading")
+			if err != nil {
+				a.ShowAlert(fmt.Sprintf("✗ Connection failed\n\n%s\n\n%s",
+					err.Error(), connectionHint(err, cfg)), "connectModal")
+				return
+			}
+			a.ShowAlert(fmt.Sprintf("✓ Connection successful!\n\n%s -> %s",
+				cfg.TypeLabel(), cfg.Name), "connectModal")
+		})
+	}()
 }
 
 // buildConfigFromForm builds and validates a ConnectionConfig from form fields
@@ -228,8 +252,8 @@ func (a *App) buildConfigFromForm(form *tview.Form) *config.ConnectionConfig {
 			return nil
 		}
 		// Check parent directory exists for new files
-		dir := cfg.FilePath[:strings.LastIndex(cfg.FilePath, "/")+1]
-		if dir != "" {
+		dir := filepath.Dir(cfg.FilePath)
+		if dir != "." && dir != "" {
 			if _, err := os.Stat(dir); os.IsNotExist(err) {
 				a.ShowAlert(fmt.Sprintf("Directory does not exist:\n%s\n\nPlease create it first.", dir), "connectModal")
 				return nil
@@ -266,35 +290,44 @@ func (a *App) buildConfigFromForm(form *tview.Form) *config.ConnectionConfig {
 
 // connectWithConfig connects and transitions to the main workspace
 func (a *App) connectWithConfig(cfg *config.ConnectionConfig, storeIndex int) {
-	// Close previous connection if any
-	a.cleanup()
+	a.showLoadingModal(fmt.Sprintf("Connecting to %s...", cfg.Name))
 
-	db, err := utils.ConnectDB(cfg)
-	if err != nil {
-		a.ShowAlert(fmt.Sprintf("✗ Connection failed\n\n%s\n\n%s",
-			err.Error(), connectionHint(err, cfg)), "connectModal")
-		return
-	}
+	go func() {
+		db, err := utils.ConnectDB(cfg)
+		a.app.QueueUpdateDraw(func() {
+			a.pages.RemovePage("loading")
 
-	a.db = db
-	a.dbType = cfg.Type
-	a.dbName = cfg.Name
+			if err != nil {
+				a.ShowAlert(fmt.Sprintf("✗ Connection failed\n\n%s\n\n%s",
+					err.Error(), connectionHint(err, cfg)), "connectModal")
+				return
+			}
 
-	if storeIndex >= 0 {
-		a.store.MarkUsed(storeIndex)
-	}
+			// Close previous connection only after the new one is ready.
+			a.cleanup()
+			a.db = db
+			a.dbType = cfg.Type
+			a.dbName = cfg.Name
 
-	if err := a.LoadTables(); err != nil {
-		a.ShowAlert(fmt.Sprintf("Connected, but could not load tables:\n\n%v\n\nYou can still run queries manually.", err), "main")
-	}
+			if storeIndex >= 0 {
+				if err := a.store.MarkUsed(storeIndex); err != nil {
+					a.ShowAlert(fmt.Sprintf("Connected, but failed to update saved state:\n\n%v", err), "main")
+				}
+			}
 
-	a.updateStatusBar("", 0)
-	a.results.SetTitle(" Results [yellow](Alt+R)[-] ")
+			if err := a.LoadTables(); err != nil {
+				a.ShowAlert(fmt.Sprintf("Connected, but could not load tables:\n\n%v\n\nYou can still run queries manually.", err), "main")
+			}
 
-	a.pages.RemovePage("connectModal")
-	a.pages.RemovePage("dashboard")
-	a.pages.ShowPage("main")
-	a.app.SetFocus(a.tables)
+			a.updateStatusBar("", 0)
+			a.results.SetTitle(" Results [yellow](Alt+R)[-] ")
+
+			a.pages.RemovePage("connectModal")
+			a.pages.RemovePage("dashboard")
+			a.pages.ShowPage("main")
+			a.app.SetFocus(a.tables)
+		})
+	}()
 }
 
 // connectionHint provides a helpful suggestion based on the error

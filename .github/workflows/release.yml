@@ -66,7 +66,9 @@ jobs:
 
           # Get commit message for release title
           COMMIT_MSG=$(git log -1 --pretty=%s)
-          echo "commit_msg=$COMMIT_MSG" >> $GITHUB_OUTPUT
+          echo "commit_msg<<EOF" >> $GITHUB_OUTPUT
+          echo "$COMMIT_MSG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Generate Checksums
         run: |

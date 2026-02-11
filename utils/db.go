@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"time"
@@ -31,7 +32,9 @@ func ConnectDB(cfg *config.ConnectionConfig) (*sql.DB, error) {
 	db.SetMaxIdleConns(2)
 	db.SetConnMaxLifetime(5 * time.Minute)
 
-	if err := db.Ping(); err != nil {
+	pingCtx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	if err := db.PingContext(pingCtx); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("could not reach %s at %s: %w", cfg.TypeLabel(), cfg.Host, err)
 	}

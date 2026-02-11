@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -18,7 +19,10 @@ func (a *App) ExecuteQuery(query string) {
 		a.ShowAlert("Not connected to any database.\n\nPress Alt+D to go to Dashboard and connect.", "main")
 		return
 	}
-	if err := a.db.Ping(); err != nil {
+
+	pingCtx, pingCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer pingCancel()
+	if err := a.db.PingContext(pingCtx); err != nil {
 		a.ShowAlert(fmt.Sprintf("Connection lost: %v\n\nPress Alt+D to reconnect from Dashboard.", err), "main")
 		return
 	}
@@ -35,7 +39,10 @@ func (a *App) ExecuteQuery(query string) {
 		strings.HasPrefix(queryUpper, "WITH")
 
 	if isRead {
-		rows, err := a.db.Query(query)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		rows, err := a.db.QueryContext(ctx, query)
 		if err != nil {
 			a.showQueryError(err, query)
 			return
@@ -54,7 +61,10 @@ func (a *App) ExecuteQuery(query string) {
 		a.updateStatusBar(fmt.Sprintf("[teal]%s[-]", formatDuration(elapsed)), rowCount)
 		a.app.SetFocus(a.results)
 	} else {
-		res, err := a.db.Exec(query)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		res, err := a.db.ExecContext(ctx, query)
 		if err != nil {
 			a.showQueryError(err, query)
 			return
@@ -69,9 +79,8 @@ func (a *App) ExecuteQuery(query string) {
 		)
 
 		// Refresh tables & results in case schema changed
-		a.LoadTables()
-		if a.selectedTable != "" {
-			a.LoadResults()
+		if err := a.refreshData(); err != nil {
+			a.ShowAlert(fmt.Sprintf("Query succeeded, but refresh failed:\n\n%v", err), "main")
 		}
 	}
 }

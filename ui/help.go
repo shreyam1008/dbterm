@@ -24,7 +24,8 @@ func (a *App) showHelp() {
 
 [#a6e3a1]Query & Results[-]
   Alt + Enter ....... Execute query
-  F5 ................ Refresh tables & data
+  F5 ................ Refresh current table (keep sort/selection)
+  Ctrl + F5 ......... Refresh table list + current table
   Alt + F ........... Toggle fullscreen results
   S ................. Sort by current column (in Results)
 

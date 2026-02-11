@@ -27,20 +27,14 @@ type serviceInfo struct {
 
 // showServiceDashboard displays the DB services status panel
 func (a *App) showServiceDashboard() {
-	// Gather info in background-safe way (short timeout commands)
-	mysqlInfo := getServiceInfo("MySQL", "mysql", "mysqld", "mysql")
-	pgInfo := getServiceInfo("PostgreSQL", "postgresql", "postgres", "postgresql")
-
 	// ── Header ──
 	header := tview.NewTextView().
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignCenter)
 	header.SetBackgroundColor(bg)
-	header.SetText(`
-[::b][#cba6f7]━━━ Database Services ━━━[-][-]
-[#a6adc8]System service status & management[-]`)
+	header.SetText(` [::b][#cba6f7]Database Services[-][-]  [#a6adc8]System status & management[-]`)
 
-	// ── Build content ──
+	// ── Content ──
 	content := tview.NewTextView().
 		SetDynamicColors(true).
 		SetScrollable(true)
@@ -49,18 +43,8 @@ func (a *App) showServiceDashboard() {
 		SetBorderColor(surface1).
 		SetTitleColor(mauve)
 
-	var sb strings.Builder
-
-	// MySQL section
-	writeServiceSection(&sb, mysqlInfo)
-	sb.WriteString("\n")
-	// PostgreSQL section
-	writeServiceSection(&sb, pgInfo)
-
-	sb.WriteString("\n\n[#6c7086]Press [yellow]1[-][#6c7086] to toggle MySQL  │  [yellow]2[-][#6c7086] to toggle PostgreSQL[-]")
-	sb.WriteString("\n[#6c7086]Press [yellow]R[-][#6c7086] to refresh  │  [yellow]Esc[-][#6c7086] to go back[-]")
-
-	content.SetText(sb.String())
+	// Initial loading state
+	content.SetText("\n\n\n\n          [::b][#89b4fa]Loading service information...[-][-]")
 
 	// ── Footer ──
 	footer := tview.NewTextView().
@@ -72,9 +56,12 @@ func (a *App) showServiceDashboard() {
 	// ── Layout ──
 	layout := tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(header, 4, 0, false).
+		AddItem(header, 1, 0, false).
 		AddItem(content, 0, 1, true).
 		AddItem(footer, 1, 0, false)
+
+	// Variable to hold info for key bindings
+	var mysqlInfo, pgInfo *serviceInfo
 
 	// ── Key bindings ──
 	content.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
@@ -94,13 +81,17 @@ func (a *App) showServiceDashboard() {
 
 		switch event.Rune() {
 		case '1':
-			a.toggleService(mysqlInfo)
+			if mysqlInfo != nil {
+				a.toggleService(mysqlInfo)
+			}
 			return nil
 		case '2':
-			a.toggleService(pgInfo)
+			if pgInfo != nil {
+				a.toggleService(pgInfo)
+			}
 			return nil
 		case 'r', 'R':
-			// Refresh the service dashboard
+			// Refresh the service dashboard entirely
 			a.pages.RemovePage("services")
 			a.showServiceDashboard()
 			return nil
@@ -110,6 +101,33 @@ func (a *App) showServiceDashboard() {
 
 	a.pages.AddAndSwitchToPage("services", layout, true)
 	a.app.SetFocus(content)
+
+	// ── Fetch Data in Background ──
+	go func() {
+		// Gather info in background (can be slow)
+		mInfo := getServiceInfo("MySQL", "mysql", "mysqld", "mysql")
+		pInfo := getServiceInfo("PostgreSQL", "postgresql", "postgres", "postgresql")
+
+		// Update UI on main thread
+		a.app.QueueUpdateDraw(func() {
+			// Update the closure variables for key bindings
+			mysqlInfo = mInfo
+			pgInfo = pInfo
+
+			var sb strings.Builder
+
+			// MySQL section
+			writeServiceSection(&sb, mInfo)
+			sb.WriteString("\n")
+			// PostgreSQL section
+			writeServiceSection(&sb, pInfo)
+
+			sb.WriteString("\n\n[#6c7086]Press [yellow]1[-][#6c7086] to toggle MySQL  │  [yellow]2[-][#6c7086] to toggle PostgreSQL[-]")
+			sb.WriteString("\n[#6c7086]Press [yellow]R[-][#6c7086] to refresh  │  [yellow]Esc[-][#6c7086] to go back[-]")
+
+			content.SetText(sb.String())
+		})
+	}()
 }
 
 // writeServiceSection writes a formatted section for one service
@@ -404,23 +422,29 @@ func (a *App) toggleService(info *serviceInfo) {
 // showSudoPasswordPrompt displays a modal input for the sudo password
 func (a *App) showSudoPasswordPrompt(action string, info *serviceInfo) {
 	form := tview.NewForm()
-	
+
 	actionTitle := strings.ToUpper(action[:1]) + action[1:]
 	form.SetTitle(fmt.Sprintf(" Sudo Password Required for %s %s ", actionTitle, info.name))
 	form.SetTitleColor(red)
 	form.SetBorder(true)
 	form.SetBorderColor(red)
 
-	password := ""
-	form.AddPasswordField("Password", "", 20, '*', func(text string) {
-		password = text
-	})
+	form.AddPasswordField("Password", "", 32, '*', nil)
 
 	form.AddButton("Run", func() {
-		a.pages.RemovePage("sudoPrompt")
-		if password == "" {
+		passwordItem := form.GetFormItemByLabel("Password")
+		passwordField, ok := passwordItem.(*tview.InputField)
+		if !ok {
+			a.ShowAlert("Could not read sudo password input.", "services")
 			return
 		}
+		password := strings.TrimSpace(passwordField.GetText())
+		if password == "" {
+			a.ShowAlert("Sudo password is required to continue.", "sudoPrompt")
+			return
+		}
+
+		a.pages.RemovePage("sudoPrompt")
 		a.runServiceCmdWithSudo(action, info, password)
 	})
 
@@ -434,17 +458,22 @@ func (a *App) showSudoPasswordPrompt(action string, info *serviceInfo) {
 	form.SetButtonBackgroundColor(surface1)
 	form.SetButtonTextColor(green)
 	form.SetLabelColor(text)
+	form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEscape {
+			a.pages.RemovePage("sudoPrompt")
+			a.pages.ShowPage("services")
+			return nil
+		}
+		return event
+	})
 
-	// Center the form
-	flex := tview.NewFlex().
-		AddItem(nil, 0, 1, false).
-		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-			AddItem(nil, 0, 1, false).
-			AddItem(form, 10, 1, true).
-			AddItem(nil, 0, 1, false), 40, 1, true).
-		AddItem(nil, 0, 1, false)
+	modalW, modalH := a.modalSize(44, 72, 9, 13)
+	grid := tview.NewGrid().
+		SetColumns(0, modalW, 0).
+		SetRows(0, modalH, 0).
+		AddItem(form, 1, 1, 1, 1, 0, 0, true)
 
-	a.pages.AddPage("sudoPrompt", flex, true, true)
+	a.pages.AddPage("sudoPrompt", grid, true, true)
 	a.app.SetFocus(form)
 }
 
@@ -475,27 +504,18 @@ func (a *App) confirmAndRunServiceCmd(action string, info *serviceInfo, password
 
 // runServiceCmdWithSudo executes the systemctl command, piping password if provided
 func (a *App) runServiceCmdWithSudo(action string, info *serviceInfo, password string) {
-	actionPast := action + "ed"
-	if strings.HasSuffix(action, "e") {
-		actionPast = action + "d"
-	} else if action == "stop" {
-		actionPast = "stopped"
-	}
-
 	actionTitle := strings.ToUpper(action[:1]) + action[1:]
 	a.showLoadingModal(fmt.Sprintf("%s %s...", actionTitle, info.name))
 
 	go func() {
 		// Create a context with timeout to prevent hanging
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 
 		var cmd *exec.Cmd
 		if password != "" {
-			// echo password | sudo -S ...
-			// Use -k to ignore cached credentials and force password use if provided, 
-			// ensuring consistent behavior.
-			cmd = exec.CommandContext(ctx, "sudo", "-S", "-k", "systemctl", action, info.unit)
+			// Use -p "" to suppress prompts and keep output cleaner for error handling.
+			cmd = exec.CommandContext(ctx, "sudo", "-S", "-k", "-p", "", "systemctl", action, info.unit)
 			cmd.Stdin = strings.NewReader(password + "\n")
 		} else {
 			cmd = exec.CommandContext(ctx, "sudo", "-n", "systemctl", action, info.unit)
@@ -503,7 +523,8 @@ func (a *App) runServiceCmdWithSudo(action string, info *serviceInfo, password s
 
 		// Capture output for error reporting
 		out, err := cmd.CombinedOutput()
-		
+		outStr := strings.TrimSpace(string(out))
+
 		// Update UI on main thread
 		a.app.QueueUpdateDraw(func() {
 			// Remove loading modal
@@ -512,25 +533,26 @@ func (a *App) runServiceCmdWithSudo(action string, info *serviceInfo, password s
 			if err != nil {
 				errMsg := err.Error()
 				if ctx.Err() == context.DeadlineExceeded {
-					errMsg = "Timed out"
+					errMsg = "Timed out while waiting for sudo/systemctl"
 				}
-				
-				outStr := string(out)
 				if strings.Contains(outStr, "incorrect password") || strings.Contains(outStr, "try again") {
 					errMsg = "Incorrect password"
 				}
+				if strings.Contains(outStr, "a password is required") {
+					errMsg = "Sudo requires a password"
+				}
+				if outStr == "" {
+					outStr = "(no output)"
+				}
+
 				a.ShowAlert(fmt.Sprintf("Failed to %s %s:\n\n%s\n%s",
 					action, info.name, errMsg, outStr), "services")
-			} else {
-				a.ShowAlert(fmt.Sprintf("✓ %s %s successfully!\n\nRefreshing...", info.name, actionPast), "services")
-				// Refresh dashboard after a brief pause
-				time.Sleep(500 * time.Millisecond)
-				a.app.QueueUpdateDraw(func() {
-					a.pages.RemovePage("alert")
-					a.pages.RemovePage("services")
-					a.showServiceDashboard()
-				})
+				return
 			}
+
+			a.pages.RemovePage("services")
+			a.showServiceDashboard()
+			a.ShowAlert(fmt.Sprintf("✓ %s %s succeeded.", info.name, action), "services")
 		})
 	}()
 }
@@ -541,41 +563,25 @@ func (a *App) showLoadingModal(message string) {
 		SetText(fmt.Sprintf("\n⏳ %s\n\nPlease wait...", message)).
 		SetBackgroundColor(bg).
 		SetTextColor(text)
-	
+
 	// No buttons, so it catches input but doesn't do anything
 	a.pages.AddPage("loading", modal, true, true)
 	a.app.SetFocus(modal)
-	a.app.Draw()
 }
 
 // runCmd runs a command with a 3-second timeout and returns stdout, or empty on error
 func runCmd(name string, args ...string) string {
-	cmd := exec.Command(name, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Env = append(cmd.Environ(), "LC_ALL=C")
 
-	// Use a channel + goroutine to enforce timeout
-	type result struct {
-		out []byte
-		err error
-	}
-	ch := make(chan result, 1)
-	go func() {
-		out, err := cmd.Output()
-		ch <- result{out, err}
-	}()
-
-	select {
-	case r := <-ch:
-		if r.err != nil {
-			return ""
-		}
-		return strings.TrimSpace(string(r.out))
-	case <-time.After(3 * time.Second):
-		if cmd.Process != nil {
-			cmd.Process.Kill()
-		}
+	out, err := cmd.Output()
+	if err != nil {
 		return ""
 	}
+	return strings.TrimSpace(string(out))
 }
 
 // getQuickStatus returns a short colored status string for the dashboard header

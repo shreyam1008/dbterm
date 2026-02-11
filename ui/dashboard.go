@@ -108,9 +108,18 @@ func (a *App) showDashboard() {
 	}
 
 	// ── Layout ──
+	screenW, screenH := a.getScreenSize()
+	headerHeight := 8
+	if screenW < 100 || screenH < 30 {
+		headerHeight = 6
+	}
+	if screenH < 22 {
+		headerHeight = 5
+	}
+
 	layout := tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(header, 8, 0, false).
+		AddItem(header, headerHeight, 0, false).
 		AddItem(connList, 0, 1, true).
 		AddItem(actions, 1, 0, false)
 
