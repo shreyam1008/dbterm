@@ -26,13 +26,19 @@ func (a *App) LoadTables() error {
 	}
 	defer rows.Close()
 
+	currentSelection := a.selectedTable
+
 	count := 0
+	selectedIndex := 0
 	for rows.Next() {
 		var tableName string
 		if err := rows.Scan(&tableName); err != nil {
 			return fmt.Errorf("could not read table name: %w", err)
 		}
 		a.tables.AddItem(tableName, "", 0, nil)
+		if tableName == currentSelection {
+			selectedIndex = count
+		}
 		count++
 	}
 
@@ -45,6 +51,8 @@ func (a *App) LoadTables() error {
 
 	if count == 0 {
 		a.tables.AddItem("[gray]No tables found[-]", "", 0, nil)
+	} else {
+		a.tables.SetCurrentItem(selectedIndex)
 	}
 
 	a.tables.SetSelectedFunc(func(_ int, selectedTable string, _ string, _ rune) {

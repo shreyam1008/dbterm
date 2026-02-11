@@ -1,39 +1,36 @@
 # dbterm
 
-> A mini DBeaver for your terminal — manage **PostgreSQL**, **MySQL**, and **SQLite** databases from one beautiful TUI.
+> **A modern, multi-database terminal client.**  
+> Manage PostgreSQL, MySQL, and SQLite databases from a beautiful, keyboard-driven TUI.
 
-Built on top of [nabsk911/pgterm](https://github.com/nabsk911/pgterm) — the original PostgreSQL terminal client. This is a rewrite with multi-database support, persistent configurations, and a full connection manager.
-
----
+![Main UI](assets/main_ui.png)
 
 ## ✨ Features
 
-### Multi-Database Engine
-- **PostgreSQL** — full support via `lib/pq`
-- **MySQL** — full support via `go-sql-driver/mysql`
-- **SQLite** — pure Go driver, no CGO needed (`modernc.org/sqlite`)
+- **Multi-Database Support**:  
+  - 🐘 **PostgreSQL** (via `lib/pq`)  
+  - 🐬 **MySQL** (via `go-sql-driver`)  
+  - 📦 **SQLite** (pure Go, no CGO required)
 
-### Connection Manager (Dashboard)
-- Save unlimited database connections
-- See all connections at a glance — **type**, **host**, **status** (active/inactive), **last used**
-- **Connect**, **Edit**, **Delete** any saved connection
-- Dynamic forms — SQLite only asks for file path, PG/MySQL ask for host/port/user/pass/db
-- **Save Only** or **Save & Connect** — your choice
+- **Connection Manager**:  
+  - Save, edit, and manage multiple connections.
+  - **Service Dashboard**: Monitor MySQL/PostgreSQL system services, ports, RAM usage, and start/stop them directly from the TUI.
 
-### SQL Workspace
-- **Table Browser** — click any table to preview its data
-- **Query Editor** — write and execute any SQL
-- **Result Viewer** — formatted, scrollable results table
-- **Status Bar** — shows connected DB type, connection status
+- **Powerful Workspace**:  
+  - **Query Editor**: Write and execute SQL with `Alt+Enter`.
+  - **Results Table**: Sortable columns, fullscreen toggle (`Alt+F`), and frozen headers for easy reading.
+  - **Smart Refresh**: `F5` refreshes data while preserving your row selection and sort order.
 
-### Help & Cheatsheets
-- Built-in SQL cheatsheets for each database engine
-- Keyboard shortcuts reference
-- Common queries, schema inspection commands, performance tips
+- **Keyboard Driven**:  
+  - `Tab` cycles focus between Tables, Query, and Results.
+  - Shortcuts for everything—never touch the mouse.
 
-### Persistent Config
-- Connections saved at `~/.config/dbterm/connections.json`
-- Survives restarts — open `dbterm` and your connections are waiting
+---
+
+## 📸 Screenshots
+
+### Connection Dashboard
+![Connect DB](assets/connect_db.png)
 
 ---
 
@@ -43,7 +40,7 @@ Built on top of [nabsk911/pgterm](https://github.com/nabsk911/pgterm) — the or
 go install github.com/shreyam1008/dbterm@latest
 ```
 
-Make sure `$GOPATH/bin` (usually `~/go/bin`) is in your `PATH`:
+Make sure your Go bin directory is in your `PATH`:
 
 ```bash
 export PATH=$PATH:$(go env GOPATH)/bin
@@ -57,52 +54,42 @@ dbterm
 
 ---
 
-## ⌨️ Keyboard Shortcuts
+## ⌨️ Shortcuts
 
-### Dashboard
+### Global
+| Key | Action |
+|---|---|
+| `Alt + S` | **Open Service Dashboard** (Manage MySQL/PG services) |
+| `Alt + D` | Go to Connection Dashboard |
+| `Alt + H` | Toggle Help & Cheatsheets |
+| `Ctrl + C` | Quit |
 
-| Key     | Action              |
-| ------- | ------------------- |
-| `Enter` | Connect to selected |
-| `N`     | New connection      |
-| `E`     | Edit selected       |
-| `D`     | Delete selected     |
-| `H`     | Help & Cheatsheets  |
-| `Q`     | Quit                |
+### Workspace
+| Key | Action |
+|---|---|
+| `Tab` | Cycle focus: **Tables** → **Query** → **Results** |
+| `Alt + Enter` | Execute Query |
+| `F5` | **Refresh** data (preserves selection & sort) |
+| `Alt + Q` | Focus Query Editor |
+| `Alt + R` | Focus Results Table |
+| `Alt + F` | Toggle **Fullscreen Results** |
+| `S` | **Sort** results by selected column |
 
-### Main Interface
-
-| Key             | Action             |
-| --------------- | ------------------ |
-| `Alt + Q`       | Focus Query editor |
-| `Alt + R`       | Focus Results view |
-| `Alt + T`       | Focus Tables list  |
-| `Alt + Enter`   | Execute Query      |
-| `Alt + H`       | Toggle Help panel  |
-| `Alt + D`       | Back to Dashboard  |
-| `Tab/Shift+Tab` | Navigate fields    |
-| `Esc`           | Close modal        |
-
----
-
-## 🗄️ Supported Databases
-
-| Database   | Driver                | Connection Info                    |
-| ---------- | --------------------- | ---------------------------------- |
-| PostgreSQL | `lib/pq`              | Host, Port, User, Password, DB     |
-| MySQL      | `go-sql-driver/mysql` | Host, Port, User, Password, DB     |
-| SQLite     | `modernc.org/sqlite`  | File path only (pure Go, no CGO)   |
+### Service Dashboard
+| Key | Action |
+|---|---|
+| `1` | Toggle **MySQL** Start/Stop |
+| `2` | Toggle **PostgreSQL** Start/Stop |
+| `R` | Refresh status |
 
 ---
 
-## 🙏 Credits
+## 🔧 Technical Details
 
-This project is built on top of **[pgterm](https://github.com/nabsk911/pgterm)** by **[@nabsk911](https://github.com/nabsk911)** — a clean, minimal PostgreSQL TUI client. 
+**dbterm** is a fork and major expansion of [pgterm](https://github.com/nabsk911/pgterm).
+- **Language**: Pure Go
+- **UI Framework**: [tview](https://github.com/rivo/tview) & [tcell](https://github.com/gdamore/tcell)
+- **Zero Dependencies**: Connects to SQLite without CGO.
 
-**dbterm** extends it into a multi-database terminal client with connection management, persistent configs, and SQL cheatsheets.
-
----
-
-## License
-
+### License
 MIT
