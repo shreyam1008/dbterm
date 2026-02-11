@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -478,26 +479,44 @@ func (a *App) runServiceCmdWithSudo(action string, info *serviceInfo, password s
 	if strings.HasSuffix(action, "e") {
 		actionPast = action + "d"
 	} else if action == "stop" {
-		actionPast = "stopped" // handle double p logic if needed, but 'stoped' is wrong. 'stopped' is right.
+		actionPast = "stopped"
 	}
 
+	actionTitle := strings.ToUpper(action[:1]) + action[1:]
+	a.showLoadingModal(fmt.Sprintf("%s %s...", actionTitle, info.name))
+
 	go func() {
+		// Create a context with timeout to prevent hanging
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
 		var cmd *exec.Cmd
 		if password != "" {
 			// echo password | sudo -S ...
-			cmd = exec.Command("sudo", "-S", "systemctl", action, info.unit)
+			// Use -k to ignore cached credentials and force password use if provided, 
+			// ensuring consistent behavior.
+			cmd = exec.CommandContext(ctx, "sudo", "-S", "-k", "systemctl", action, info.unit)
 			cmd.Stdin = strings.NewReader(password + "\n")
 		} else {
-			cmd = exec.Command("sudo", "systemctl", action, info.unit)
+			cmd = exec.CommandContext(ctx, "sudo", "-n", "systemctl", action, info.unit)
 		}
 
+		// Capture output for error reporting
 		out, err := cmd.CombinedOutput()
 		
+		// Update UI on main thread
 		a.app.QueueUpdateDraw(func() {
+			// Remove loading modal
+			a.pages.RemovePage("loading")
+
 			if err != nil {
 				errMsg := err.Error()
+				if ctx.Err() == context.DeadlineExceeded {
+					errMsg = "Timed out"
+				}
+				
 				outStr := string(out)
-				if strings.Contains(outStr, "incorrect password") {
+				if strings.Contains(outStr, "incorrect password") || strings.Contains(outStr, "try again") {
 					errMsg = "Incorrect password"
 				}
 				a.ShowAlert(fmt.Sprintf("Failed to %s %s:\n\n%s\n%s",
@@ -514,6 +533,19 @@ func (a *App) runServiceCmdWithSudo(action string, info *serviceInfo, password s
 			}
 		})
 	}()
+}
+
+// showLoadingModal displays a non-interactive loading spinner
+func (a *App) showLoadingModal(message string) {
+	modal := tview.NewModal().
+		SetText(fmt.Sprintf("\n⏳ %s\n\nPlease wait...", message)).
+		SetBackgroundColor(bg).
+		SetTextColor(text)
+	
+	// No buttons, so it catches input but doesn't do anything
+	a.pages.AddPage("loading", modal, true, true)
+	a.app.SetFocus(modal)
+	a.app.Draw()
 }
 
 // runCmd runs a command with a 3-second timeout and returns stdout, or empty on error
