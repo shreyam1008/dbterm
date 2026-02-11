@@ -28,7 +28,7 @@ func (a *App) LoadResults() error {
 
 	rows, err := a.db.Query(query)
 	if err != nil {
-		a.results.SetTitle(fmt.Sprintf(" Results — [red]error[-] "))
+		a.results.SetTitle(" Results — [red]error[-] ")
 		return err
 	}
 	defer rows.Close()

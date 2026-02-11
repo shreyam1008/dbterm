@@ -386,13 +386,69 @@ func (a *App) toggleService(info *serviceInfo) {
 	}
 
 	action := "start"
-	actionPast := "started"
 	if info.active {
 		action = "stop"
-		actionPast = "stopped"
 	}
 
-	// Show confirmation
+	// 1. Try non-interactive sudo first (in case of cached credentials or NOPASSWD)
+	if err := exec.Command("sudo", "-n", "true").Run(); err == nil {
+		a.confirmAndRunServiceCmd(action, info, "")
+		return
+	}
+
+	// 2. If that fails, prompt for password
+	a.showSudoPasswordPrompt(action, info)
+}
+
+// showSudoPasswordPrompt displays a modal input for the sudo password
+func (a *App) showSudoPasswordPrompt(action string, info *serviceInfo) {
+	form := tview.NewForm()
+	
+	actionTitle := strings.ToUpper(action[:1]) + action[1:]
+	form.SetTitle(fmt.Sprintf(" Sudo Password Required for %s %s ", actionTitle, info.name))
+	form.SetTitleColor(red)
+	form.SetBorder(true)
+	form.SetBorderColor(red)
+
+	password := ""
+	form.AddPasswordField("Password", "", 20, '*', func(text string) {
+		password = text
+	})
+
+	form.AddButton("Run", func() {
+		a.pages.RemovePage("sudoPrompt")
+		if password == "" {
+			return
+		}
+		a.runServiceCmdWithSudo(action, info, password)
+	})
+
+	form.AddButton("Cancel", func() {
+		a.pages.RemovePage("sudoPrompt")
+		a.pages.ShowPage("services")
+	})
+
+	form.SetBackgroundColor(bg)
+	form.SetFieldBackgroundColor(mantle)
+	form.SetButtonBackgroundColor(surface1)
+	form.SetButtonTextColor(green)
+	form.SetLabelColor(text)
+
+	// Center the form
+	flex := tview.NewFlex().
+		AddItem(nil, 0, 1, false).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+			AddItem(nil, 0, 1, false).
+			AddItem(form, 10, 1, true).
+			AddItem(nil, 0, 1, false), 40, 1, true).
+		AddItem(nil, 0, 1, false)
+
+	a.pages.AddPage("sudoPrompt", flex, true, true)
+	a.app.SetFocus(form)
+}
+
+// confirmAndRunServiceCmd shows confirmation if no password needed, then runs
+func (a *App) confirmAndRunServiceCmd(action string, info *serviceInfo, password string) {
 	actionTitle := strings.ToUpper(action[:1]) + action[1:]
 	modal := tview.NewModal().
 		SetText(fmt.Sprintf("%s %s?\n\nThis will run:\n  sudo systemctl %s %s",
@@ -401,25 +457,9 @@ func (a *App) toggleService(info *serviceInfo) {
 		SetDoneFunc(func(buttonIndex int, buttonLabel string) {
 			a.pages.RemovePage("serviceConfirm")
 			if buttonIndex == 0 {
-				// Run the command
-				go func() {
-					out, err := exec.Command("sudo", "systemctl", action, info.unit).CombinedOutput()
-					a.app.QueueUpdateDraw(func() {
-						if err != nil {
-							a.ShowAlert(fmt.Sprintf("Failed to %s %s:\n\n%s\n%s\n\nTry running manually:\n  sudo systemctl %s %s",
-								action, info.name, err.Error(), string(out), action, info.unit), "services")
-						} else {
-							a.ShowAlert(fmt.Sprintf("✓ %s %s successfully!\n\nRefreshing...", info.name, actionPast), "services")
-							// Refresh dashboard after a brief pause
-							time.Sleep(500 * time.Millisecond)
-							a.app.QueueUpdateDraw(func() {
-								a.pages.RemovePage("alert")
-								a.pages.RemovePage("services")
-								a.showServiceDashboard()
-							})
-						}
-					})
-				}()
+				a.runServiceCmdWithSudo(action, info, password)
+			} else {
+				a.pages.ShowPage("services")
 			}
 		})
 
@@ -430,6 +470,50 @@ func (a *App) toggleService(info *serviceInfo) {
 
 	a.pages.AddPage("serviceConfirm", modal, true, true)
 	a.app.SetFocus(modal)
+}
+
+// runServiceCmdWithSudo executes the systemctl command, piping password if provided
+func (a *App) runServiceCmdWithSudo(action string, info *serviceInfo, password string) {
+	actionPast := action + "ed"
+	if strings.HasSuffix(action, "e") {
+		actionPast = action + "d"
+	} else if action == "stop" {
+		actionPast = "stopped" // handle double p logic if needed, but 'stoped' is wrong. 'stopped' is right.
+	}
+
+	go func() {
+		var cmd *exec.Cmd
+		if password != "" {
+			// echo password | sudo -S ...
+			cmd = exec.Command("sudo", "-S", "systemctl", action, info.unit)
+			cmd.Stdin = strings.NewReader(password + "\n")
+		} else {
+			cmd = exec.Command("sudo", "systemctl", action, info.unit)
+		}
+
+		out, err := cmd.CombinedOutput()
+		
+		a.app.QueueUpdateDraw(func() {
+			if err != nil {
+				errMsg := err.Error()
+				outStr := string(out)
+				if strings.Contains(outStr, "incorrect password") {
+					errMsg = "Incorrect password"
+				}
+				a.ShowAlert(fmt.Sprintf("Failed to %s %s:\n\n%s\n%s",
+					action, info.name, errMsg, outStr), "services")
+			} else {
+				a.ShowAlert(fmt.Sprintf("✓ %s %s successfully!\n\nRefreshing...", info.name, actionPast), "services")
+				// Refresh dashboard after a brief pause
+				time.Sleep(500 * time.Millisecond)
+				a.app.QueueUpdateDraw(func() {
+					a.pages.RemovePage("alert")
+					a.pages.RemovePage("services")
+					a.showServiceDashboard()
+				})
+			}
+		})
+	}()
 }
 
 // runCmd runs a command with a 3-second timeout and returns stdout, or empty on error
