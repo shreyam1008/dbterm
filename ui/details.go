@@ -25,13 +25,15 @@ func (a *App) showRowDetail(row int) {
 	detailsFlex := tview.NewFlex().SetDirection(tview.FlexRow)
 	detailsFlex.SetBorder(true).
 		SetTitle(fmt.Sprintf(" %s Row Details (Row %d) ", iconResults, row)).
-		SetBorderColor(green).
-		SetTitleColor(mauve)
+		SetBorderColor(yellow).
+		SetTitleColor(mauve).
+		SetBackgroundColor(mantle)
 
 	// Create a table to show Field | Value
 	table := tview.NewTable().
 		SetBorders(true).
-		SetSelectable(true, true) // Allow selecting cells to scroll
+		SetSelectable(true, true)
+	table.SetBackgroundColor(mantle)
 
 	// Headers
 	table.SetCell(0, 0, tview.NewTableCell(" Column ").

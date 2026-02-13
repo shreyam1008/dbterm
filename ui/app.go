@@ -677,9 +677,6 @@ func (a *App) setupKeyBindings() {
 				// Show service dashboard from anywhere
 				a.showServiceDashboard()
 				return nil
-			case 'b', 'B':
-				a.showBackupModal()
-				return nil
 			}
 		}
 
@@ -693,6 +690,18 @@ func (a *App) setupKeyBindings() {
 			return nil
 		}
 
+		// Global shortcuts (only if not typing in query input)
+		if a.app.GetFocus() != a.queryInput {
+			switch event.Rune() {
+			case 'f', 'F':
+				a.toggleExpandResults()
+				return nil
+			case 'b', 'B':
+				a.showBackupModal()
+				return nil
+			}
+		}
+
 		if event.Modifiers()&tcell.ModAlt != 0 {
 			switch event.Rune() {
 			case 't', 'T':
@@ -703,9 +712,6 @@ func (a *App) setupKeyBindings() {
 				return nil
 			case 'r', 'R':
 				a.setFocusWithColor(a.results)
-				return nil
-			case 'f', 'F':
-				a.toggleExpandResults()
 				return nil
 			case '=', '+':
 				a.increaseResultLimit()
