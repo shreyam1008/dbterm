@@ -17,3 +17,18 @@ dist/
 .idea/
 *.swp
 .DS_Store
+
+# Go modules
+vendor/
+
+# Local configuration
+.env
+
+# Logs
+*.log
+
+# Build output
+bin/
+
+# Test coverage
+coverage.txt
