@@ -144,6 +144,44 @@ func (a *App) showHelp() {
 
 `
 
+	cheatTurso := `[::b][#a6e3a1]━━━ Turso (LibSQL) Cheatsheet ━━━[-][-]
+
+[#a6e3a1]Inspect Schema[-]
+  SELECT name FROM sqlite_master WHERE type='table';
+  PRAGMA table_info(table_name);
+  SELECT sql FROM sqlite_master WHERE name = 'TABLE';
+
+[#a6e3a1]Database Info[-]
+  SELECT sqlite_version();
+  PRAGMA database_list;
+  PRAGMA page_count;
+
+[#a6e3a1]Common Operations[-]
+  SELECT * FROM table LIMIT 100;
+  SELECT COUNT(*) FROM table;
+  INSERT INTO t (c1, c2) VALUES ('v1', 'v2');
+  UPDATE t SET c1 = 'new' WHERE id = 1;
+
+`
+
+	cheatD1 := `[::b][#a6e3a1]━━━ Cloudflare D1 Cheatsheet ━━━[-][-]
+
+[#a6e3a1]Inspect Schema[-]
+  SELECT name FROM sqlite_master WHERE type='table';
+  PRAGMA table_info(table_name);
+  SELECT sql FROM sqlite_master WHERE name = 'TABLE';
+
+[#a6e3a1]Database Info[-]
+  SELECT sqlite_version();
+  PRAGMA database_list;
+
+[#a6e3a1]Common Operations[-]
+  SELECT * FROM table LIMIT 100;
+  SELECT COUNT(*) FROM table;
+  INSERT INTO t (c1, c2) VALUES ('v1', 'v2');
+
+`
+
 	// Show the connected DB cheatsheet first
 	var content string
 	if a.db != nil {
@@ -152,6 +190,10 @@ func (a *App) showHelp() {
 			content = helpText + cheatMySQL + cheatPG + cheatSQLite
 		case config.SQLite:
 			content = helpText + cheatSQLite + cheatPG + cheatMySQL
+		case config.Turso:
+			content = helpText + cheatTurso + cheatPG + cheatMySQL
+		case config.CloudflareD1:
+			content = helpText + cheatD1 + cheatPG + cheatMySQL
 		default:
 			content = helpText + cheatPG + cheatMySQL + cheatSQLite
 		}

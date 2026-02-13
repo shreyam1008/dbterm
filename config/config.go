@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	mysql "github.com/go-sql-driver/mysql"
@@ -18,7 +19,9 @@ type DBType string
 const (
 	PostgreSQL DBType = "postgresql"
 	MySQL      DBType = "mysql"
-	SQLite     DBType = "sqlite"
+	SQLite       DBType = "sqlite"
+	Turso        DBType = "turso"
+	CloudflareD1 DBType = "d1"
 )
 
 // ConnectionConfig holds all info for a saved database connection
@@ -30,10 +33,13 @@ type ConnectionConfig struct {
 	User     string `json:"user,omitempty"`
 	Password string `json:"password,omitempty"`
 	Database string `json:"database,omitempty"`
-	FilePath string `json:"file_path,omitempty"` // SQLite only
-	SSLMode  string `json:"ssl_mode,omitempty"`  // PostgreSQL only
-	LastUsed string `json:"last_used,omitempty"`
-	Active   bool   `json:"active"`
+	FilePath   string `json:"file_path,omitempty"`   // SQLite only
+	SSLMode    string `json:"ssl_mode,omitempty"`    // PostgreSQL only
+	AccountID  string `json:"account_id,omitempty"`  // Cloudflare D1 only
+	DatabaseID string `json:"database_id,omitempty"` // Cloudflare D1 only
+	AuthToken  string `json:"auth_token,omitempty"`  // Turso & D1
+	LastUsed   string `json:"last_used,omitempty"`
+	Active     bool   `json:"active"`
 }
 
 // Store manages the collection of saved connections
@@ -141,6 +147,39 @@ func (s *Store) MarkUsed(index int) error {
 // BuildConnString creates a driver-appropriate connection string
 func (c *ConnectionConfig) BuildConnString() string {
 	switch c.Type {
+	case Turso:
+		// libsql://... or https://...
+		// If user provided a full URL in Host, use it.
+		// If just a hostname, assume libsql:// scheme.
+		// Append token? The driver usually takes it as a separate arg or embedded in URL?
+		// libsql-client-go usually expects a URL.
+		// If AuthToken is present, it might be ?authToken=... or similar,
+		// OR the driver might handle it differently.
+		// Actually, standard sql.Open("libsql", "url")
+		// The driver docs say: `db, _ := sql.Open("libsql", "libsql://dbname.turso.io?authToken=...")`
+		
+		host := c.Host
+		if !strings.Contains(host, "://") {
+			host = "libsql://" + host
+		}
+		
+		if c.AuthToken != "" {
+			if strings.Contains(host, "?") {
+				return host + "&authToken=" + c.AuthToken
+			}
+			return host + "?authToken=" + c.AuthToken
+		}
+		return host
+
+	case CloudflareD1:
+		// cfd1 driver expects DSN in format: "https://api.cloudflare.com/client/v4/accounts/<account_id>/d1/database/<database_id>/query?token=<api_token>"
+		// Or using the helper: cfd1.FormatDSN(accountID, databaseID, token)
+		// But here we are in config package, we don't want to depend on cfd1 necessarily to avoid cyclical deps if possible,
+		// or just construct the string manually.
+		// Manual construction:
+		return fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/d1/database/%s/query?token=%s",
+			c.AccountID, c.DatabaseID, c.AuthToken)
+
 	case PostgreSQL:
 		sslMode := c.SSLMode
 		if sslMode == "" {
@@ -192,6 +231,10 @@ func (c *ConnectionConfig) DriverName() string {
 		return "mysql"
 	case SQLite:
 		return "sqlite"
+	case Turso:
+		return "libsql"
+	case CloudflareD1:
+		return "cfd1"
 	default:
 		return ""
 	}
@@ -202,6 +245,10 @@ func (c *ConnectionConfig) DisplayLabel() string {
 	switch c.Type {
 	case SQLite:
 		return fmt.Sprintf("[%s] %s (%s)", c.Type, c.Name, c.FilePath)
+	case Turso:
+		return fmt.Sprintf("[%s] %s (%s)", c.Type, c.Name, c.Host)
+	case CloudflareD1:
+		return fmt.Sprintf("[%s] %s (%s)", c.Type, c.Name, c.DatabaseID)
 	default:
 		return fmt.Sprintf("[%s] %s (%s@%s:%s/%s)", c.Type, c.Name, c.User, c.Host, c.Port, c.Database)
 	}
@@ -216,6 +263,10 @@ func (c *ConnectionConfig) TypeLabel() string {
 		return "MySQL"
 	case SQLite:
 		return "SQLite"
+	case Turso:
+		return "Turso"
+	case CloudflareD1:
+		return "Cloudflare D1"
 	default:
 		return string(c.Type)
 	}
