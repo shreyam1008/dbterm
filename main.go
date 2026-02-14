@@ -1,13 +1,20 @@
 package main
 
 import (
+	"bufio"
+	"crypto/sha256"
+	_ "embed"
+	"encoding/hex"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
 	"strings"
+	"time"
 
 	"github.com/shreyam1008/dbterm/ui"
 )
@@ -16,6 +23,11 @@ var (
 	version = "dev"
 	commit  = "dev"
 )
+
+//go:embed releases/versions.txt
+var embeddedVersionsManifest string
+
+const defaultRepo = "shreyam1008/dbterm"
 
 func main() {
 	if len(os.Args) > 1 {
@@ -29,10 +41,20 @@ func main() {
 			printVersion()
 		case arg == "--info" || arg == "-i" || arg == "info":
 			printInfo()
+		case arg == "--update" || arg == "-u" || arg == "update":
+			requestedVersion := ""
+			if len(os.Args) > 2 {
+				requestedVersion = strings.TrimSpace(os.Args[2])
+			}
+			if err := runUpdate(requestedVersion); err != nil {
+				fmt.Fprintf(os.Stderr, "\n  \033[31mUpdate failed:\033[0m %s\n\n", err)
+				os.Exit(1)
+			}
 		case strings.HasPrefix(arg, "--unin") || strings.HasPrefix(arg, "unin") || arg == "remove":
 			// Catches: --uninstall, --unintall, uninstall, uninst, remove, etc.
 			purge := hasFlag(os.Args[2:], "--purge", "-p", "purge")
-			if err := runUninstall(purge); err != nil {
+			assumeYes := hasFlag(os.Args[2:], "--yes", "-y", "--force", "force")
+			if err := runUninstall(purge, assumeYes); err != nil {
 				fmt.Fprintf(os.Stderr, "\n  \033[31mUninstall failed:\033[0m %s\n\n", err)
 				os.Exit(1)
 			}
@@ -77,7 +99,10 @@ func printHelp() {
     dbterm --help             Show this help
     dbterm --version          Show version info
     dbterm --info             Config, storage & system info
+    dbterm --update           Update to latest release
+    dbterm --update 0.3.4     Update to a specific version
     dbterm --uninstall        Uninstall dbterm binary
+    dbterm --uninstall --yes  Uninstall without confirmation prompt
     dbterm --uninstall --purge Uninstall binary + saved connections
 
   ` + "\033[33m" + `DATABASES` + "\033[0m" + `
@@ -148,7 +173,8 @@ func printInfo() {
 	fmt.Println("  \033[33mINSTALL\033[0m       No Go required")
 	fmt.Println("  macOS/Linux   curl -fsSL https://raw.githubusercontent.com/shreyam1008/dbterm/main/install.sh | bash")
 	fmt.Println("  Windows       powershell -NoProfile -ExecutionPolicy Bypass -Command \"irm https://raw.githubusercontent.com/shreyam1008/dbterm/main/install.ps1 | iex\"")
-	fmt.Println("  \033[33mREMOVE\033[0m        dbterm --uninstall [--purge]")
+	fmt.Println("  \033[33mUPDATE\033[0m        dbterm --update [version]")
+	fmt.Println("  \033[33mREMOVE\033[0m        dbterm --uninstall [--purge] [--yes]")
 	fmt.Println()
 }
 
@@ -164,11 +190,270 @@ func hasFlag(args []string, flags ...string) bool {
 	return false
 }
 
-func runUninstall(purge bool) error {
+func runUpdate(requestedVersion string) error {
+	repo := strings.TrimSpace(os.Getenv("DBTERM_REPO"))
+	if repo == "" {
+		repo = defaultRepo
+	}
+
+	versionSpec := strings.TrimSpace(requestedVersion)
+	if versionSpec == "" {
+		versionSpec = strings.TrimSpace(os.Getenv("DBTERM_VERSION"))
+	}
+	if versionSpec == "" {
+		versionSpec = "latest"
+	}
+
+	targetOS, targetArch, err := updateTargetForRuntime(runtime.GOOS, runtime.GOARCH)
+	if err != nil {
+		return err
+	}
+
+	assetName := fmt.Sprintf("dbterm-%s-%s", targetOS, targetArch)
+	if targetOS == "windows" {
+		assetName += ".exe"
+	}
+
+	fmt.Print("\n  \033[1;38;2;203;166;247mdbterm\033[0m — Update\n")
+	fmt.Printf("  Target        %s/%s\n", targetOS, targetArch)
+	fmt.Printf("  Source        %s\n", repo)
+	fmt.Printf("  Version       %s\n", strings.TrimPrefix(versionSpec, "v"))
+
+	baseURL := releaseBaseURL(repo, versionSpec)
+
+	tmpDir, err := os.MkdirTemp("", "dbterm-update-*")
+	if err != nil {
+		return fmt.Errorf("could not create temp directory: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	downloadPath := filepath.Join(tmpDir, assetName)
+	checksumPath := filepath.Join(tmpDir, "checksums.txt")
+
+	fmt.Printf("  Downloading   %s\n", assetName)
+	if err := downloadToFile(baseURL+"/"+assetName, downloadPath); err != nil {
+		return fmt.Errorf("download failed (%s): %w", assetName, err)
+	}
+
+	if err := downloadToFile(baseURL+"/checksums.txt", checksumPath); err == nil {
+		expected, err := checksumForAsset(checksumPath, assetName)
+		if err != nil {
+			return err
+		}
+		actual, err := sha256File(downloadPath)
+		if err != nil {
+			return fmt.Errorf("could not compute checksum: %w", err)
+		}
+		if !strings.EqualFold(expected, actual) {
+			return fmt.Errorf("checksum mismatch for %s", assetName)
+		}
+		fmt.Println("  \033[38;2;166;227;161m✓\033[0m Checksum verified")
+	} else {
+		fmt.Println("  \033[33mWarning:\033[0m checksums.txt unavailable, skipping checksum verification.")
+	}
+
+	if targetOS != "windows" {
+		if err := os.Chmod(downloadPath, 0o755); err != nil {
+			return fmt.Errorf("could not set executable bit: %w", err)
+		}
+	}
+
+	exePath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("could not locate current binary: %w", err)
+	}
+
+	if runtime.GOOS == "windows" {
+		return replaceWindowsBinary(exePath, downloadPath)
+	}
+	return replaceUnixBinary(exePath, downloadPath)
+}
+
+func updateTargetForRuntime(goos, goarch string) (string, string, error) {
+	var osName, archName string
+	switch goos {
+	case "linux":
+		osName = "linux"
+	case "darwin":
+		osName = "darwin"
+	case "windows":
+		osName = "windows"
+	default:
+		return "", "", fmt.Errorf("self-update is not supported on %s", goos)
+	}
+
+	switch goarch {
+	case "amd64":
+		archName = "amd64"
+	case "arm64":
+		archName = "arm64"
+	default:
+		return "", "", fmt.Errorf("self-update is not supported on %s/%s", goos, goarch)
+	}
+
+	return osName, archName, nil
+}
+
+func releaseBaseURL(repo, versionSpec string) string {
+	if versionSpec == "" || strings.EqualFold(versionSpec, "latest") {
+		return fmt.Sprintf("https://github.com/%s/releases/latest/download", repo)
+	}
+	if !strings.HasPrefix(versionSpec, "v") {
+		versionSpec = "v" + versionSpec
+	}
+	return fmt.Sprintf("https://github.com/%s/releases/download/%s", repo, versionSpec)
+}
+
+func downloadToFile(url, dest string) error {
+	client := &http.Client{Timeout: 2 * time.Minute}
+	resp, err := client.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+
+	out, err := os.Create(dest)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	if _, err := io.Copy(out, resp.Body); err != nil {
+		return err
+	}
+	return out.Close()
+}
+
+func checksumForAsset(checksumPath, assetName string) (string, error) {
+	content, err := os.ReadFile(checksumPath)
+	if err != nil {
+		return "", fmt.Errorf("could not read checksums.txt: %w", err)
+	}
+
+	lines := strings.Split(string(content), "\n")
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		name := strings.TrimPrefix(fields[1], "*")
+		if filepath.Base(name) == assetName {
+			return strings.ToLower(fields[0]), nil
+		}
+	}
+	return "", fmt.Errorf("checksums.txt does not contain %s", assetName)
+}
+
+func sha256File(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	sum := sha256.New()
+	if _, err := io.Copy(sum, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(sum.Sum(nil)), nil
+}
+
+func replaceUnixBinary(exePath, downloadedPath string) error {
+	targetDir := filepath.Dir(exePath)
+	stagedPath := filepath.Join(targetDir, fmt.Sprintf(".dbterm-update-%d", time.Now().UnixNano()))
+
+	if err := copyFile(downloadedPath, stagedPath, 0o755); err != nil {
+		if isPermissionErr(err) {
+			return fmt.Errorf("permission denied writing %s. Re-run with sudo: sudo dbterm --update", targetDir)
+		}
+		return fmt.Errorf("failed to stage update in %s: %w", targetDir, err)
+	}
+
+	if err := os.Rename(stagedPath, exePath); err != nil {
+		_ = os.Remove(stagedPath)
+		if isPermissionErr(err) {
+			return fmt.Errorf("permission denied replacing %s. Re-run with sudo: sudo dbterm --update", exePath)
+		}
+		return fmt.Errorf("failed to replace binary: %w", err)
+	}
+
+	fmt.Printf("  \033[38;2;166;227;161m✓\033[0m Updated: %s\n", exePath)
+	fmt.Println("  \033[38;2;166;227;161m✓\033[0m Update complete.")
+	fmt.Println()
+	return nil
+}
+
+func replaceWindowsBinary(exePath, downloadedPath string) error {
+	stagedPath := exePath + ".new"
+	if err := copyFile(downloadedPath, stagedPath, 0o755); err != nil {
+		if isPermissionErr(err) {
+			return fmt.Errorf("permission denied writing %s. Re-run terminal as Administrator and try dbterm --update again", exePath)
+		}
+		return fmt.Errorf("failed to stage update: %w", err)
+	}
+
+	cmdLine := fmt.Sprintf(`ping 127.0.0.1 -n 3 > nul & move /Y "%s" "%s" > nul`, stagedPath, exePath)
+	if err := exec.Command("cmd", "/C", cmdLine).Start(); err != nil {
+		return fmt.Errorf("could not schedule binary replacement: %w", err)
+	}
+
+	fmt.Printf("  \033[38;2;166;227;161m✓\033[0m Downloaded update for %s\n", exePath)
+	fmt.Println("  \033[33mAction:\033[0m Close this terminal, then run dbterm again.")
+	fmt.Println()
+	return nil
+}
+
+func copyFile(src, dst string, mode os.FileMode) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	if _, err := io.Copy(out, in); err != nil {
+		return err
+	}
+	return out.Close()
+}
+
+func isPermissionErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	if os.IsPermission(err) {
+		return true
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "permission denied")
+}
+
+func runUninstall(purge bool, assumeYes bool) error {
 	cfgDir := configDir()
 	exePath, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("could not locate executable path: %w", err)
+	}
+	exePath = filepath.Clean(exePath)
+
+	if err := validateUninstallTarget(exePath); err != nil {
+		return err
+	}
+	if purge {
+		if err := validatePurgeTarget(cfgDir); err != nil {
+			return err
+		}
+	}
+	if err := confirmUninstall(exePath, cfgDir, purge, assumeYes); err != nil {
+		return err
 	}
 
 	if runtime.GOOS == "windows" {
@@ -201,6 +486,73 @@ func runUninstall(purge bool) error {
 
 	fmt.Println("  \033[38;2;166;227;161m✓\033[0m Uninstall complete.")
 	fmt.Println()
+	return nil
+}
+
+func validateUninstallTarget(exePath string) error {
+	base := strings.ToLower(filepath.Base(exePath))
+	if base != "dbterm" && base != "dbterm.exe" {
+		return fmt.Errorf("refusing to remove unexpected executable path: %s", exePath)
+	}
+
+	info, err := os.Stat(exePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("binary not found: %s", exePath)
+		}
+		return fmt.Errorf("could not access binary %s: %w", exePath, err)
+	}
+	if info.IsDir() {
+		return fmt.Errorf("refusing to remove directory: %s", exePath)
+	}
+	return nil
+}
+
+func validatePurgeTarget(cfgDir string) error {
+	if strings.TrimSpace(cfgDir) == "" {
+		return fmt.Errorf("config path is empty; refusing purge")
+	}
+	if strings.HasPrefix(cfgDir, "~") {
+		return fmt.Errorf("could not resolve config path (%s); refusing purge", cfgDir)
+	}
+	clean := filepath.Clean(cfgDir)
+	if clean == "/" || clean == "." {
+		return fmt.Errorf("unsafe config path for purge: %s", clean)
+	}
+	return nil
+}
+
+func confirmUninstall(exePath, cfgDir string, purge, assumeYes bool) error {
+	if assumeYes {
+		return nil
+	}
+
+	stdinInfo, err := os.Stdin.Stat()
+	if err != nil {
+		return fmt.Errorf("could not access stdin for confirmation: %w", err)
+	}
+	if stdinInfo.Mode()&os.ModeCharDevice == 0 {
+		return fmt.Errorf("non-interactive input; re-run with --yes to confirm uninstall")
+	}
+
+	fmt.Print("\n  \033[1;38;2;203;166;247mdbterm\033[0m — Confirm Uninstall\n")
+	fmt.Printf("  Binary        %s\n", exePath)
+	if purge {
+		fmt.Printf("  Config        %s (will be deleted)\n", cfgDir)
+	} else {
+		fmt.Printf("  Config        %s (will be kept)\n", cfgDir)
+	}
+	fmt.Print("  Continue? [y/N]: ")
+
+	reader := bufio.NewReader(os.Stdin)
+	answer, err := reader.ReadString('\n')
+	if err != nil && err != io.EOF {
+		return fmt.Errorf("could not read confirmation: %w", err)
+	}
+	answer = strings.ToLower(strings.TrimSpace(answer))
+	if answer != "y" && answer != "yes" {
+		return fmt.Errorf("uninstall cancelled")
+	}
 	return nil
 }
 
@@ -258,6 +610,11 @@ func buildVersion() string {
 	if version != "" && version != "dev" {
 		return strings.TrimPrefix(version, "v")
 	}
+
+	if v, _, _ := latestManifestRelease(); v != "" {
+		return strings.TrimPrefix(v, "v")
+	}
+
 	if bi, ok := debug.ReadBuildInfo(); ok {
 		if bi.Main.Version != "" && bi.Main.Version != "(devel)" {
 			return strings.TrimPrefix(bi.Main.Version, "v")
@@ -281,4 +638,28 @@ func buildCommit() string {
 		}
 	}
 	return "dev"
+}
+
+func latestManifestRelease() (version, name, description string) {
+	lines := strings.Split(embeddedVersionsManifest, "\n")
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+
+		parts := strings.SplitN(trimmed, "|", 3)
+		if len(parts) < 3 {
+			continue
+		}
+
+		v := strings.TrimSpace(parts[0])
+		n := strings.TrimSpace(parts[1])
+		d := strings.TrimSpace(parts[2])
+		if v == "" || n == "" || d == "" {
+			continue
+		}
+		return v, n, d
+	}
+	return "", "", ""
 }
