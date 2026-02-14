@@ -197,11 +197,11 @@ func (a *App) updateStatusBar(extra string, rowCount int) {
 
 	if a.db == nil {
 		if width < 58 {
-			a.statusBar.SetText("  [gray]○[-]  [yellow]H[-]  [yellow]Q[-]")
+			a.statusBar.SetText("  [gray]○[-]  [yellow]Alt+H[-]  [yellow]Q[-]")
 			return
 		}
 		if width < 80 {
-			a.statusBar.SetText("  [gray]○ offline[-]  │  [yellow]H[-] Help  │  [yellow]Q[-] Quit")
+			a.statusBar.SetText("  [gray]○ offline[-]  │  [yellow]Alt+H[-] Help  │  [yellow]Q[-] Quit")
 			return
 		}
 		a.statusBar.SetText(fmt.Sprintf("  [gray]○ offline[-]  │  %s no DB  │  [yellow]Alt+H[-] Help  │  [yellow]Q[-] Quit", iconConnect))
@@ -808,14 +808,14 @@ func (a *App) applyResponsiveLayout(width, height int) {
 func (a *App) statusActionText(width int) string {
 	switch {
 	case width < 72:
-		return "[yellow]Esc[-] Back  │  [yellow]F5[-] Refresh  │  [yellow]H[-]"
+		return "[yellow]Esc[-] Back  │  [yellow]F5[-] Refresh  │  [yellow]Alt+H[-]"
 	case width < 90:
-		return fmt.Sprintf("[yellow]F5[-] %s Refresh  │  [yellow]Esc[-] Back  │  [yellow]H[-] Help %s", iconRefresh, iconHelp)
+		return fmt.Sprintf("[yellow]F5[-] %s Refresh  │  [yellow]Esc[-] Back  │  [yellow]Alt+H[-] Help %s", iconRefresh, iconHelp)
 	case width < 120:
-		return fmt.Sprintf("[yellow]F5[-] %s  │  [yellow]Alt+F/B[-] Full/%s  │  [yellow]Enter[-] Detail  │  [yellow]Alt+D/Esc[-] Dash %s",
+		return fmt.Sprintf("[yellow]F5[-] %s  │  [yellow]F/B[-] Full/%s  │  [yellow]Enter[-] Detail  │  [yellow]Alt+D/Esc[-] Dash %s",
 			iconRefresh, iconBackup, iconDashboard)
 	default:
-		return fmt.Sprintf("[yellow]F5[-] %s  │  [yellow]Alt+F[-] Full  │  [yellow]Alt+B[-] %s  │  [yellow]Enter[-] Detail  │  [yellow]Alt+H[-] Help %s  │  [yellow]Esc/Bksp[-] Dashboard %s",
+		return fmt.Sprintf("[yellow]F5[-] %s  │  [yellow]F[-] Full  │  [yellow]B[-] %s  │  [yellow]Enter[-] Detail  │  [yellow]Alt+H[-] Help %s  │  [yellow]Esc/Bksp[-] Dashboard %s",
 			iconRefresh, iconBackup, iconHelp, iconDashboard)
 	}
 }

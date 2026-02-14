@@ -86,23 +86,7 @@ func (a *App) showServiceDashboard() {
 			}
 			return nil
 		case tcell.KeyEnter:
-			if mysqlInfo != nil && mysqlInfo.active {
-				// Default to MySQL if both behave identically for now, or use logic based on selection
-				// Since we don't have selection *on the item*, we might need a way to select.
-				// But the UI shows "1" and "2".
-				// Let's defer "Enter" unless we have a clear focus or selection concept.
-				// The prompt says "ask pw and abiilty to enter".
-				// We can add a "C" key to connect using a modal that asks which one.
-				// OR if we make the list selectable.
-				// Current UI is just text.
-				// The user asked for "Enter".
-				// I'll stick to 'C' for now or '1'/'2' inside the connect modal.
-				// Actually, let's make 1/2 toggle service, and maybe Alt+1/Alt+2 to connect?
-				// Or add a Connect button.
-				// Let's just add 'c' for Connect.
-				a.showConnectServiceModal()
-				return nil
-			}
+			a.showConnectServiceModal()
 			return nil
 		}
 
@@ -722,13 +706,13 @@ func (a *App) showConnectServiceModal() {
 		// Too late, I'm already in tool call.
 		// usage of `config` package is fine.
 		// I will try to use a generic open (sql.Open) and set it.
-		
+
 		a.pages.RemovePage("connectService")
 		a.showLoadingModal(fmt.Sprintf("Connecting to %s...", dbName))
-		
+
 		go func() {
 			err := a.DirectConnect(dbType, dsn, dbName) // I will implement this method in connect.go
-			
+
 			a.app.QueueUpdateDraw(func() {
 				a.pages.RemovePage("loading")
 				if err != nil {

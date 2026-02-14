@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -29,7 +30,11 @@ func main() {
 			printInfo()
 		case strings.HasPrefix(arg, "--unin") || strings.HasPrefix(arg, "unin") || arg == "remove":
 			// Catches: --uninstall, --unintall, uninstall, uninst, remove, etc.
-			printUninstall()
+			purge := hasFlag(os.Args[2:], "--purge", "-p", "purge")
+			if err := runUninstall(purge); err != nil {
+				fmt.Fprintf(os.Stderr, "\n  \033[31mUninstall failed:\033[0m %s\n\n", err)
+				os.Exit(1)
+			}
 		default:
 			fmt.Printf("\033[31mUnknown command:\033[0m %s\n\n", os.Args[1])
 			printHelp()
@@ -71,7 +76,8 @@ func printHelp() {
     dbterm --help             Show this help
     dbterm --version          Show version info
     dbterm --info             Config, storage & system info
-    dbterm --uninstall        How to remove dbterm
+    dbterm --uninstall        Uninstall dbterm binary
+    dbterm --uninstall --purge Uninstall binary + saved connections
 
   ` + "\033[33m" + `DATABASES` + "\033[0m" + `
     ⬢ PostgreSQL    ⬡ MySQL    ◆ SQLite
@@ -83,10 +89,11 @@ func printHelp() {
     4. Press ` + "\033[33m" + `Alt+H` + "\033[0m" + ` for SQL cheatsheets per DB
 
   ` + "\033[33m" + `KEY BINDINGS` + "\033[0m" + `
-    Alt+Q  Query editor    Alt+T  Tables list
-    Alt+R  Results view    Alt+H  Help panel
-    Alt+D  Dashboard       Alt+Enter  Execute
-    Ctrl+C Quit
+    Alt+Q/T/R  Focus Query/Tables/Results
+    Alt+Enter  Execute query       F5  Refresh table
+    Ctrl+F5    Full refresh        F/B Toggle Fullscreen/Backup
+    Alt+H      Help panel          Alt+D  Dashboard
+    Ctrl+C     Quit
 
   ` + "\033[38;2;108;112;134m" + `https://github.com/shreyam1008/dbterm
   Based on pgterm by @nabsk911` + "\033[0m" + `
@@ -140,39 +147,87 @@ func printInfo() {
 	fmt.Println("  \033[33mINSTALL\033[0m       No Go required")
 	fmt.Println("  macOS/Linux   curl -fsSL https://raw.githubusercontent.com/shreyam1008/dbterm/main/install.sh | bash")
 	fmt.Println("  Windows       powershell -NoProfile -ExecutionPolicy Bypass -Command \"irm https://raw.githubusercontent.com/shreyam1008/dbterm/main/install.ps1 | iex\"")
-	fmt.Println("  \033[33mREMOVE\033[0m        dbterm --uninstall")
+	fmt.Println("  \033[33mREMOVE\033[0m        dbterm --uninstall [--purge]")
 	fmt.Println()
 }
 
-func printUninstall() {
+func hasFlag(args []string, flags ...string) bool {
+	for _, a := range args {
+		normalized := strings.ToLower(strings.TrimSpace(a))
+		for _, f := range flags {
+			if normalized == f {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func runUninstall(purge bool) error {
 	cfgDir := configDir()
-
-	binPath := "$(which dbterm)"
-	if path, err := os.Executable(); err == nil {
-		binPath = path
+	exePath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("could not locate executable path: %w", err)
 	}
 
-	fmt.Print(`
-  ` + "\033[1;38;2;203;166;247m" + `dbterm` + "\033[0m" + ` — Uninstall
-`)
 	if runtime.GOOS == "windows" {
-		fmt.Println("\n  \033[33mStep 1:\033[0m Remove the binary")
-		fmt.Printf("  PS> Remove-Item -Force \"%s\"\n", binPath)
-		fmt.Println("\n  \033[33mStep 2:\033[0m Remove saved connections (optional)")
-		fmt.Printf("  PS> Remove-Item -Recurse -Force \"%s\"\n", cfgDir)
-		fmt.Println("\n  \033[33mStep 3:\033[0m Remove dbterm from user PATH (optional)")
-		fmt.Println("  PS> $p=[Environment]::GetEnvironmentVariable(\"Path\",\"User\")")
-		fmt.Println("  PS> [Environment]::SetEnvironmentVariable(\"Path\",(($p -split ';' | ? { $_ -ne \"$env:LOCALAPPDATA\\dbterm\\bin\" }) -join ';'),\"User\")")
-	} else {
-		fmt.Println("\n  \033[33mStep 1:\033[0m Remove the binary")
-		fmt.Printf("  $ rm %s\n", binPath)
-		fmt.Println("\n  \033[33mStep 2:\033[0m Remove saved connections (optional)")
-		fmt.Printf("  $ rm -rf %s\n", cfgDir)
-		fmt.Println("\n  \033[33mStep 3:\033[0m Clean Go cache (optional, frees ~50MB)")
-		fmt.Println("  $ go clean -modcache")
+		return runWindowsUninstall(exePath, cfgDir, purge)
 	}
-	fmt.Println("\n  \033[38;2;166;227;161m✓\033[0m That's everything. dbterm stores nothing else.")
+
+	fmt.Print("\n  \033[1;38;2;203;166;247mdbterm\033[0m — Uninstall\n")
+
+	if err := os.Remove(exePath); err != nil {
+		if os.IsPermission(err) {
+			suffix := ""
+			if purge {
+				suffix = " --purge"
+			}
+			return fmt.Errorf("permission denied removing %s. Re-run with sudo: sudo dbterm --uninstall%s", exePath, suffix)
+		}
+		return fmt.Errorf("could not remove binary %s: %w", exePath, err)
+	}
+	fmt.Printf("  \033[38;2;166;227;161m✓\033[0m Removed binary: %s\n", exePath)
+
+	if purge {
+		if err := os.RemoveAll(cfgDir); err != nil {
+			return fmt.Errorf("removed binary but failed to remove config %s: %w", cfgDir, err)
+		}
+		fmt.Printf("  \033[38;2;166;227;161m✓\033[0m Removed config: %s\n", cfgDir)
+	} else {
+		fmt.Printf("  \033[33mInfo:\033[0m Kept config: %s\n", cfgDir)
+		fmt.Println("  Use dbterm --uninstall --purge to remove saved connections too.")
+	}
+
+	fmt.Println("  \033[38;2;166;227;161m✓\033[0m Uninstall complete.")
 	fmt.Println()
+	return nil
+}
+
+func runWindowsUninstall(exePath, cfgDir string, purge bool) error {
+	fmt.Print("\n  \033[1;38;2;203;166;247mdbterm\033[0m — Uninstall\n")
+
+	parts := []string{
+		"ping 127.0.0.1 -n 3 > nul",
+		fmt.Sprintf(`del /f /q "%s"`, exePath),
+	}
+	if purge {
+		parts = append(parts, fmt.Sprintf(`rmdir /s /q "%s"`, cfgDir))
+	}
+
+	cmdLine := strings.Join(parts, " & ")
+	if err := exec.Command("cmd", "/C", cmdLine).Start(); err != nil {
+		return fmt.Errorf("could not schedule uninstall: %w", err)
+	}
+
+	fmt.Printf("  \033[38;2;166;227;161m✓\033[0m Scheduled binary removal: %s\n", exePath)
+	if purge {
+		fmt.Printf("  \033[38;2;166;227;161m✓\033[0m Scheduled config removal: %s\n", cfgDir)
+	} else {
+		fmt.Printf("  \033[33mInfo:\033[0m Kept config: %s\n", cfgDir)
+	}
+	fmt.Println("  Close this terminal and open a new one.")
+	fmt.Println()
+	return nil
 }
 
 func configDir() string {
