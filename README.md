@@ -36,6 +36,39 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubus
 
 ---
 
+## 🔁 Automatic Releases
+
+Releases are automated from `.github/workflows/release.yml` on every push to `main`.
+
+The workflow reads the first non-comment line from `releases/versions.txt` in this format:
+
+```text
+<version>|<release name>|<short description>
+```
+
+Rules:
+
+1. Add a new entry at the top for every release.
+2. Use SemVer without `v` (example: `0.3.4`).
+3. Push to `main`.
+
+What happens automatically:
+
+1. Build binaries for Linux/macOS/Windows (amd64 + arm64).
+2. Create tag `v<version>`.
+3. Publish GitHub release assets + checksums.
+4. Update the APT repository on `gh-pages`.
+
+If the tag already exists, the workflow fails (prevents duplicate release tags).
+
+Install/update behavior:
+
+- `curl ... install.sh` / `install.ps1` installs from **latest GitHub Release**.
+- `go install github.com/shreyam1008/dbterm@latest` installs the **latest tagged release**.
+- So both pick up updates after the release workflow publishes a new tag.
+
+---
+
 ## ✨ Features
 
 - **Multi-Database**: PostgreSQL, MySQL, SQLite (no CGO required).
