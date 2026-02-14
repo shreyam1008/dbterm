@@ -10,4 +10,5 @@
 # 5) If that tag already exists, the workflow fails (prevents duplicate releases).
 #
 # Newest entry first:
+0.3.4|Aarati|Cross-platform one-command installer flow, Windows ARM64 artifacts, shortcut/help sync, and direct dbterm uninstall support.
 0.3.3|Production Installer Rollout|Cross-platform one-command installer flow, Windows ARM64 artifacts, shortcut/help sync, and direct dbterm uninstall support.
