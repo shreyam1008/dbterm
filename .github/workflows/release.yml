@@ -23,6 +23,8 @@ jobs:
       release_name: ${{ steps.meta.outputs.release_name }}
       release_notes: ${{ steps.meta.outputs.release_notes }}
       short_sha: ${{ steps.meta.outputs.short_sha }}
+      should_release: ${{ steps.meta.outputs.should_release }}
+      skip_reason: ${{ steps.meta.outputs.skip_reason }}
     steps:
       - name: Checkout code (tags)
         uses: actions/checkout@v4
@@ -67,9 +69,11 @@ jobs:
           fi
 
           TAG_NAME="v${VERSION}"
+          SHOULD_RELEASE="true"
+          SKIP_REASON=""
           if git rev-parse -q --verify "refs/tags/${TAG_NAME}" >/dev/null; then
-            echo "Tag ${TAG_NAME} already exists. Add a new top entry in ${FILE} before pushing." >&2
-            exit 1
+            SHOULD_RELEASE="false"
+            SKIP_REASON="Tag ${TAG_NAME} already exists. Skipping release. Add a new top entry in ${FILE} to publish a new version."
           fi
 
           SHORT_SHA="${GITHUB_SHA::7}"
@@ -78,6 +82,8 @@ jobs:
           echo "tag_name=${TAG_NAME}" >> "$GITHUB_OUTPUT"
           echo "release_name=${RELEASE_NAME}" >> "$GITHUB_OUTPUT"
           echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "should_release=${SHOULD_RELEASE}" >> "$GITHUB_OUTPUT"
+          echo "skip_reason=${SKIP_REASON}" >> "$GITHUB_OUTPUT"
           {
             echo "release_notes<<EOF"
             echo "$RELEASE_NOTES"
@@ -90,11 +96,16 @@ jobs:
           echo "tag=${{ steps.meta.outputs.tag_name }}"
           echo "name=${{ steps.meta.outputs.release_name }}"
           echo "notes=${{ steps.meta.outputs.release_notes }}"
+          echo "should_release=${{ steps.meta.outputs.should_release }}"
+          if [[ "${{ steps.meta.outputs.should_release }}" != "true" ]]; then
+            echo "skip_reason=${{ steps.meta.outputs.skip_reason }}"
+          fi
 
   build-core:
     name: Build Core Binaries
     runs-on: ubuntu-latest
     needs: [release-meta]
+    if: needs.release-meta.outputs.should_release == 'true'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -132,6 +143,7 @@ jobs:
     name: Create GitHub Release
     runs-on: ubuntu-latest
     needs: [release-meta, build-core]
+    if: needs.release-meta.outputs.should_release == 'true'
     steps:
       - name: Checkout code (tags)
         uses: actions/checkout@v4
@@ -198,3 +210,13 @@ jobs:
 
           git commit -m "apt: publish ${TAG_NAME}"
           git push origin gh-pages
+
+  release-skip:
+    name: Release Skipped
+    runs-on: ubuntu-latest
+    needs: [release-meta]
+    if: needs.release-meta.outputs.should_release != 'true'
+    steps:
+      - name: Explain skip
+        run: |
+          echo "${{ needs.release-meta.outputs.skip_reason }}"

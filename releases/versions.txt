@@ -7,7 +7,7 @@
 # 3) Version must be SemVer without "v" (example: 0.3.4).
 # 4) Commit and push to main.
 #    The release workflow reads only the first non-comment line and creates that GitHub release.
-# 5) If that tag already exists, the workflow fails (prevents duplicate releases).
+# 5) If that tag already exists, the workflow skips release (no failure).
 #
 # Newest entry first:
 0.3.6|Chakra|better installer experience.
