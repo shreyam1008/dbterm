@@ -1,25 +1,111 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 
-const title = "dbterm | Minimal Multi-Database Terminal Client";
+const title = "dbterm | Open-Source Multi-Database Terminal Client";
 const description =
-  "dbterm is a lightweight terminal UI for PostgreSQL, MySQL, and SQLite with keyboard-first workflows, query editor, and built-in help.";
+  "dbterm is a lightweight, keyboard-first terminal database client for PostgreSQL, MySQL, SQLite, Turso, and Cloudflare D1.";
+const keywords =
+  "dbterm, terminal database client, postgresql mysql sqlite turso d1, open source, keyboard-first tui";
 
-const installUnix = "curl -fsSL https://raw.githubusercontent.com/shreyam1008/dbterm/main/install.sh | bash";
+const baseUrl = import.meta.env.BASE_URL;
+const withBase = (path: string) => {
+  const trimmedBase = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
+  const trimmedPath = path.startsWith("/") ? path.slice(1) : path;
+  return `${trimmedBase}/${trimmedPath}`.replace(/\/{2,}/g, "/");
+};
+
+const installUnix =
+  "curl -fsSL https://raw.githubusercontent.com/shreyam1008/dbterm/main/install.sh | bash";
 const installWindows =
-  "powershell -NoProfile -ExecutionPolicy Bypass -Command \"irm https://raw.githubusercontent.com/shreyam1008/dbterm/main/install.ps1 | iex\"";
+  'powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/shreyam1008/dbterm/main/install.ps1 | iex"';
+
 const commandExamples = [
   "dbterm",
   "dbterm --help",
   "dbterm --version",
   "dbterm --info",
   "dbterm --update",
-  "dbterm --update 0.3.4",
+  "dbterm --update X.Y.Z",
   "dbterm --uninstall --yes",
   "dbterm --uninstall --purge"
 ];
 
-const jsonLd = {
+const workflows = [
+  {
+    title: "Fast SQL triage",
+    body: "Run ad-hoc checks without leaving terminal workflows. Execute with Alt+Enter and inspect results instantly."
+  },
+  {
+    title: "Schema exploration",
+    body: "Move between Tables, Query, and Results panels quickly, with shortcuts for refresh, sort, and row details."
+  },
+  {
+    title: "Ops-ready actions",
+    body: "Open the services dashboard, trigger backups for PostgreSQL/MySQL, and reconnect from one interface."
+  }
+];
+
+const dbTargets = [
+  {
+    type: "PostgreSQL",
+    support: "Full query + backup + service controls",
+    note: "Great for local dev and remote prod checks"
+  },
+  {
+    type: "MySQL",
+    support: "Full query + backup + service controls",
+    note: "Native driver, no external runtimes"
+  },
+  {
+    type: "SQLite",
+    support: "Local file workflows and schema browsing",
+    note: "Pure Go driver, no CGO dependency"
+  },
+  {
+    type: "Turso (LibSQL)",
+    support: "Cloud SQLite-compatible querying",
+    note: "Connect with auth token-based DSN"
+  },
+  {
+    type: "Cloudflare D1",
+    support: "D1 API-backed SQL operations",
+    note: "Use account ID, database ID, and API token"
+  }
+];
+
+const shortcuts = [
+  { key: "Alt + Enter", action: "Execute SQL query" },
+  { key: "Alt + Q / T / R", action: "Focus Query, Tables, or Results" },
+  { key: "F5 / Ctrl + F5", action: "Refresh current table or full table list" },
+  { key: "F / B", action: "Fullscreen results / backup modal" },
+  { key: "Alt + H", action: "Open in-app help and SQL cheatsheets" },
+  { key: "Ctrl + C", action: "Quit safely" }
+];
+
+const faqItems = [
+  {
+    question: "Is dbterm truly open source?",
+    answer:
+      "Yes. dbterm is MIT licensed, source-first, and intended for community use, contributions, and forks."
+  },
+  {
+    question: "Do I need Go, Java, Python, or Node installed?",
+    answer:
+      "No. Installers download a single platform binary. You can still use `go install` if you prefer that workflow."
+  },
+  {
+    question: "Can I use dbterm on production databases?",
+    answer:
+      "Yes, but treat it like any database client: apply least-privilege credentials and test destructive queries in non-prod first."
+  },
+  {
+    question: "Where should new users start?",
+    answer:
+      "Open the Guide page for connection setup, panel workflows, keybindings, CLI commands, and troubleshooting steps."
+  }
+];
+
+const softwareJsonLd = {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
   name: "dbterm",
@@ -28,71 +114,186 @@ const jsonLd = {
   description,
   url: "https://shreyam1008.github.io/dbterm/",
   downloadUrl: "https://github.com/shreyam1008/dbterm/releases",
+  softwareHelp: "https://shreyam1008.github.io/dbterm/guide/",
+  license: "https://github.com/shreyam1008/dbterm/blob/main/LICENSE",
   offers: {
     "@type": "Offer",
     price: "0",
     priceCurrency: "USD"
-  }
+  },
+  featureList: [
+    "Keyboard-first TUI",
+    "PostgreSQL, MySQL, SQLite, Turso, Cloudflare D1",
+    "Service dashboard",
+    "Backup support for PostgreSQL and MySQL",
+    "Single binary installation"
+  ]
+};
+
+const faqJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: faqItems.map((item) => ({
+    "@type": "Question",
+    name: item.question,
+    acceptedAnswer: {
+      "@type": "Answer",
+      text: item.answer
+    }
+  }))
 };
 ---
 
-<BaseLayout title={title} description={description} jsonLd={jsonLd}>
-  <main class="shell">
-    <header class="hero" style="--delay: 0s">
-      <p class="eyebrow">Keyboard-first DB client</p>
-      <h1>dbterm</h1>
-      <p class="lead">
-        One tiny binary to work with PostgreSQL, MySQL, and SQLite without Java, Python,
-        or Node runtimes.
-      </p>
-      <div class="action-row">
-        <a class="btn primary" href="https://github.com/shreyam1008/dbterm/releases">Download Latest</a>
-        <a class="btn" href="https://github.com/shreyam1008/dbterm">GitHub Repo</a>
+<BaseLayout title={title} description={description} keywords={keywords} jsonLd={[softwareJsonLd, faqJsonLd]}>
+  <section class="hero-panel">
+    <p class="eyebrow">Lightweight terminal workflow for modern databases</p>
+    <div class="hero-grid">
+      <div>
+        <h1>dbterm</h1>
+        <p>
+          One binary, keyboard-first navigation, and practical operations tooling. Use dbterm when you
+          want fast SQL work without heavy desktop stacks.
+        </p>
+        <div class="cta-row">
+          <a class="button" href="https://github.com/shreyam1008/dbterm/releases">Download latest</a>
+          <a class="button outline" href={withBase("guide/")}>Read full guide</a>
+          <a class="button ghost" data-variant="secondary" href="https://github.com/shreyam1008/dbterm">
+            View source
+          </a>
+        </div>
+        <ul class="chip-list" aria-label="Highlights">
+          <li>MIT licensed</li>
+          <li>Single binary</li>
+          <li>No Java/Python/Node runtime</li>
+          <li>~8-12 MB idle RAM</li>
+        </ul>
       </div>
-      <ul class="badge-row">
-        <li>~10MB RAM idle</li>
-        <li>Cross-platform</li>
-        <li>Single binary</li>
+
+      <ul class="hero-stats" aria-label="Performance and scope">
+        <li>
+          <span>5</span>
+          <p>Database targets: PostgreSQL, MySQL, SQLite, Turso, and Cloudflare D1.</p>
+        </li>
+        <li>
+          <span>1</span>
+          <p>Unified terminal UI for connection management, querying, and result exploration.</p>
+        </li>
+        <li>
+          <span>0</span>
+          <p>Zero external runtime requirement for end users.</p>
+        </li>
       </ul>
-      <img src="main_ui.png" alt="dbterm main interface with tables and SQL query editor" loading="lazy" />
-    </header>
+    </div>
+  </section>
 
-    <section style="--delay: 0.08s" id="install">
-      <h2>Quick install</h2>
-      <p>Install in one command. No Go toolchain required.</p>
-      <h3>Linux / macOS</h3>
-      <pre><code>{installUnix}</code></pre>
-      <h3>Windows (PowerShell)</h3>
-      <pre><code>{installWindows}</code></pre>
-    </section>
+  <section class="panel" id="install">
+    <h2>Quick install</h2>
+    <p class="lead">
+      Install with one command and start immediately. Copy buttons are included for fast onboarding.
+    </p>
 
-    <section style="--delay: 0.14s" id="ways">
-      <h2>Ways to use dbterm</h2>
-      <div class="cards">
-        <article>
-          <h3>Ad-hoc SQL checks</h3>
-          <p>Jump into any connection, run quick diagnostics, inspect rows, and sort results.</p>
+    <div class="copy-stack">
+      <article class="copy-shell">
+        <header>
+          <h3>Linux / macOS</h3>
+          <button
+            type="button"
+            class="button outline small copy-button"
+            data-copy-target="install-unix"
+            data-default-label="Copy"
+          >
+            Copy
+          </button>
+        </header>
+        <pre><code id="install-unix">{installUnix}</code></pre>
+      </article>
+
+      <article class="copy-shell">
+        <header>
+          <h3>Windows (PowerShell)</h3>
+          <button
+            type="button"
+            class="button outline small copy-button"
+            data-copy-target="install-windows"
+            data-default-label="Copy"
+          >
+            Copy
+          </button>
+        </header>
+        <pre><code id="install-windows">{installWindows}</code></pre>
+      </article>
+    </div>
+  </section>
+
+  <section class="panel" id="workflows">
+    <h2>Built for real terminal workflows</h2>
+    <p class="lead">Focused on speed, low resource use, and routine production diagnostics.</p>
+
+    <div class="feature-grid">
+      {workflows.map((workflow) => (
+        <article class="feature-item">
+          <h3>{workflow.title}</h3>
+          <p>{workflow.body}</p>
         </article>
-        <article>
-          <h3>Schema exploration</h3>
-          <p>Browse tables fast and use the built-in cheatsheets for PostgreSQL, MySQL, and SQLite.</p>
-        </article>
-        <article>
-          <h3>Ops workflow</h3>
-          <p>Use service dashboard shortcuts, run backups (PG/MySQL), and refresh DB state quickly.</p>
-        </article>
-      </div>
-    </section>
+      ))}
+    </div>
+  </section>
 
-    <section style="--delay: 0.2s" id="examples">
-      <h2>Command examples</h2>
-      <p>Most common commands in day-to-day usage:</p>
-      <pre><code>{commandExamples.join("\n")}</code></pre>
-    </section>
+  <section class="panel" id="support">
+    <h2>Supported database targets</h2>
+    <p class="lead">Connection setup supports local, remote, and cloud-oriented SQL targets.</p>
 
-    <section style="--delay: 0.26s" id="shortcuts">
-      <h2>Essential shortcuts</h2>
-      <table>
+    <div class="table-wrap">
+      <table class="support-table">
+        <thead>
+          <tr>
+            <th>Database</th>
+            <th>Support level</th>
+            <th>Typical use case</th>
+          </tr>
+        </thead>
+        <tbody>
+          {dbTargets.map((target) => (
+            <tr>
+              <td>{target.type}</td>
+              <td>{target.support}</td>
+              <td>{target.note}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel" id="commands">
+    <h2>Common terminal commands</h2>
+    <p class="lead">Use these for daily operation, updates, and maintenance.</p>
+
+    <article class="copy-shell">
+      <header>
+        <h3>CLI essentials</h3>
+        <button
+          type="button"
+          class="button outline small copy-button"
+          data-copy-target="command-examples"
+          data-default-label="Copy"
+        >
+          Copy
+        </button>
+      </header>
+      <pre><code id="command-examples">{commandExamples.join("\n")}</code></pre>
+    </article>
+  </section>
+
+  <section class="panel" id="shortcuts">
+    <h2>Starter shortcuts</h2>
+    <p class="lead">
+      Core controls you will use most often once connected. Full workflow reference is on the
+      <a href={withBase("guide/")}>Guide page</a>.
+    </p>
+
+    <div class="table-wrap">
+      <table class="shortcut-table">
         <thead>
           <tr>
             <th>Shortcut</th>
@@ -100,28 +301,38 @@ const jsonLd = {
           </tr>
         </thead>
         <tbody>
-          <tr>
-            <td><code>Alt + Enter</code></td>
-            <td>Execute query</td>
-          </tr>
-          <tr>
-            <td><code>Alt + H</code></td>
-            <td>Open help and SQL cheatsheets</td>
-          </tr>
-          <tr>
-            <td><code>Alt + Q / T / R</code></td>
-            <td>Focus query, tables, or results</td>
-          </tr>
-          <tr>
-            <td><code>F5 / Ctrl + F5</code></td>
-            <td>Refresh current table or full table list</td>
-          </tr>
-          <tr>
-            <td><code>Ctrl + C</code></td>
-            <td>Quit</td>
-          </tr>
+          {shortcuts.map((shortcut) => (
+            <tr>
+              <td><code>{shortcut.key}</code></td>
+              <td>{shortcut.action}</td>
+            </tr>
+          ))}
         </tbody>
       </table>
-    </section>
-  </main>
+    </div>
+  </section>
+
+  <section class="panel" id="faq">
+    <h2>Frequently asked questions</h2>
+    <div class="faq-list">
+      {faqItems.map((item) => (
+        <details>
+          <summary>{item.question}</summary>
+          <p>{item.answer}</p>
+        </details>
+      ))}
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Need the full app guide?</h2>
+    <p class="lead">
+      Start with the structured walkthrough for setup, panel behavior, services, backups, and
+      troubleshooting.
+    </p>
+    <div class="callout-row">
+      <a class="button" href={withBase("guide/")}>Open guide</a>
+      <a class="button outline" href={withBase("open-source/")}>Open-source handbook</a>
+    </div>
+  </section>
 </BaseLayout>

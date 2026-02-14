@@ -1,0 +1,174 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+
+const title = "dbterm Open Source | Contribution and Project Guide";
+const description =
+  "How dbterm is maintained in the open: contribution flow, release process, quality expectations, and beginner-friendly entry points.";
+const keywords =
+  "dbterm open source, contribute dbterm, dbterm roadmap, dbterm release process, MIT license";
+
+const contributionSteps = [
+  {
+    title: "Set up locally",
+    detail: "Fork the repository, clone your fork, and run the app in your terminal to understand current behavior."
+  },
+  {
+    title: "Pick one scoped issue",
+    detail: "Choose one bug fix or UX refinement, confirm expected behavior, and keep the first PR tight."
+  },
+  {
+    title: "Ship with proof",
+    detail: "Include reproducible steps, test notes, and screenshots or terminal output where relevant."
+  },
+  {
+    title: "Iterate in public",
+    detail: "Respond to review comments quickly and document final behavior in README/site docs when needed."
+  }
+];
+
+const values = [
+  {
+    title: "Terminal-first ergonomics",
+    detail: "Every feature should preserve keyboard speed and low cognitive load."
+  },
+  {
+    title: "Low-resource runtime",
+    detail: "Keep binary and runtime overhead practical for laptops, servers, and constrained environments."
+  },
+  {
+    title: "No lock-in stack",
+    detail: "Avoid heavyweight runtime requirements for users who just need a robust DB client."
+  }
+];
+
+const focusAreas = [
+  {
+    title: "Connection UX",
+    detail: "Validation messaging, better defaults, and cloud target setup guides."
+  },
+  {
+    title: "Result handling",
+    detail: "Large result ergonomics, sorting behavior, and export-oriented improvements."
+  },
+  {
+    title: "Cross-platform polish",
+    detail: "Windows terminal behavior, service command fallbacks, and shell-level edge cases."
+  },
+  {
+    title: "Documentation",
+    detail: "Onboarding docs, workflow recipes, troubleshooting playbooks, and examples."
+  },
+  {
+    title: "Accessibility and readability",
+    detail: "Color contrast, terminal theme clarity, and clear shortcut discoverability."
+  },
+  {
+    title: "Release reliability",
+    detail: "Improve automation checks, artifact verification, and installer robustness."
+  }
+];
+
+const releaseFacts = [
+  "Releases are automated from GitHub Actions on pushes to `main`.",
+  "Version metadata is read from `releases/versions.txt` in `<version>|<name>|<description>` format.",
+  "Assets and checksums are published to GitHub Releases for Linux, macOS, and Windows.",
+  "Install/update commands fetch the newest tagged release unless a specific version is requested."
+];
+
+const projectJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "CreativeWork",
+  name: "dbterm",
+  description,
+  license: "https://github.com/shreyam1008/dbterm/blob/main/LICENSE",
+  codeRepository: "https://github.com/shreyam1008/dbterm",
+  maintainer: {
+    "@type": "Person",
+    name: "dbterm contributors"
+  }
+};
+---
+
+<BaseLayout title={title} description={description} keywords={keywords} jsonLd={projectJsonLd}>
+  <section class="hero-panel">
+    <p class="eyebrow">Built for everyone, maintained in public</p>
+    <h1>Open-source handbook</h1>
+    <p>
+      dbterm is planned as a long-term public utility project. This page explains how contributors can
+      participate effectively even if they are new to open source.
+    </p>
+    <div class="callout-row">
+      <a class="button" href="https://github.com/shreyam1008/dbterm/issues">Browse issues</a>
+      <a class="button outline" href="https://github.com/shreyam1008/dbterm/pulls">Review active PRs</a>
+      <a class="button ghost" data-variant="secondary" href="https://github.com/shreyam1008/dbterm/releases">
+        Release feed
+      </a>
+    </div>
+  </section>
+
+  <section class="panel" id="values">
+    <h2>Project values</h2>
+    <p class="lead">These principles should guide code decisions and product scope.</p>
+
+    <div class="value-grid">
+      {values.map((item) => (
+        <article class="value-item">
+          <h3>{item.title}</h3>
+          <p>{item.detail}</p>
+        </article>
+      ))}
+    </div>
+  </section>
+
+  <section class="panel" id="contribute">
+    <h2>Contribution flow (beginner friendly)</h2>
+    <p class="lead">Start small, stay precise, and link every change to a clear user outcome.</p>
+
+    <div class="step-grid">
+      {contributionSteps.map((item, index) => (
+        <article class="step-item">
+          <h3>{index + 1}. {item.title}</h3>
+          <p>{item.detail}</p>
+        </article>
+      ))}
+    </div>
+
+    <p class="notice">
+      If you are new: documentation improvements, keyboard hint clarity, and repro-focused bug reports are
+      high-value first contributions.
+    </p>
+  </section>
+
+  <section class="panel" id="areas">
+    <h2>High-impact areas to work on</h2>
+    <div class="resource-grid">
+      {focusAreas.map((item) => (
+        <article class="resource-item">
+          <h3>{item.title}</h3>
+          <p>{item.detail}</p>
+        </article>
+      ))}
+    </div>
+  </section>
+
+  <section class="panel" id="release">
+    <h2>Release and maintenance model</h2>
+    <p class="lead">Current automation keeps binaries and installers in sync with tagged releases.</p>
+    <ul class="list-tight">
+      {releaseFacts.map((fact) => (
+        <li>{fact}</li>
+      ))}
+    </ul>
+  </section>
+
+  <section class="panel" id="community">
+    <h2>Community channels</h2>
+    <p class="lead">Use these paths so maintainers and contributors can collaborate efficiently.</p>
+    <ul class="chip-list" aria-label="Community links">
+      <li><a href="https://github.com/shreyam1008/dbterm/issues">Issues: bug reports and feature requests</a></li>
+      <li><a href="https://github.com/shreyam1008/dbterm/pulls">Pull requests: implementation proposals</a></li>
+      <li><a href="https://github.com/shreyam1008/dbterm/releases">Releases: binary downloads and changelogs</a></li>
+      <li><a href="https://github.com/shreyam1008/dbterm">Repository: source, scripts, and docs</a></li>
+    </ul>
+  </section>
+</BaseLayout>

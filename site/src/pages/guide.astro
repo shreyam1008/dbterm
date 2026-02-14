@@ -1,0 +1,311 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+
+const title = "dbterm Guide | Setup, Workflow, and Shortcuts";
+const description =
+  "Production-focused dbterm guide for setup, dashboard workflow, SQL execution, services, backups, shortcuts, and troubleshooting.";
+const keywords =
+  "dbterm guide, dbterm shortcuts, dbterm backup, dbterm services, postgresql mysql sqlite turso d1";
+
+const quickStartSteps = [
+  {
+    step: "Install dbterm",
+    detail: "Use the shell installer for Linux/macOS or PowerShell installer for Windows."
+  },
+  {
+    step: "Create a connection",
+    detail: "Press N in dashboard, select DB type, fill fields, then Save & Connect."
+  },
+  {
+    step: "Run your first query",
+    detail: "Focus Query panel (Alt+Q), type SQL, and execute with Alt+Enter."
+  },
+  {
+    step: "Inspect and iterate",
+    detail: "Use Alt+T and Alt+R to move between tables and results while refining SQL."
+  }
+];
+
+const workspacePanels = [
+  {
+    panel: "Dashboard",
+    behavior: "Manage saved connections, add/edit/remove entries, and reconnect quickly.",
+    keys: "N, E, D, Enter, R"
+  },
+  {
+    panel: "Query",
+    behavior: "Write SQL and execute it directly against the current database session.",
+    keys: "Alt+Q, Alt+Enter"
+  },
+  {
+    panel: "Tables",
+    behavior: "Browse schema objects and load table data into the results pane.",
+    keys: "Alt+T, F5, Ctrl+F5"
+  },
+  {
+    panel: "Results",
+    behavior: "Sort columns, inspect rows, and switch fullscreen when needed.",
+    keys: "Alt+R, S, Enter, Space, F"
+  }
+];
+
+const shortcutRows = [
+  { combo: "Alt + Q / T / R", action: "Focus Query, Tables, or Results panel" },
+  { combo: "Alt + Enter", action: "Execute query from Query panel" },
+  { combo: "Alt + H", action: "Toggle help + SQL cheatsheets" },
+  { combo: "Alt + D", action: "Back to dashboard" },
+  { combo: "Alt + S", action: "Open services dashboard" },
+  { combo: "F5 / Ctrl + F5", action: "Refresh current table / refresh list + table" },
+  { combo: "F", action: "Toggle fullscreen results" },
+  { combo: "B", action: "Open backup modal (PostgreSQL/MySQL)" },
+  { combo: "Alt + = / - / 0", action: "Adjust preview row limit" },
+  { combo: "Ctrl + C", action: "Quit app" }
+];
+
+const serviceOps = [
+  {
+    title: "Inspect service state",
+    detail: "Press Alt+S from anywhere to view MySQL/PostgreSQL status and quick actions."
+  },
+  {
+    title: "Toggle MySQL/PostgreSQL",
+    detail: "Inside services, use key 1 for MySQL and key 2 for PostgreSQL start/stop."
+  },
+  {
+    title: "Connect directly from services",
+    detail: "Use C or Enter to open connect modal with prefilled defaults."
+  },
+  {
+    title: "Backup active database",
+    detail: "Press B from workspace to open backup flow for PostgreSQL/MySQL."
+  }
+];
+
+const cliRows = [
+  ["dbterm", "Launch interactive TUI"],
+  ["dbterm --help", "Show command help"],
+  ["dbterm --version", "Show version + build details"],
+  ["dbterm --info", "Show install path, config path, and runtime info"],
+  ["dbterm --update", "Update to latest release"],
+  ["dbterm --update X.Y.Z", "Update to a specific release"],
+  ["dbterm --uninstall", "Uninstall binary with confirmation"],
+  ["dbterm --uninstall --purge", "Uninstall binary + saved connections"],
+  ["dbterm --uninstall --yes", "Uninstall without prompt"]
+];
+
+const troubleshooting = [
+  "Connection issues: run `dbterm --info`, verify host/port/credentials, then reconnect from dashboard.",
+  "Query errors: open in-app cheatsheets with Alt+H to validate SQL syntax and DB-specific clauses.",
+  "Permission errors on update/uninstall: rerun command with elevated terminal permissions.",
+  "Large result sets: use preview row controls (Alt+=, Alt+-, Alt+0) before exporting or deeper analysis."
+];
+
+const installUnix =
+  "curl -fsSL https://raw.githubusercontent.com/shreyam1008/dbterm/main/install.sh | bash";
+const installWindows =
+  'powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/shreyam1008/dbterm/main/install.ps1 | iex"';
+
+const howToJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "HowTo",
+  name: "How to start using dbterm",
+  description,
+  totalTime: "PT5M",
+  step: quickStartSteps.map((entry) => ({
+    "@type": "HowToStep",
+    name: entry.step,
+    text: entry.detail
+  }))
+};
+---
+
+<BaseLayout title={title} description={description} keywords={keywords} jsonLd={howToJsonLd}>
+  <section class="hero-panel">
+    <p class="eyebrow">Practical reference for daily usage</p>
+    <h1>dbterm guide</h1>
+    <p>
+      This page documents the real app workflow from connection setup to production-safe operations.
+      Keep it open while onboarding new users.
+    </p>
+    <div class="page-meta" aria-label="Guide metadata">
+      <span>Setup + workflow</span>
+      <span>Keybindings by context</span>
+      <span>Services + backup actions</span>
+      <span>Troubleshooting tips</span>
+    </div>
+  </section>
+
+  <section class="panel" id="setup">
+    <h2>1. Start in 60 seconds</h2>
+    <p class="lead">Install, connect, run SQL, then iterate in panel-focused flow.</p>
+
+    <div class="copy-stack">
+      <article class="copy-shell">
+        <header>
+          <h3>Install on Linux / macOS</h3>
+          <button
+            type="button"
+            class="button outline small copy-button"
+            data-copy-target="guide-install-unix"
+            data-default-label="Copy"
+          >
+            Copy
+          </button>
+        </header>
+        <pre><code id="guide-install-unix">{installUnix}</code></pre>
+      </article>
+
+      <article class="copy-shell">
+        <header>
+          <h3>Install on Windows</h3>
+          <button
+            type="button"
+            class="button outline small copy-button"
+            data-copy-target="guide-install-windows"
+            data-default-label="Copy"
+          >
+            Copy
+          </button>
+        </header>
+        <pre><code id="guide-install-windows">{installWindows}</code></pre>
+      </article>
+    </div>
+
+    <div class="step-grid">
+      {quickStartSteps.map((entry, index) => (
+        <article class="step-item">
+          <h3>{index + 1}. {entry.step}</h3>
+          <p>{entry.detail}</p>
+        </article>
+      ))}
+    </div>
+  </section>
+
+  <section class="panel" id="workspace">
+    <h2>2. Understand the workspace</h2>
+    <p class="lead">dbterm is optimized around panel focus and keyboard flow.</p>
+
+    <div class="table-wrap">
+      <table class="command-table">
+        <thead>
+          <tr>
+            <th>Panel</th>
+            <th>Primary behavior</th>
+            <th>Core keys</th>
+          </tr>
+        </thead>
+        <tbody>
+          {workspacePanels.map((item) => (
+            <tr>
+              <td>{item.panel}</td>
+              <td>{item.behavior}</td>
+              <td><code>{item.keys}</code></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel" id="shortcuts">
+    <h2>3. Essential shortcuts</h2>
+    <p class="lead">Use these to avoid context switching and keep query loops fast.</p>
+
+    <div class="table-wrap">
+      <table class="shortcut-table">
+        <thead>
+          <tr>
+            <th>Shortcut</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {shortcutRows.map((row) => (
+            <tr>
+              <td><code>{row.combo}</code></td>
+              <td>{row.action}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+
+    <p class="notice">
+      Use <kbd>Esc</kbd> and <kbd>Backspace</kbd> to back out safely from most views if you lose focus.
+    </p>
+  </section>
+
+  <section class="panel" id="ops">
+    <h2>4. Services and backup workflow</h2>
+    <p class="lead">Useful when dbterm is part of local infra maintenance or incident response.</p>
+
+    <div class="guide-flow">
+      {serviceOps.map((item) => (
+        <article class="guide-box">
+          <h3>{item.title}</h3>
+          <p>{item.detail}</p>
+        </article>
+      ))}
+    </div>
+  </section>
+
+  <section class="panel" id="cli">
+    <h2>5. CLI maintenance reference</h2>
+    <p class="lead">Use CLI mode for updates, diagnostics, and uninstall operations.</p>
+
+    <article class="copy-shell">
+      <header>
+        <h3>CLI command set</h3>
+        <button
+          type="button"
+          class="button outline small copy-button"
+          data-copy-target="guide-cli-cmds"
+          data-default-label="Copy"
+        >
+          Copy
+        </button>
+      </header>
+      <pre><code id="guide-cli-cmds">{cliRows.map(([cmd]) => cmd).join("\n")}</code></pre>
+    </article>
+
+    <div class="table-wrap">
+      <table class="command-table">
+        <thead>
+          <tr>
+            <th>Command</th>
+            <th>Purpose</th>
+          </tr>
+        </thead>
+        <tbody>
+          {cliRows.map(([command, desc]) => (
+            <tr>
+              <td><code>{command}</code></td>
+              <td>{desc}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel" id="troubleshooting">
+    <h2>6. Troubleshooting quick list</h2>
+    <ul class="list-tight">
+      {troubleshooting.map((point) => (
+        <li>{point}</li>
+      ))}
+    </ul>
+  </section>
+
+  <section class="panel" id="preview">
+    <h2>7. Interface preview</h2>
+    <p class="lead">Screenshot is placed at the end so the guide stays task-focused first.</p>
+    <div class="preview-wrap">
+      <img
+        src="main_ui.png"
+        alt="dbterm main interface with tables and SQL query editor"
+        loading="lazy"
+      />
+    </div>
+  </section>
+</BaseLayout>
