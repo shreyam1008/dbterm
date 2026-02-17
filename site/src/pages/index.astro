@@ -1,7 +1,7 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 
-const title = "dbterm | Open-Source Multi-Database Terminal Client";
+const title = "dbterm | Multi-Database Terminal Client for PostgreSQL, MySQL & SQLite";
 const description =
   "dbterm is a lightweight, keyboard-first terminal database client for PostgreSQL, MySQL, SQLite, Turso, and Cloudflare D1.";
 const keywords =
@@ -74,9 +74,12 @@ const dbTargets = [
 ];
 
 const shortcuts = [
-  { key: "Alt + Enter", action: "Execute SQL query" },
+  { key: "Enter", action: "Execute SQL query" },
+  { key: "Shift + Enter", action: "New line in query editor" },
   { key: "Alt + Q / T / R", action: "Focus Query, Tables, or Results" },
   { key: "F5 / Ctrl + F5", action: "Refresh current table or full table list" },
+  { key: "Ctrl + = / -", action: "Zoom table columns wider / narrower" },
+  { key: "+ / -", action: "Widen / narrow selected column" },
   { key: "F / B", action: "Fullscreen results / backup modal" },
   { key: "Alt + H", action: "Open in-app help and SQL cheatsheets" },
   { key: "Ctrl + C", action: "Quit safely" }
@@ -332,7 +335,7 @@ const faqJsonLd = {
     </p>
     <div class="callout-row">
       <a class="button" href={withBase("guide/")}>Open guide</a>
-      <a class="button outline" href={withBase("open-source/")}>Open-source handbook</a>
+      <a class="button outline" href="https://github.com/shreyam1008/dbterm">View on GitHub</a>
     </div>
   </section>
 </BaseLayout>

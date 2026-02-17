@@ -33,8 +33,7 @@ const withBase = (path: string) => {
 
 const navItems = [
   { label: "Home", href: withBase("/") },
-  { label: "Guide", href: withBase("guide/") },
-  { label: "Open Source", href: withBase("open-source/") }
+  { label: "Guide", href: withBase("guide/") }
 ];
 
 const normalizedPathname = Astro.url.pathname.endsWith("/")
