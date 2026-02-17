@@ -24,7 +24,8 @@ func (a *App) showHelp() {
   Ctrl+C ............ Quit
 
 [#a6e3a1]Query & Results ` + iconQuery + ` ` + iconResults + `[-]
-  Alt + Enter ....... Execute query
+  Enter ............. Execute query (in Query editor)
+  Shift + Enter ..... New line in query (multiline SQL)
   F5 ................ Refresh current table (keep sort/selection) ` + iconRefresh + `
   Ctrl + F5 ......... Refresh table list + current table ` + iconRefresh + `
   F ................. Toggle fullscreen results (outside Query editor)
@@ -33,6 +34,9 @@ func (a *App) showHelp() {
   Enter / Space ..... Open row details (in Results)
   Alt + = / - ....... Increase / decrease preview row limit
   Alt + 0 ........... Toggle preview limit (100 ↔ all rows)
+  Ctrl + = / - ...... Zoom table columns wider / narrower
+  Ctrl + 0 .......... Reset zoom to default
+  + / - ............. Widen / narrow selected column (in Results)
   Status bar ........ Shows active sort + preview limit
 
 [#a6e3a1]Dashboard ` + iconDashboard + `[-]

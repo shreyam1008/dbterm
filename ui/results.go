@@ -36,6 +36,9 @@ func (a *App) LoadResults() error {
 		return fmt.Errorf("not connected")
 	}
 
+	// Reset per-column width overrides when loading a new table
+	a.clearColumnOverrides()
+
 	// DB-specific quoting for identifiers
 	quotedTable := quoteIdentifier(a.dbType, a.selectedTable)
 	query := fmt.Sprintf("SELECT * FROM %s", quotedTable)
@@ -66,6 +69,9 @@ func (a *App) LoadResults() error {
 	if a.sortColumn != -1 {
 		a.applySort()
 	}
+
+	// Re-apply zoom / column width overrides
+	a.applyColumnWidths()
 
 	a.restoreResultSelection(selection, rowCount)
 

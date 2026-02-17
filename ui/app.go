@@ -64,6 +64,10 @@ type App struct {
 	tableExpanded bool // results fullscreen mode
 	lastScreenW   int
 	lastScreenH   int
+
+	// Column width / zoom state
+	tableZoom        int         // global zoom offset in steps (range: -5 to +10)
+	colWidthOverrides map[int]int // per-column max-width overrides (col index → width)
 }
 
 // NewApp creates a new dbterm application instance
@@ -110,7 +114,7 @@ func (a *App) setupUI() {
 
 	// ── Query Input ──
 	a.queryInput = tview.NewTextArea().
-		SetPlaceholder("  Write SQL here — Alt+Enter to execute").
+		SetPlaceholder("  Write SQL here — Enter to run, Shift+Enter for newline").
 		SetPlaceholderStyle(tcell.StyleDefault.Foreground(overlay0))
 	a.queryInput.SetBorder(true).
 		SetTitle(fmt.Sprintf(" %s Query [yellow](Alt+Q)[-] ", iconQuery)).
@@ -144,7 +148,7 @@ func (a *App) setupUI() {
 	a.pages.AddPage("main", mainLayout, true, false)
 	a.applyResponsiveLayout(120, 40)
 
-	// ── Results table input: sort on 's', key navigation ──
+	// ── Results table input: sort on 's', key navigation, column width ──
 	a.results.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Rune() {
 		case 's', 'S':
@@ -155,6 +159,16 @@ func (a *App) setupUI() {
 				row = 1
 			}
 			a.results.Select(row, col)
+			return nil
+		case '+', '=':
+			// Widen current column
+			_, col := a.results.GetSelection()
+			a.adjustColumnWidth(col, 4)
+			return nil
+		case '-', '_':
+			// Narrow current column
+			_, col := a.results.GetSelection()
+			a.adjustColumnWidth(col, -4)
 			return nil
 		case ' ':
 			// Also support space for row details alongside Enter
@@ -174,12 +188,17 @@ func (a *App) setupUI() {
 		return event
 	})
 
-	// Execute query on Alt+Enter
+	// Execute query on Enter; Shift+Enter or Alt+Enter inserts newline
 	a.queryInput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEnter && event.Modifiers()&tcell.ModAlt != 0 {
+		if event.Key() == tcell.KeyEnter {
+			// Alt+Enter or Shift+Enter = insert newline (let tview handle it)
+			if event.Modifiers()&tcell.ModAlt != 0 || event.Modifiers()&tcell.ModShift != 0 {
+				return event
+			}
+			// Plain Enter = execute query
 			query := a.queryInput.GetText()
 			if query == "" {
-				a.ShowAlert(fmt.Sprintf("%s No query to execute.\n\nType a SQL query and press Alt+Enter.", iconInfo), "main")
+				a.ShowAlert(fmt.Sprintf("%s No query to execute.\n\nType a SQL query and press Enter.", iconInfo), "main")
 				return nil
 			}
 			a.queryStart = time.Now()
@@ -277,6 +296,8 @@ func (a *App) setFocusWithColor(target tview.Primitive) {
 	}
 
 	a.app.SetFocus(target)
+	// Refresh status bar so context-sensitive footer hints update
+	a.updateStatusBar("", a.currentResultRowCount())
 }
 
 // cycleFocus cycles Tab focus: Tables → Query → Results → Tables
@@ -690,6 +711,21 @@ func (a *App) setupKeyBindings() {
 			return nil
 		}
 
+		// Ctrl+=/- for table zoom, Ctrl+0 for reset (any focus in main)
+		if event.Modifiers()&tcell.ModCtrl != 0 {
+			switch event.Rune() {
+			case '=', '+':
+				a.zoomTable(1)
+				return nil
+			case '-', '_':
+				a.zoomTable(-1)
+				return nil
+			case '0':
+				a.resetTableZoom()
+				return nil
+			}
+		}
+
 		// Global shortcuts (only if not typing in query input)
 		if a.app.GetFocus() != a.queryInput {
 			switch event.Rune() {
@@ -726,6 +762,99 @@ func (a *App) setupKeyBindings() {
 		}
 		return event
 	})
+}
+
+// ── Column width / zoom helpers ──
+
+const (
+	colWidthStep   = 4
+	minColWidth    = 8
+	minZoom        = -5
+	maxZoom        = 10
+	defaultColBase = 30 // initial base width when first adjusting a column
+)
+
+// applyColumnWidths sets MaxWidth on every cell based on zoom + per-column overrides.
+func (a *App) applyColumnWidths() {
+	rowCount := a.results.GetRowCount()
+	colCount := a.results.GetColumnCount()
+	if rowCount == 0 || colCount == 0 {
+		return
+	}
+
+	screenW, _ := a.getScreenSize()
+	maxW := max(minColWidth, screenW)
+
+	for c := 0; c < colCount; c++ {
+		w := 0 // 0 = auto / unlimited
+		if override, ok := a.colWidthOverrides[c]; ok {
+			w = override
+		}
+		if a.tableZoom != 0 && w == 0 {
+			// Apply zoom from a reasonable base
+			w = defaultColBase + a.tableZoom*colWidthStep
+		} else if a.tableZoom != 0 {
+			w += a.tableZoom * colWidthStep
+		}
+		if w > 0 {
+			w = clamp(w, minColWidth, maxW)
+		}
+		for r := 0; r < rowCount; r++ {
+			if cell := a.results.GetCell(r, c); cell != nil {
+				cell.SetMaxWidth(w)
+			}
+		}
+	}
+}
+
+// adjustColumnWidth changes the width of a single column by delta characters.
+func (a *App) adjustColumnWidth(col, delta int) {
+	if a.colWidthOverrides == nil {
+		a.colWidthOverrides = make(map[int]int)
+	}
+	screenW, _ := a.getScreenSize()
+	maxW := max(minColWidth, screenW)
+
+	current, ok := a.colWidthOverrides[col]
+	if !ok {
+		current = defaultColBase
+	}
+	newW := clamp(current+delta, minColWidth, maxW)
+	a.colWidthOverrides[col] = newW
+	a.applyColumnWidths()
+
+	a.flashStatus(fmt.Sprintf("[teal]col %d width → %d[-]", col+1, newW), a.currentResultRowCount(), 1200*time.Millisecond)
+}
+
+// zoomTable adjusts the global zoom level for all columns.
+func (a *App) zoomTable(delta int) {
+	newZoom := clamp(a.tableZoom+delta, minZoom, maxZoom)
+	if newZoom == a.tableZoom {
+		return
+	}
+	a.tableZoom = newZoom
+	a.applyColumnWidths()
+
+	label := "default"
+	if a.tableZoom > 0 {
+		label = fmt.Sprintf("+%d", a.tableZoom)
+	} else if a.tableZoom < 0 {
+		label = fmt.Sprintf("%d", a.tableZoom)
+	}
+	a.flashStatus(fmt.Sprintf("[teal]zoom %s[-]", label), a.currentResultRowCount(), 1200*time.Millisecond)
+}
+
+// resetTableZoom resets zoom and per-column overrides to defaults.
+func (a *App) resetTableZoom() {
+	a.tableZoom = 0
+	a.colWidthOverrides = nil
+	a.applyColumnWidths()
+	a.flashStatus("[green]zoom reset[-]", a.currentResultRowCount(), 1200*time.Millisecond)
+}
+
+// clearColumnOverrides resets per-column width overrides (called on table/query change).
+func (a *App) clearColumnOverrides() {
+	a.colWidthOverrides = nil
 }
 
 // cleanup gracefully closes the database connection
@@ -806,15 +935,30 @@ func (a *App) applyResponsiveLayout(width, height int) {
 }
 
 func (a *App) statusActionText(width int) string {
+	inQuery := a.app.GetFocus() == a.queryInput
 	switch {
 	case width < 72:
+		if inQuery {
+			return "[yellow]Enter[-] Run ▶  │  [yellow]Esc[-] Back"
+		}
 		return "[yellow]Esc[-] Back  │  [yellow]F5[-] Refresh  │  [yellow]Alt+H[-]"
 	case width < 90:
+		if inQuery {
+			return fmt.Sprintf("[yellow]Enter[-] Run ▶  │  [yellow]Shift+Enter[-] Newline  │  [yellow]Esc[-] Back  │  [yellow]Alt+H[-] Help %s", iconHelp)
+		}
 		return fmt.Sprintf("[yellow]F5[-] %s Refresh  │  [yellow]Esc[-] Back  │  [yellow]Alt+H[-] Help %s", iconRefresh, iconHelp)
 	case width < 120:
+		if inQuery {
+			return fmt.Sprintf("[yellow]Enter[-] Run ▶  │  [yellow]Shift+Enter[-] Newline  │  [yellow]F5[-] %s  │  [yellow]Alt+D/Esc[-] Dash %s",
+				iconRefresh, iconDashboard)
+		}
 		return fmt.Sprintf("[yellow]F5[-] %s  │  [yellow]F/B[-] Full/%s  │  [yellow]Enter[-] Detail  │  [yellow]Alt+D/Esc[-] Dash %s",
 			iconRefresh, iconBackup, iconDashboard)
 	default:
+		if inQuery {
+			return fmt.Sprintf("[yellow]Enter[-] Run ▶  │  [yellow]Shift+Enter[-] Newline  │  [yellow]F5[-] %s  │  [yellow]Alt+H[-] Help %s  │  [yellow]Esc/Bksp[-] Dashboard %s",
+				iconRefresh, iconHelp, iconDashboard)
+		}
 		return fmt.Sprintf("[yellow]F5[-] %s  │  [yellow]F[-] Full  │  [yellow]B[-] %s  │  [yellow]Enter[-] Detail  │  [yellow]Alt+H[-] Help %s  │  [yellow]Esc/Bksp[-] Dashboard %s",
 			iconRefresh, iconBackup, iconHelp, iconDashboard)
 	}

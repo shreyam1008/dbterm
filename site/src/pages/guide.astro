@@ -18,7 +18,7 @@ const quickStartSteps = [
   },
   {
     step: "Run your first query",
-    detail: "Focus Query panel (Alt+Q), type SQL, and execute with Alt+Enter."
+    detail: "Focus Query panel (Alt+Q), type SQL, and press Enter to run."
   },
   {
     step: "Inspect and iterate",
@@ -35,7 +35,7 @@ const workspacePanels = [
   {
     panel: "Query",
     behavior: "Write SQL and execute it directly against the current database session.",
-    keys: "Alt+Q, Alt+Enter"
+    keys: "Alt+Q, Enter, Shift+Enter"
   },
   {
     panel: "Tables",
@@ -44,14 +44,15 @@ const workspacePanels = [
   },
   {
     panel: "Results",
-    behavior: "Sort columns, inspect rows, and switch fullscreen when needed.",
-    keys: "Alt+R, S, Enter, Space, F"
+    behavior: "Sort columns, inspect rows, adjust column widths, and switch fullscreen.",
+    keys: "Alt+R, S, Enter, Space, F, +/−"
   }
 ];
 
 const shortcutRows = [
   { combo: "Alt + Q / T / R", action: "Focus Query, Tables, or Results panel" },
-  { combo: "Alt + Enter", action: "Execute query from Query panel" },
+  { combo: "Enter", action: "Execute query (in Query panel)" },
+  { combo: "Shift + Enter", action: "New line in query (multiline SQL)" },
   { combo: "Alt + H", action: "Toggle help + SQL cheatsheets" },
   { combo: "Alt + D", action: "Back to dashboard" },
   { combo: "Alt + S", action: "Open services dashboard" },
@@ -59,6 +60,9 @@ const shortcutRows = [
   { combo: "F", action: "Toggle fullscreen results" },
   { combo: "B", action: "Open backup modal (PostgreSQL/MySQL)" },
   { combo: "Alt + = / - / 0", action: "Adjust preview row limit" },
+  { combo: "Ctrl + = / -", action: "Zoom table columns wider / narrower" },
+  { combo: "Ctrl + 0", action: "Reset zoom to default" },
+  { combo: "+ / -", action: "Widen / narrow selected column (in Results)" },
   { combo: "Ctrl + C", action: "Quit app" }
 ];
 
