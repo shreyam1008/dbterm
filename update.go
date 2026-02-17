@@ -120,9 +120,9 @@ func runUpdate(requestedVersion string) error {
 	}
 
 	if runtime.GOOS == "windows" {
-		return replaceWindowsBinary(exePath, downloadPath, oldVersion)
+		return replaceWindowsBinary(exePath, downloadPath, oldVersion, resolvedVersion)
 	}
-	return replaceUnixBinary(exePath, downloadPath, oldVersion)
+	return replaceUnixBinary(exePath, downloadPath, oldVersion, resolvedVersion)
 }
 
 // ── Platform helpers ──
@@ -251,7 +251,7 @@ func sha256File(path string) (string, error) {
 
 // ── Binary replacement ──
 
-func replaceUnixBinary(exePath, downloadedPath, oldVersion string) error {
+func replaceUnixBinary(exePath, downloadedPath, oldVersion, resolvedVersion string) error {
 	targetDir := filepath.Dir(exePath)
 	stagedPath := filepath.Join(targetDir, fmt.Sprintf(".dbterm-update-%d", time.Now().UnixNano()))
 
@@ -271,11 +271,11 @@ func replaceUnixBinary(exePath, downloadedPath, oldVersion string) error {
 	}
 
 	fmt.Printf("  \033[38;2;166;227;161m✓\033[0m Updated: %s\n", exePath)
-	printUpdateSummary(oldVersion)
+	printUpdateSummary(exePath, oldVersion, resolvedVersion)
 	return nil
 }
 
-func replaceWindowsBinary(exePath, downloadedPath, oldVersion string) error {
+func replaceWindowsBinary(exePath, downloadedPath, oldVersion, resolvedVersion string) error {
 	stagedPath := exePath + ".new"
 	if err := copyFile(downloadedPath, stagedPath, 0o755); err != nil {
 		if isPermissionErr(err) {
@@ -290,15 +290,44 @@ func replaceWindowsBinary(exePath, downloadedPath, oldVersion string) error {
 	}
 
 	fmt.Printf("  \033[38;2;166;227;161m✓\033[0m Downloaded update for %s\n", exePath)
-	printUpdateSummary(oldVersion)
+	// On Windows the new binary isn't in place yet (delayed move), so use the tag version
+	printUpdateSummary("", oldVersion, resolvedVersion)
 	fmt.Println("  \033[33mAction:\033[0m Close this terminal, then run dbterm again.")
 	fmt.Println()
 	return nil
 }
 
 // printUpdateSummary shows old→new version info and release notes after a successful update.
-func printUpdateSummary(oldVersion string) {
-	newVersion, newName, newDesc := latestManifestRelease()
+// It execs the NEW binary to read its embedded version info, avoiding the stale-manifest bug.
+func printUpdateSummary(newBinaryPath, oldVersion, resolvedVersion string) {
+	var newVersion, newName, newDesc string
+
+	// Try to get version info from the new binary itself
+	if newBinaryPath != "" {
+		out, err := exec.Command(newBinaryPath, "--version").CombinedOutput()
+		if err == nil {
+			newVersion, newName = parseVersionOutput(string(out))
+		}
+	}
+
+	// Fallback: use the resolved tag if exec failed
+	if newVersion == "" && resolvedVersion != "" {
+		newVersion = strings.TrimPrefix(resolvedVersion, "v")
+	}
+
+	// Look up release notes from the resolved version's manifest entry
+	if newVersion != "" {
+		for _, r := range manifestReleases() {
+			if normalizeVersion(r.version) == normalizeVersion(newVersion) {
+				if newName == "" {
+					newName = r.name
+				}
+				newDesc = r.description
+				break
+			}
+		}
+	}
+
 	if newVersion == "" {
 		fmt.Println("  \033[38;2;166;227;161m✓\033[0m Update complete.")
 		fmt.Println()
@@ -323,6 +352,31 @@ func printUpdateSummary(oldVersion string) {
 	fmt.Println()
 	fmt.Println("  \033[38;2;166;227;161m✓\033[0m Update complete. Thank you for using dbterm!")
 	fmt.Println()
+}
+
+// parseVersionOutput extracts version and release name from `dbterm --version` output.
+// Expected format: "dbterm v0.3.9 \"Fakir\"\n..."
+func parseVersionOutput(output string) (version, name string) {
+	lines := strings.SplitN(output, "\n", 2)
+	if len(lines) == 0 {
+		return "", ""
+	}
+	line := strings.TrimSpace(lines[0])
+	// Expected: "dbterm v0.3.9 \"Fakir\""
+	parts := strings.Fields(line)
+	if len(parts) < 2 {
+		return "", ""
+	}
+	version = strings.TrimPrefix(parts[1], "v")
+
+	// Extract quoted name if present
+	if idx := strings.Index(line, "\""); idx >= 0 {
+		rest := line[idx+1:]
+		if end := strings.Index(rest, "\""); end >= 0 {
+			name = rest[:end]
+		}
+	}
+	return version, name
 }
 
 // ── File utilities ──
