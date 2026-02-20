@@ -4,7 +4,8 @@ export const prerender = true;
 
 const routes = [
   { path: "", priority: "1.0", changefreq: "weekly" },
-  { path: "guide/", priority: "0.9", changefreq: "weekly" }
+  { path: "guide/", priority: "0.9", changefreq: "weekly" },
+  { path: "open-source/", priority: "0.8", changefreq: "monthly" }
 ];
 
 export const GET: APIRoute = ({ site }) => {
