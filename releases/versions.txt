@@ -10,6 +10,7 @@
 # 5) If that tag already exists, the workflow fails (prevents duplicate releases).
 #
 # Newest entry first:
+0.3.9|Ekalavya|.
 0.3.9|Fakir|Crash tolerance.
 0.3.8|Eshwor|Dynamic column width management in results and added comprehensive project reference documentation.
 0.3.7|Dhurv|GOPI PREM DIWAS SPECIAL.

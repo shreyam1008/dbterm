@@ -7,11 +7,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	"github.com/shreyam1008/dbterm/config"
+	"github.com/shreyam1008/dbterm/internal/history"
 )
 
 // ── Catppuccin Mocha ──────────────────────────────────────────────────
@@ -39,6 +39,9 @@ type App struct {
 	db         *sql.DB
 	pages      *tview.Pages
 	store      *config.Store
+	settings   *config.Settings
+	keymap     *actionKeymap
+	historyMgr *history.Manager
 	dbType     config.DBType
 	dbName     string // name of current connection (from config)
 	activeConn *config.ConnectionConfig
@@ -81,9 +84,35 @@ func NewApp() *App {
 			fmt.Printf("⚠ Warning: could not load saved connections: %v\n", err)
 		}
 	}
+
+	historyMgr, historyErr := history.NewManager(history.DefaultMaxEntriesPerConnection)
+	if historyErr != nil {
+		fmt.Printf("⚠ Warning: query history disabled: %v\n", historyErr)
+	}
+
+	settings, settingsErr := config.LoadSettings()
+	if settingsErr != nil {
+		fmt.Printf("⚠ Warning: settings load failed, using defaults: %v\n", settingsErr)
+	}
+	if settings == nil {
+		settings = config.DefaultSettings()
+	}
+
+	keymap, keymapErr := newActionKeymap(settings)
+	if keymapErr != nil {
+		fmt.Printf("⚠ Warning: keymap config invalid, using defaults: %v\n", keymapErr)
+		keymap, keymapErr = newActionKeymap(config.DefaultSettings())
+		if keymapErr != nil {
+			fmt.Printf("⚠ Warning: default keymap unavailable: %v\n", keymapErr)
+		}
+	}
+
 	return &App{
 		app:         tview.NewApplication(),
 		store:       store,
+		settings:    settings,
+		keymap:      keymap,
+		historyMgr:  historyMgr,
 		resultLimit: defaultTablePreviewLimit,
 	}
 }
@@ -163,12 +192,8 @@ func (a *App) setupUI() {
 			a.results.Select(row, col)
 			return nil
 		case ' ':
-			// Also support space for row details alongside Enter
-			row, _ := a.results.GetSelection()
-			if row > 0 {
-				a.showRowDetail(row)
-				return nil
-			}
+			a.toggleCurrentResultRowSelection()
+			return nil
 		}
 
 		// + / - in Results adjusts the selected column width.
@@ -218,6 +243,7 @@ func (a *App) setupUI() {
 func (a *App) updateStatusBar(extra string, rowCount int) {
 	width, _ := a.getScreenSize()
 	actionText := a.statusActionText(width)
+	selectedCount := a.selectedResultRowCount()
 
 	if a.db == nil {
 		if width < 58 {
@@ -268,6 +294,13 @@ func (a *App) updateStatusBar(extra string, rowCount int) {
 	}
 	if rowCount > 0 && width >= 64 {
 		parts = append(parts, fmt.Sprintf("[teal]%d rows[-]", rowCount))
+	}
+	if selectedCount > 0 && width >= 70 {
+		if width < 98 {
+			parts = append(parts, fmt.Sprintf("[yellow]sel:%d[-]", selectedCount))
+		} else {
+			parts = append(parts, fmt.Sprintf("[yellow]%d selected[-]", selectedCount))
+		}
 	}
 	if width >= 84 {
 		parts = append(parts, a.resultLimitStatus(width))
@@ -605,6 +638,7 @@ func (a *App) applySort() {
 func (a *App) setupKeyBindings() {
 	a.app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		page, _ := a.pages.GetFrontPage()
+		action, hasAction := a.resolveAction(event)
 
 		// Ctrl+C always quits, unless we are in a modal that uses it (like row details)
 		if event.Key() == tcell.KeyCtrlC {
@@ -680,9 +714,9 @@ func (a *App) setupKeyBindings() {
 			return nil
 		}
 
-		if event.Modifiers()&tcell.ModAlt != 0 {
-			switch unicode.ToLower(event.Rune()) {
-			case 'h':
+		if hasAction {
+			switch action {
+			case actionHelp:
 				if page == "help" {
 					a.pages.RemovePage("help")
 					if a.db != nil {
@@ -694,14 +728,14 @@ func (a *App) setupKeyBindings() {
 					a.showHelp()
 				}
 				return nil
-			case 'd':
+			case actionDashboard:
 				if page == "main" || page == "help" {
 					a.pages.HidePage(page)
 					a.showDashboard()
 				}
 				return nil
-			case 's':
-				// Show service dashboard from anywhere
+			case actionServices:
+				// Show service dashboard from anywhere.
 				a.showServiceDashboard()
 				return nil
 			}
@@ -732,12 +766,12 @@ func (a *App) setupKeyBindings() {
 			}
 		}
 
-		if event.Modifiers()&tcell.ModAlt != 0 {
-			switch unicode.ToLower(event.Rune()) {
-			case 't':
+		if hasAction {
+			switch action {
+			case actionFocusTables:
 				a.setFocusWithColor(a.tables)
 				return nil
-			case 'q':
+			case actionFocusQuery:
 				// If query editor is already focused, let the event pass through.
 				// This helps international keyboard layouts that rely on AltGr combos.
 				if a.app.GetFocus() == a.queryInput {
@@ -745,21 +779,56 @@ func (a *App) setupKeyBindings() {
 				}
 				a.setFocusWithColor(a.queryInput)
 				return nil
-			case 'r':
+			case actionFocusResults:
 				a.setFocusWithColor(a.results)
 				return nil
-			case 'f':
+			case actionFullscreen:
 				if a.app.GetFocus() == a.queryInput {
 					return event
 				}
 				a.toggleExpandResults()
 				return nil
-			case 'b':
+			case actionBackup:
 				if a.app.GetFocus() == a.queryInput {
 					return event
 				}
 				a.showBackupModal()
 				return nil
+			case actionImportDump:
+				if a.app.GetFocus() == a.queryInput {
+					return event
+				}
+				a.showImportModal()
+				return nil
+			case actionSelectAll:
+				if a.app.GetFocus() == a.queryInput {
+					return event
+				}
+				a.selectAllResultRows()
+				return nil
+			case actionClearSelection:
+				if a.app.GetFocus() == a.queryInput {
+					return event
+				}
+				a.clearResultRowSelection()
+				return nil
+			case actionExportCSV:
+				if a.app.GetFocus() == a.queryInput {
+					return event
+				}
+				a.exportCurrentResultsToCSV()
+				return nil
+			case actionHistory:
+				a.showHistoryModal()
+				return nil
+			case actionSettings:
+				a.showSettings()
+				return nil
+			}
+		}
+
+		if event.Modifiers()&tcell.ModAlt != 0 {
+			switch event.Rune() {
 			case '=', '+':
 				a.increaseResultLimit()
 				return nil
@@ -773,6 +842,13 @@ func (a *App) setupKeyBindings() {
 		}
 		return event
 	})
+}
+
+func (a *App) resolveAction(event *tcell.EventKey) (keymapAction, bool) {
+	if a == nil || a.keymap == nil {
+		return "", false
+	}
+	return a.keymap.Resolve(event)
 }
 
 func isIncreaseKey(event *tcell.EventKey) bool {
@@ -970,26 +1046,26 @@ func (a *App) statusActionText(width int) string {
 		if inQuery {
 			return "[yellow]Enter[-] Run ▶  │  [yellow]Esc[-] Back"
 		}
-		return "[yellow]Esc[-] Back  │  [yellow]F5[-] Refresh  │  [yellow]Alt+H[-]"
+		return "[yellow]Space[-] Select  │  [yellow]Alt+E[-] CSV  │  [yellow]Esc[-] Back"
 	case width < 90:
 		if inQuery {
 			return fmt.Sprintf("[yellow]Enter[-] Run ▶  │  [yellow]Shift+Enter[-] Newline  │  [yellow]Esc[-] Back  │  [yellow]Alt+H[-] Help %s", iconHelp)
 		}
-		return fmt.Sprintf("[yellow]F5[-] %s Refresh  │  [yellow]Esc[-] Back  │  [yellow]Alt+H[-] Help %s", iconRefresh, iconHelp)
+		return fmt.Sprintf("[yellow]Space[-] Select  │  [yellow]Alt+A/C[-] All/Clear  │  [yellow]Alt+E[-] CSV  │  [yellow]Alt+H[-] %s", iconHelp)
 	case width < 120:
 		if inQuery {
 			return fmt.Sprintf("[yellow]Enter[-] Run ▶  │  [yellow]Shift+Enter[-] Newline  │  [yellow]F5[-] %s  │  [yellow]Alt+D/Esc[-] Dash %s",
 				iconRefresh, iconDashboard)
 		}
-		return fmt.Sprintf("[yellow]F5[-] %s  │  [yellow]Alt+F/B[-] Full/%s  │  [yellow]Enter[-] Detail  │  [yellow]Alt+D/Esc[-] Dash %s",
-			iconRefresh, iconBackup, iconDashboard)
+		return fmt.Sprintf("[yellow]F5[-] %s  │  [yellow]Space[-] Toggle Sel  │  [yellow]Alt+A/C/E[-] All/Clear/CSV  │  [yellow]Enter[-] Detail  │  [yellow]Alt+D/Esc[-] Dash %s",
+			iconRefresh, iconDashboard)
 	default:
 		if inQuery {
 			return fmt.Sprintf("[yellow]Enter[-] Run ▶  │  [yellow]Shift+Enter[-] Newline  │  [yellow]F5[-] %s  │  [yellow]Alt+H[-] Help %s  │  [yellow]Esc/Bksp[-] Dashboard %s",
 				iconRefresh, iconHelp, iconDashboard)
 		}
-		return fmt.Sprintf("[yellow]F5[-] %s  │  [yellow]Alt+F[-] Full  │  [yellow]Alt+B[-] %s  │  [yellow]Enter[-] Detail  │  [yellow]Alt+H[-] Help %s  │  [yellow]Esc/Bksp[-] Dashboard %s",
-			iconRefresh, iconBackup, iconHelp, iconDashboard)
+		return fmt.Sprintf("[yellow]F5[-] %s  │  [yellow]Space[-] Toggle Sel  │  [yellow]Alt+A[-] All  │  [yellow]Alt+C[-] Clear  │  [yellow]Alt+E[-] CSV  │  [yellow]Enter[-] Detail  │  [yellow]Alt+H[-] Help %s  │  [yellow]Esc/Bksp[-] Dashboard %s",
+			iconRefresh, iconHelp, iconDashboard)
 	}
 }
 

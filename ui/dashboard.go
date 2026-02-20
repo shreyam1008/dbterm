@@ -161,6 +161,9 @@ func (a *App) showDashboard() {
 			a.pages.RemovePage("dashboard")
 			a.showDashboard()
 			return nil
+		case 'g', 'G':
+			a.showSettings()
+			return nil
 		}
 
 		if event.Key() == tcell.KeyEnter && connCount > 0 {
@@ -359,38 +362,38 @@ func dashboardFooterText(hasConnections, hasWorkspace bool, width int) string {
 	if hasConnections {
 		switch {
 		case width < 74:
-			return fmt.Sprintf("  [yellow]N[-] New  │  [teal]H[-] Help %s  │  [#cba6f7]Q[-] Quit", iconHelp)
+			return "  [yellow]N[-] New  │  [yellow]G[-] Settings  │  [#cba6f7]Q[-] Quit"
 		case width < 100:
 			if hasWorkspace {
-				return fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [yellow]S[-] Services %s  │  [yellow]B/Esc[-] Back %s", iconConnect, iconServices, iconBack)
+				return fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [yellow]G[-] Settings  │  [yellow]B/Esc[-] Back %s", iconConnect, iconBack)
 			}
-			return fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [yellow]N[-] New  │  [teal]H[-] Help %s  │  [#cba6f7]Q[-] Quit", iconConnect, iconHelp)
+			return fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [yellow]N[-] New  │  [yellow]G[-] Settings  │  [#cba6f7]Q[-] Quit", iconConnect)
 		case width < 128:
 			if hasWorkspace {
-				return fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [yellow]B/Esc[-] Back %s", iconConnect, iconBack)
+				return fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [yellow]G[-] Settings  │  [yellow]B/Esc[-] Back %s", iconConnect, iconBack)
 			}
-			return fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [teal]H[-] Help %s", iconConnect, iconHelp)
+			return fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [yellow]G[-] Settings  │  [teal]H[-] Help %s", iconConnect, iconHelp)
 		default:
 			if hasWorkspace {
-				return fmt.Sprintf("  [green]Enter[-] Connect %s  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [#94e2d5]S[-] Services %s  │  [yellow]R[-] Recheck %s  │  [yellow]B/Esc[-] Back %s  │  [#cba6f7]Q[-] Quit",
+				return fmt.Sprintf("  [green]Enter[-] Connect %s  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [#94e2d5]S[-] Services %s  │  [yellow]R[-] Recheck %s  │  [yellow]G[-] Settings  │  [yellow]B/Esc[-] Back %s  │  [#cba6f7]Q[-] Quit",
 					iconConnect, iconServices, iconRefresh, iconBack)
 			}
-			return fmt.Sprintf("  [green]Enter[-] Connect %s  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [#94e2d5]S[-] Services %s  │  [yellow]R[-] Recheck %s  │  [teal]H[-] Help %s  │  [#cba6f7]Q[-] Quit",
+			return fmt.Sprintf("  [green]Enter[-] Connect %s  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [#94e2d5]S[-] Services %s  │  [yellow]R[-] Recheck %s  │  [yellow]G[-] Settings  │  [teal]H[-] Help %s  │  [#cba6f7]Q[-] Quit",
 				iconConnect, iconServices, iconRefresh, iconHelp)
 		}
 	}
 
 	if width < 74 {
-		return "  [yellow]N[-] New  │  [#cba6f7]Q[-] Quit"
+		return "  [yellow]N[-] New  │  [yellow]G[-] Settings  │  [#cba6f7]Q[-] Quit"
 	}
 	if width < 104 {
 		if hasWorkspace {
-			return fmt.Sprintf("  [yellow]N[-] New  │  [yellow]B/Esc[-] Back %s  │  [#cba6f7]Q[-] Quit", iconBack)
+			return fmt.Sprintf("  [yellow]N[-] New  │  [yellow]G[-] Settings  │  [yellow]B/Esc[-] Back %s  │  [#cba6f7]Q[-] Quit", iconBack)
 		}
-		return fmt.Sprintf("  [yellow]N[-] New  │  [teal]H[-] Help %s  │  [#cba6f7]Q[-] Quit", iconHelp)
+		return fmt.Sprintf("  [yellow]N[-] New  │  [yellow]G[-] Settings  │  [teal]H[-] Help %s  │  [#cba6f7]Q[-] Quit", iconHelp)
 	}
 	if hasWorkspace {
-		return fmt.Sprintf("  [yellow]N[-] New Connection  │  [#94e2d5]S[-] Services %s  │  [yellow]B/Esc[-] Back %s  │  [#cba6f7]Q[-] Quit", iconServices, iconBack)
+		return fmt.Sprintf("  [yellow]N[-] New Connection  │  [#94e2d5]S[-] Services %s  │  [yellow]G[-] Settings  │  [yellow]B/Esc[-] Back %s  │  [#cba6f7]Q[-] Quit", iconServices, iconBack)
 	}
-	return fmt.Sprintf("  [yellow]N[-] New Connection  │  [#94e2d5]S[-] Services %s  │  [teal]H[-] Help %s  │  [#cba6f7]Q[-] Quit", iconServices, iconHelp)
+	return fmt.Sprintf("  [yellow]N[-] New Connection  │  [#94e2d5]S[-] Services %s  │  [yellow]G[-] Settings  │  [teal]H[-] Help %s  │  [#cba6f7]Q[-] Quit", iconServices, iconHelp)
 }

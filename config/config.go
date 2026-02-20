@@ -17,8 +17,8 @@ import (
 type DBType string
 
 const (
-	PostgreSQL DBType = "postgresql"
-	MySQL      DBType = "mysql"
+	PostgreSQL   DBType = "postgresql"
+	MySQL        DBType = "mysql"
 	SQLite       DBType = "sqlite"
 	Turso        DBType = "turso"
 	CloudflareD1 DBType = "d1"
@@ -26,13 +26,14 @@ const (
 
 // ConnectionConfig holds all info for a saved database connection
 type ConnectionConfig struct {
-	Name     string `json:"name"`
-	Type     DBType `json:"type"`
-	Host     string `json:"host,omitempty"`
-	Port     string `json:"port,omitempty"`
-	User     string `json:"user,omitempty"`
-	Password string `json:"password,omitempty"`
-	Database string `json:"database,omitempty"`
+	Name       string `json:"name"`
+	Type       DBType `json:"type"`
+	Host       string `json:"host,omitempty"`
+	Port       string `json:"port,omitempty"`
+	User       string `json:"user,omitempty"`
+	Password   string `json:"password,omitempty"`
+	Database   string `json:"database,omitempty"`
+	ReadOnly   bool   `json:"read_only,omitempty"`
 	FilePath   string `json:"file_path,omitempty"`   // SQLite only
 	SSLMode    string `json:"ssl_mode,omitempty"`    // PostgreSQL only
 	AccountID  string `json:"account_id,omitempty"`  // Cloudflare D1 only
@@ -157,12 +158,12 @@ func (c *ConnectionConfig) BuildConnString() string {
 		// OR the driver might handle it differently.
 		// Actually, standard sql.Open("libsql", "url")
 		// The driver docs say: `db, _ := sql.Open("libsql", "libsql://dbname.turso.io?authToken=...")`
-		
+
 		host := c.Host
 		if !strings.Contains(host, "://") {
 			host = "libsql://" + host
 		}
-		
+
 		if c.AuthToken != "" {
 			if strings.Contains(host, "?") {
 				return host + "&authToken=" + c.AuthToken
