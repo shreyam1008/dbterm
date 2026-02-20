@@ -1,11 +1,11 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 
-const title = "dbterm | Multi-Database Terminal Client for PostgreSQL, MySQL & SQLite";
+const title = "dbterm | Open Source Terminal SQL Client for PostgreSQL, MySQL, SQLite, Turso, D1";
 const description =
-  "dbterm is a lightweight, keyboard-first terminal database client for PostgreSQL, MySQL, SQLite, Turso, and Cloudflare D1.";
+  "dbterm is an open-source, keyboard-first terminal SQL client for PostgreSQL, MySQL, SQLite, Turso, and Cloudflare D1 with low-overhead runtime.";
 const keywords =
-  "dbterm, terminal database client, postgresql mysql sqlite turso d1, open source, keyboard-first tui";
+  "dbterm, open source database client, terminal sql client, postgresql mysql sqlite turso d1, keyboard-first tui";
 
 const baseUrl = import.meta.env.BASE_URL;
 const withBase = (path: string) => {
@@ -45,6 +45,19 @@ const workflows = [
   }
 ];
 
+const showcases = [
+  {
+    image: "assets/1.png",
+    alt: "dbterm connection management and services dashboard",
+    caption: "Connection management and service controls dashboard"
+  },
+  {
+    image: "assets/2.png",
+    alt: "dbterm SQL query editing and results browsing view",
+    caption: "SQL editor with scalable result browsing and keyboard controls"
+  }
+];
+
 const dbTargets = [
   {
     type: "PostgreSQL",
@@ -78,9 +91,11 @@ const shortcuts = [
   { key: "Shift + Enter", action: "New line in query editor" },
   { key: "Alt + Q / T / R", action: "Focus Query, Tables, or Results" },
   { key: "F5 / Ctrl + F5", action: "Refresh current table or full table list" },
+  { key: "Alt + = / - / 0", action: "Adjust preview row limit (including all rows)" },
   { key: "Ctrl + = / -", action: "Zoom table columns wider / narrower" },
   { key: "+ / -", action: "Widen / narrow selected column" },
-  { key: "F / B", action: "Fullscreen results / backup modal" },
+  { key: "Ctrl + 0", action: "Reset table zoom" },
+  { key: "Alt + F / Alt + B", action: "Fullscreen results / backup modal" },
   { key: "Alt + H", action: "Open in-app help and SQL cheatsheets" },
   { key: "Ctrl + C", action: "Quit safely" }
 ];
@@ -129,12 +144,18 @@ const softwareJsonLd = {
     price: "0",
     priceCurrency: "USD"
   },
+  isAccessibleForFree: true,
+  screenshot: [
+    "https://shreyam1008.github.io/dbterm/assets/1.png",
+    "https://shreyam1008.github.io/dbterm/assets/2.png"
+  ],
   featureList: [
     "Keyboard-first TUI",
     "PostgreSQL, MySQL, SQLite, Turso, Cloudflare D1",
     "Service dashboard",
     "Backup support for PostgreSQL and MySQL",
-    "Single binary installation"
+    "Single binary installation",
+    "Preview-limit controls for low-memory result browsing"
   ]
 };
 
@@ -194,6 +215,20 @@ const faqJsonLd = {
     </div>
   </section>
 
+  <section class="panel" id="showcase">
+    <h2>Interface highlights</h2>
+    <p class="lead">From viewing multiple active connections and their services to quickly querying large tables.</p>
+
+    <div class="showcase-gallery">
+      {showcases.map((item) => (
+        <figure class="showcase-card">
+          <img src={withBase(item.image)} alt={item.alt} loading="lazy" />
+          <figcaption>{item.caption}</figcaption>
+        </figure>
+      ))}
+    </div>
+  </section>
+
   <section class="panel" id="install">
     <h2>Quick install</h2>
     <p class="lead">
@@ -245,6 +280,17 @@ const faqJsonLd = {
         </article>
       ))}
     </div>
+  </section>
+
+  <section class="panel" id="footprint">
+    <h2>Low-overhead by default</h2>
+    <p class="lead">dbterm keeps build and runtime footprint constrained for daily terminal use.</p>
+    <ul class="list-tight">
+      <li>Release builds strip debug + VCS metadata for smaller artifacts.</li>
+      <li>Read queries follow the active preview limit to avoid loading excessive rows into memory.</li>
+      <li>Connection pool defaults are intentionally small for lower idle resource usage.</li>
+      <li>Use <code>Alt + 0</code> only when you explicitly want full row loading.</li>
+    </ul>
   </section>
 
   <section class="panel" id="support">

@@ -250,6 +250,34 @@ body {
   font-size: 0.86rem;
 }
 
+.showcase-gallery {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.showcase-card {
+  margin: 0;
+  border: 1px solid color-mix(in srgb, var(--border), white 24%);
+  border-radius: 0.86rem;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--card), white 10%);
+  box-shadow: 0 14px 30px rgba(19, 45, 40, 0.1);
+}
+
+.showcase-card img {
+  width: 100%;
+  display: block;
+  background: #121b18;
+}
+
+.showcase-card figcaption {
+  padding: 0.62rem 0.72rem;
+  color: var(--muted-foreground);
+  font-size: 0.84rem;
+}
+
 h1,
 h2,
 h3 {
@@ -617,6 +645,10 @@ kbd {
 
 @media (max-width: 920px) {
   .hero-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .showcase-gallery {
     grid-template-columns: 1fr;
   }
 

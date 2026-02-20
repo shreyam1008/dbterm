@@ -45,7 +45,7 @@ const workspacePanels = [
   {
     panel: "Results",
     behavior: "Sort columns, inspect rows, adjust column widths, and switch fullscreen.",
-    keys: "Alt+R, S, Enter, Space, F, +/−"
+    keys: "Alt+R, S, Enter, Space, Alt+F, +/−"
   }
 ];
 
@@ -57,8 +57,8 @@ const shortcutRows = [
   { combo: "Alt + D", action: "Back to dashboard" },
   { combo: "Alt + S", action: "Open services dashboard" },
   { combo: "F5 / Ctrl + F5", action: "Refresh current table / refresh list + table" },
-  { combo: "F", action: "Toggle fullscreen results" },
-  { combo: "B", action: "Open backup modal (PostgreSQL/MySQL)" },
+  { combo: "Alt + F", action: "Toggle fullscreen results" },
+  { combo: "Alt + B", action: "Open backup modal (PostgreSQL/MySQL)" },
   { combo: "Alt + = / - / 0", action: "Adjust preview row limit" },
   { combo: "Ctrl + = / -", action: "Zoom table columns wider / narrower" },
   { combo: "Ctrl + 0", action: "Reset zoom to default" },
@@ -81,7 +81,7 @@ const serviceOps = [
   },
   {
     title: "Backup active database",
-    detail: "Press B from workspace to open backup flow for PostgreSQL/MySQL."
+    detail: "Press Alt+B from workspace to open backup flow for PostgreSQL/MySQL."
   }
 ];
 

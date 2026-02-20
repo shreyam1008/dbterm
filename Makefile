@@ -1,14 +1,14 @@
 BINARY_NAME=dbterm
 VERSION?=$(shell awk -F'|' '/^[[:space:]]*#/ {next} /^[[:space:]]*$$/ {next} {gsub(/^[[:space:]]+|[[:space:]]+$$/, "", $$1); print $$1; exit}' releases/versions.txt 2>/dev/null || echo dev)
 COMMIT?=$(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
-GO_BUILD_FLAGS=-trimpath -ldflags="-s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT)"
+GO_BUILD_FLAGS=-trimpath -buildvcs=false -ldflags="-s -w -buildid= -X main.version=$(VERSION) -X main.commit=$(COMMIT)"
 
 .PHONY: all build clean test release release-core release-ios deb apt-repo
 
 all: build
 
 build:
-	go build $(GO_BUILD_FLAGS) -o $(BINARY_NAME) .
+	CGO_ENABLED=0 go build $(GO_BUILD_FLAGS) -o $(BINARY_NAME) .
 
 clean:
 	rm -f $(BINARY_NAME)
@@ -44,5 +44,5 @@ release-ios:
 		GOOS=ios GOARCH=arm64 CGO_ENABLED=1 CC="$$CC" SDKROOT="$$SDKROOT" \
 		CGO_CFLAGS="-isysroot $$SDKROOT -miphoneos-version-min=13.0" \
 		CGO_LDFLAGS="-isysroot $$SDKROOT -miphoneos-version-min=13.0" \
-		go build -trimpath -buildmode=c-archive -ldflags="-s -w" -o dist/$(BINARY_NAME)-ios-arm64.a .; \
+		go build -trimpath -buildvcs=false -buildmode=c-archive -ldflags="-s -w -buildid=" -o dist/$(BINARY_NAME)-ios-arm64.a .; \
 	fi
