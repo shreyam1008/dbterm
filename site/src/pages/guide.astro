@@ -57,7 +57,8 @@ const shortcutRows = [
   { combo: "Alt + A / Alt + C", action: "Select all result rows / clear selection" },
   { combo: "Space (Results)", action: "Toggle current row selection" },
   { combo: "Alt + E", action: "Export selected rows to CSV (or all displayed rows)" },
-  { combo: "Alt + I", action: "Open SQL import modal (PostgreSQL/MySQL)" },
+  { combo: "Alt + I", action: "Open SQL import modal for active connection (PostgreSQL/MySQL)" },
+  { combo: "I (Dashboard)", action: "Import SQL dump into selected saved PostgreSQL/MySQL connection" },
   { combo: "G (Dashboard) / Alt + ,", action: "Open keymap settings page" },
   { combo: "Alt + H", action: "Toggle help + SQL cheatsheets" },
   { combo: "Alt + D", action: "Back to dashboard" },
@@ -91,7 +92,7 @@ const serviceOps = [
   },
   {
     title: "Import SQL dumps safely",
-    detail: "Press Alt+I and provide a .sql file path. dbterm runs psql/mysql and streams import output."
+    detail: "Press Alt+I in workspace or I on Dashboard, provide a .sql path, and dbterm streams psql/mysql output. Use Esc/Ctrl+C during run to request cancel."
   }
 ];
 

@@ -97,6 +97,7 @@ func printHelp() {
     Alt+Q/T/R  Focus Query/Tables/Results
     Enter      Execute query          F5  Refresh table
     Ctrl+F5    Full refresh           Alt+F/Alt+B Fullscreen/Backup
+    Alt+I      Import SQL dump        I (Dashboard) Import to selected saved PG/MySQL
     Ctrl+/-/0  Zoom all columns       +/- Selected column width
     Alt+H      Help panel             Alt+D  Dashboard
     Ctrl+C     Quit

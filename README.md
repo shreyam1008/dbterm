@@ -83,7 +83,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubus
 | `G` (Dashboard) | Open Settings page from dashboard |
 | `Alt + D` | Return to dashboard |
 | `Alt + S` | Open services dashboard |
-| `Alt + F / Alt + B / Alt + I` | Toggle fullscreen results / open backup modal / open SQL import modal |
+| `Alt + F / Alt + B / Alt + I` | Toggle fullscreen results / open backup modal / open SQL import modal (active connection) |
+| `I` (Dashboard) | Import SQL dump into selected saved PostgreSQL/MySQL connection |
 | `Alt + E` | Export current results table to CSV |
 | `Alt + = / - / 0` | Increase / decrease / toggle preview row limit |
 | `Ctrl + = / - / 0` | Zoom all result columns / reset zoom |
@@ -93,10 +94,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubus
 
 ## SQL dump import (PostgreSQL/MySQL)
 
-- Press `Alt + I` while connected to a PostgreSQL or MySQL database.
+- Press `Alt + I` in workspace (active connection), or press `I` on Dashboard for a selected saved PostgreSQL/MySQL connection.
 - Enter the `.sql` file path and keep `Stop on first error` enabled for safer imports.
 - dbterm runs the official client tools (`psql` for PostgreSQL, `mysql` for MySQL), streams output live, then shows success/failure.
+- During import, press `Esc` or `Ctrl + C` to request a safe cancel.
 - Required binaries in `PATH`: `psql` (PostgreSQL) and/or `mysql` (MySQL).
+- One-time setup examples:
+  - Ubuntu/Debian: `sudo apt install postgresql-client mysql-client`
+  - macOS (Homebrew): `brew install libpq mysql-client`
+  - Windows (winget): `winget install PostgreSQL.PostgreSQL` and `winget install Oracle.MySQL`
 
 ## Settings + keymap config
 

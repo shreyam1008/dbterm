@@ -35,7 +35,8 @@ func (a *App) showHelp() {
   Ctrl + F5 ......... Refresh table list + current table ` + iconRefresh + `
   Alt + F ........... Toggle fullscreen results
   Alt + B ........... Backup current DB (PostgreSQL/MySQL)
-  Alt + I ........... Import SQL dump (PostgreSQL/MySQL)
+  Alt + I ........... Import SQL dump for active connection (PostgreSQL/MySQL)
+  Esc (import run) .. Cancel running SQL import
   S ................. Sort by current column (in Results)
   Enter ............. Open row details (in Results)
   Space ............. Toggle current row selection (in Results)
@@ -52,6 +53,7 @@ func (a *App) showHelp() {
   N ................. New connection
   E ................. Edit connection
   D ................. Delete connection
+  I / Alt + I ....... Import SQL dump into selected PG/MySQL connection
   G ................. Open Settings
   R ................. Re-check saved connection reachability ` + iconRefresh + `
   W / B / Esc ....... Back to workspace (when connected) ` + iconBack + `

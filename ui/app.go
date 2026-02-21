@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -69,6 +70,13 @@ type App struct {
 	lastScreenW   int
 	lastScreenH   int
 	focusedPanel  tview.Primitive // cached focus target (avoids lock-unsafe GetFocus calls)
+
+	// Import runtime state
+	importMu              sync.Mutex
+	importRunning         bool
+	importCancelRequested bool
+	importCancel          func()
+	importCancelNotify    func()
 
 	// Column width / zoom state
 	tableZoom         int         // global zoom offset in steps (range: -5 to +10)
@@ -640,8 +648,13 @@ func (a *App) setupKeyBindings() {
 		page, _ := a.pages.GetFrontPage()
 		action, hasAction := a.resolveAction(event)
 
-		// Ctrl+C always quits, unless we are in a modal that uses it (like row details)
+		// Ctrl+C cancels import when running; otherwise it quits (except row details modal).
 		if event.Key() == tcell.KeyCtrlC {
+			if a.isImportRunning() {
+				a.requestImportCancel()
+				return nil
+			}
+
 			// Check if row_details is the front page.
 			// However, pages.GetFrontPage() returns the name of the *visible* page.
 			// Since we add row_details as a layer on top, we need to see if it's there.
@@ -795,9 +808,6 @@ func (a *App) setupKeyBindings() {
 				a.showBackupModal()
 				return nil
 			case actionImportDump:
-				if a.app.GetFocus() == a.queryInput {
-					return event
-				}
 				a.showImportModal()
 				return nil
 			case actionSelectAll:

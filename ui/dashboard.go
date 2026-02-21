@@ -113,6 +113,28 @@ func (a *App) showDashboard() {
 
 	// ── Key Handling ──
 	connList.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		importSelectedConnection := func() {
+			if connCount == 0 {
+				a.ShowAlert(fmt.Sprintf("%s No saved connections to import into.\n\nPress N to create one.", iconInfo), "dashboard")
+				return
+			}
+
+			idx := connList.GetCurrentItem()
+			if idx < 0 || idx >= connCount {
+				a.ShowAlert(fmt.Sprintf("%s Select a connection first, then press I to import.", iconInfo), "dashboard")
+				return
+			}
+
+			cfg := a.store.Connections[idx]
+			a.showImportModalForConnection(&cfg, "dashboard")
+		}
+
+		action, hasAction := a.resolveAction(event)
+		if hasAction && action == actionImportDump {
+			importSelectedConnection()
+			return nil
+		}
+
 		switch event.Rune() {
 		case 'n', 'N':
 			a.showConnectionForm(nil, -1)
@@ -163,6 +185,9 @@ func (a *App) showDashboard() {
 			return nil
 		case 'g', 'G':
 			a.showSettings()
+			return nil
+		case 'i', 'I':
+			importSelectedConnection()
 			return nil
 		}
 
@@ -370,15 +395,15 @@ func dashboardFooterText(hasConnections, hasWorkspace bool, width int) string {
 			return fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [yellow]N[-] New  │  [yellow]G[-] Settings  │  [#cba6f7]Q[-] Quit", iconConnect)
 		case width < 128:
 			if hasWorkspace {
-				return fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [yellow]G[-] Settings  │  [yellow]B/Esc[-] Back %s", iconConnect, iconBack)
+				return fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [yellow]I[-] Import  │  [yellow]G[-] Settings  │  [yellow]B/Esc[-] Back %s", iconConnect, iconBack)
 			}
-			return fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [yellow]G[-] Settings  │  [teal]H[-] Help %s", iconConnect, iconHelp)
+			return fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [yellow]I[-] Import  │  [yellow]G[-] Settings  │  [teal]H[-] Help %s", iconConnect, iconHelp)
 		default:
 			if hasWorkspace {
-				return fmt.Sprintf("  [green]Enter[-] Connect %s  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [#94e2d5]S[-] Services %s  │  [yellow]R[-] Recheck %s  │  [yellow]G[-] Settings  │  [yellow]B/Esc[-] Back %s  │  [#cba6f7]Q[-] Quit",
+				return fmt.Sprintf("  [green]Enter[-] Connect %s  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [yellow]I[-] Import  │  [#94e2d5]S[-] Services %s  │  [yellow]R[-] Recheck %s  │  [yellow]G[-] Settings  │  [yellow]B/Esc[-] Back %s  │  [#cba6f7]Q[-] Quit",
 					iconConnect, iconServices, iconRefresh, iconBack)
 			}
-			return fmt.Sprintf("  [green]Enter[-] Connect %s  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [#94e2d5]S[-] Services %s  │  [yellow]R[-] Recheck %s  │  [yellow]G[-] Settings  │  [teal]H[-] Help %s  │  [#cba6f7]Q[-] Quit",
+			return fmt.Sprintf("  [green]Enter[-] Connect %s  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [yellow]I[-] Import  │  [#94e2d5]S[-] Services %s  │  [yellow]R[-] Recheck %s  │  [yellow]G[-] Settings  │  [teal]H[-] Help %s  │  [#cba6f7]Q[-] Quit",
 				iconConnect, iconServices, iconRefresh, iconHelp)
 		}
 	}

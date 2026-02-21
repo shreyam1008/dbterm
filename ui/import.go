@@ -3,13 +3,16 @@ package ui
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -29,6 +32,18 @@ const (
 	importLabelStopOnError = "Stop on first error"
 )
 
+var errImportCancelled = errors.New("sql import cancelled")
+
+type importClientRequirement struct {
+	binary string
+	label  string
+}
+
+type importProgressModal struct {
+	output                *tview.TextView
+	notifyCancelRequested func()
+}
+
 // showImportModal opens a modal for importing SQL dumps into the active PG/MySQL connection.
 func (a *App) showImportModal() {
 	returnPage, _ := a.pages.GetFrontPage()
@@ -36,24 +51,28 @@ func (a *App) showImportModal() {
 		returnPage = "main"
 	}
 
-	if a.db == nil {
-		a.ShowAlert(fmt.Sprintf("%s No active database connection.\n\nConnect to PostgreSQL or MySQL first.", iconInfo), returnPage)
-		return
-	}
-
 	cfg := a.currentConnectionConfig()
 	if cfg == nil {
-		a.ShowAlert(fmt.Sprintf("%s Could not resolve active connection details for import.", iconWarn), returnPage)
+		a.ShowAlert(fmt.Sprintf("%s No active database connection.\n\nConnect to PostgreSQL or MySQL first, or import from Dashboard using a saved connection.", iconInfo), returnPage)
 		return
 	}
 
-	if cfg.Type != config.PostgreSQL && cfg.Type != config.MySQL {
-		a.ShowAlert(fmt.Sprintf("%s SQL import is supported for PostgreSQL and MySQL only.", iconInfo), returnPage)
+	a.showImportModalForConnection(cfg, returnPage)
+}
+
+func (a *App) showImportModalForConnection(cfg *config.ConnectionConfig, returnPage string) {
+	if strings.TrimSpace(returnPage) == "" {
+		returnPage = "main"
+	}
+
+	targetCfg, err := validateImportTarget(cfg)
+	if err != nil {
+		a.ShowAlert(fmt.Sprintf("%s %v", iconWarn, err), returnPage)
 		return
 	}
 
-	if strings.TrimSpace(cfg.Database) == "" {
-		a.ShowAlert(fmt.Sprintf("%s Active connection is missing a database name.\n\nUpdate the connection and try again.", iconWarn), returnPage)
+	if a.isImportRunning() {
+		a.ShowAlert(fmt.Sprintf("%s Another SQL import is already running.\n\nWait for it to finish or cancel it first (Esc/Ctrl+C).", iconInfo), returnPage)
 		return
 	}
 
@@ -81,6 +100,11 @@ func (a *App) showImportModal() {
 	form.AddCheckbox(importLabelStopOnError, true, nil)
 
 	form.AddButton("Import", func() {
+		if a.isImportRunning() {
+			a.ShowAlert(fmt.Sprintf("%s Another SQL import is already running.", iconInfo), pageImportModal)
+			return
+		}
+
 		rawPath := formInputValue(form, importLabelSQLPath)
 		sqlPath, err := resolveImportSQLPath(rawPath)
 		if err != nil {
@@ -88,9 +112,14 @@ func (a *App) showImportModal() {
 			return
 		}
 
+		if err := ensureImportClientAvailable(targetCfg.Type); err != nil {
+			a.ShowAlert(fmt.Sprintf("%s %v", iconWarn, err), pageImportModal)
+			return
+		}
+
 		stopOnError := formCheckboxChecked(form, importLabelStopOnError)
 		a.pages.RemovePage(pageImportModal)
-		a.runSQLImport(cfg, sqlPath, stopOnError, returnPage)
+		a.runSQLImport(targetCfg, sqlPath, stopOnError, returnPage)
 	})
 	form.AddButton("Cancel", func() {
 		a.pages.RemovePage(pageImportModal)
@@ -106,31 +135,27 @@ func (a *App) showImportModal() {
 		return event
 	})
 
-	typeHint := "PostgreSQL uses ON_ERROR_STOP when enabled."
-	if cfg.Type == config.MySQL {
-		typeHint = "Disable stop-on-error to use mysql --force."
-	}
-
 	footer := tview.NewTextView().
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignCenter)
 	footer.SetBackgroundColor(crust)
 	footer.SetText(fmt.Sprintf(
-		" [#a6adc8]%s@%s:%s/%s[-]  │  [green]%s[-] recommended\n [#a6adc8]%s[-]",
-		nonEmptyOr(cfg.User, "user"),
-		nonEmptyOr(cfg.Host, "localhost"),
-		defaultPortFor(cfg),
-		nonEmptyOr(cfg.Database, "database"),
+		" [#a6adc8]%s@%s:%s/%s[-]  │  [green]%s[-] recommended\n [#a6adc8]%s[-]\n %s",
+		nonEmptyOr(targetCfg.User, "user"),
+		nonEmptyOr(targetCfg.Host, "localhost"),
+		defaultPortFor(targetCfg),
+		nonEmptyOr(targetCfg.Database, "database"),
 		importLabelStopOnError,
-		typeHint,
+		importStopOnErrorHint(targetCfg.Type),
+		importClientStatusText(targetCfg.Type),
 	))
 
 	container := tview.NewFlex().
 		SetDirection(tview.FlexRow).
 		AddItem(form, 0, 1, true).
-		AddItem(footer, 2, 0, false)
+		AddItem(footer, 3, 0, false)
 
-	modalW, modalH := a.modalSize(72, 112, 12, 18)
+	modalW, modalH := a.modalSize(72, 112, 14, 20)
 	grid := tview.NewGrid().
 		SetColumns(0, modalW, 0).
 		SetRows(0, modalH, 0).
@@ -141,52 +166,84 @@ func (a *App) showImportModal() {
 }
 
 func (a *App) runSQLImport(cfg *config.ConnectionConfig, sqlPath string, stopOnError bool, returnPage string) {
-	outputView := a.showImportProgressModal(cfg, sqlPath, stopOnError)
-	outputBuffer := newRollingImportOutput(importOutputLineLimit)
+	targetCfg, err := validateImportTarget(cfg)
+	if err != nil {
+		a.ShowAlert(fmt.Sprintf("%s %v", iconWarn, err), returnPage)
+		return
+	}
 
+	if err := ensureImportClientAvailable(targetCfg.Type); err != nil {
+		a.ShowAlert(fmt.Sprintf("%s %v", iconWarn, err), returnPage)
+		return
+	}
+
+	if a.isImportRunning() {
+		a.ShowAlert(fmt.Sprintf("%s Another SQL import is already running.", iconInfo), returnPage)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), importCommandTimeout)
+	if !a.beginImportRun(cancel, nil) {
+		cancel()
+		a.ShowAlert(fmt.Sprintf("%s Another SQL import is already running.", iconInfo), returnPage)
+		return
+	}
+
+	progress := a.showImportProgressModal(targetCfg, sqlPath, stopOnError)
+	a.setImportCancelNotifier(progress.notifyCancelRequested)
+
+	outputBuffer := newRollingImportOutput(importOutputLineLimit)
 	appendOutput := func(line string) {
 		line = strings.TrimRight(line, "\r\n")
 		a.app.QueueUpdateDraw(func() {
 			outputBuffer.Add(line)
-			outputView.SetText(outputBuffer.Text())
-			outputView.ScrollToEnd()
+			progress.output.SetText(outputBuffer.Text())
+			progress.output.ScrollToEnd()
 		})
 	}
 
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), importCommandTimeout)
 		defer cancel()
+		defer a.finishImportRun()
 
-		var err error
-		switch cfg.Type {
+		var runErr error
+		switch targetCfg.Type {
 		case config.PostgreSQL:
-			err = runPostgresSQLImport(ctx, cfg, sqlPath, stopOnError, appendOutput)
+			runErr = runPostgresSQLImport(ctx, targetCfg, sqlPath, stopOnError, appendOutput)
 		case config.MySQL:
-			err = runMySQLSQLImport(ctx, cfg, sqlPath, stopOnError, appendOutput)
+			runErr = runMySQLSQLImport(ctx, targetCfg, sqlPath, stopOnError, appendOutput)
 		default:
-			err = fmt.Errorf("SQL import is not supported for %s", cfg.TypeLabel())
+			runErr = fmt.Errorf("SQL import is not supported for %s", targetCfg.TypeLabel())
 		}
 
 		a.app.QueueUpdateDraw(func() {
 			a.pages.RemovePage(pageImportProgressModal)
 
-			if err != nil {
-				a.ShowAlert(fmt.Sprintf("%s SQL import failed:\n\n%v", iconFail, err), returnPage)
+			if runErr != nil {
+				if errors.Is(runErr, errImportCancelled) {
+					a.ShowAlert(fmt.Sprintf("%s SQL import cancelled by user.\n\nType: %s\nDatabase: %s", iconWarn,
+						targetCfg.TypeLabel(), nonEmptyOr(targetCfg.Database, "database")), returnPage)
+					return
+				}
+				a.ShowAlert(fmt.Sprintf("%s SQL import failed:\n\n%v", iconFail, runErr), returnPage)
 				return
 			}
 
-			if refreshErr := a.refreshData(); refreshErr != nil {
-				a.ShowAlert(fmt.Sprintf("%s SQL import completed, but refresh failed:\n\n%v", iconWarn, refreshErr), returnPage)
-				return
+			refreshedWorkspace := false
+			if a.shouldRefreshAfterImport(targetCfg) {
+				if refreshErr := a.refreshData(); refreshErr != nil {
+					a.ShowAlert(fmt.Sprintf("%s SQL import completed, but refresh failed:\n\n%v", iconWarn, refreshErr), returnPage)
+					return
+				}
+				refreshedWorkspace = true
 			}
 
-			a.ShowAlert(fmt.Sprintf("%s SQL import complete.\n\nType: %s\nDatabase: %s\nFile: %s", iconSuccess,
-				cfg.TypeLabel(), nonEmptyOr(cfg.Database, "database"), sqlPath), returnPage)
+			a.ShowAlert(buildImportSuccessMessage(targetCfg, sqlPath, returnPage, refreshedWorkspace), returnPage)
 		})
 	}()
 }
 
-func (a *App) showImportProgressModal(cfg *config.ConnectionConfig, sqlPath string, stopOnError bool) *tview.TextView {
+func (a *App) showImportProgressModal(cfg *config.ConnectionConfig, sqlPath string, stopOnError bool) *importProgressModal {
 	stopMode := "enabled"
 	if !stopOnError {
 		stopMode = "disabled"
@@ -216,19 +273,37 @@ func (a *App) showImportProgressModal(cfg *config.ConnectionConfig, sqlPath stri
 	outputView.SetBackgroundColor(bg)
 	outputView.SetTextColor(text)
 	outputView.SetText("Starting import...\n")
-	outputView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEscape {
-			// Ignore Esc while import is running to avoid losing visibility of command output.
-			return nil
-		}
-		return event
-	})
 
 	footer := tview.NewTextView().
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignCenter)
 	footer.SetBackgroundColor(crust)
-	footer.SetText(fmt.Sprintf(" [#a6adc8]Streaming client output... timeout: %s[-] ", importCommandTimeout.Round(time.Minute)))
+	footer.SetText(fmt.Sprintf(" [#a6adc8]Streaming client output... timeout: %s  │  [yellow]Esc[-]/[yellow]Ctrl+C[-] cancel[-] ", importCommandTimeout.Round(time.Minute)))
+
+	var cancelOnce sync.Once
+	notifyCancelRequested := func() {
+		cancelOnce.Do(func() {
+			a.app.QueueUpdateDraw(func() {
+				footer.SetText(" [yellow]Cancel requested... waiting for database client to stop safely.[-] ")
+				current := outputView.GetText(false)
+				if strings.TrimSpace(current) == "" {
+					current = "Starting import..."
+				}
+				if !strings.Contains(current, "Cancellation requested") {
+					outputView.SetText(current + "\nCancellation requested... stopping import.")
+					outputView.ScrollToEnd()
+				}
+			})
+		})
+	}
+
+	outputView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEscape {
+			a.requestImportCancel()
+			return nil
+		}
+		return event
+	})
 
 	container := tview.NewFlex().
 		SetDirection(tview.FlexRow).
@@ -244,12 +319,271 @@ func (a *App) showImportProgressModal(cfg *config.ConnectionConfig, sqlPath stri
 
 	a.pages.AddPage(pageImportProgressModal, grid, true, true)
 	a.app.SetFocus(outputView)
-	return outputView
+	return &importProgressModal{
+		output:                outputView,
+		notifyCancelRequested: notifyCancelRequested,
+	}
+}
+
+func validateImportTarget(cfg *config.ConnectionConfig) (*config.ConnectionConfig, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("could not resolve connection details for import")
+	}
+
+	target := cloneConnectionConfig(cfg)
+	target.Host = strings.TrimSpace(target.Host)
+	target.Port = strings.TrimSpace(target.Port)
+	target.User = strings.TrimSpace(target.User)
+	target.Database = strings.TrimSpace(target.Database)
+
+	if target.Type != config.PostgreSQL && target.Type != config.MySQL {
+		return nil, fmt.Errorf("SQL import is supported for PostgreSQL and MySQL only")
+	}
+
+	if target.Database == "" {
+		return nil, fmt.Errorf("selected connection is missing a database name. Update it and try again")
+	}
+
+	return target, nil
+}
+
+func importStopOnErrorHint(dbType config.DBType) string {
+	if dbType == config.MySQL {
+		return "Disable stop-on-error to run with mysql --force."
+	}
+	return "PostgreSQL uses ON_ERROR_STOP when enabled."
+}
+
+func importClientRequirementForType(dbType config.DBType) (importClientRequirement, error) {
+	switch dbType {
+	case config.PostgreSQL:
+		return importClientRequirement{binary: "psql", label: "PostgreSQL client"}, nil
+	case config.MySQL:
+		return importClientRequirement{binary: "mysql", label: "MySQL client"}, nil
+	default:
+		return importClientRequirement{}, fmt.Errorf("SQL import is not supported for %s", dbType)
+	}
+}
+
+func importClientStatusText(dbType config.DBType) string {
+	req, err := importClientRequirementForType(dbType)
+	if err != nil {
+		return "[#6c7086]Import client unavailable for this database type[-]"
+	}
+
+	if _, lookErr := exec.LookPath(req.binary); lookErr == nil {
+		return fmt.Sprintf(" [green]%s ready[-] ([#a6adc8]%s in PATH[-])", req.label, req.binary)
+	}
+
+	return fmt.Sprintf(" [red]%s missing[-] ([#a6adc8]%s[-])  │  [yellow]Install once to enable import[-]", req.label, req.binary)
+}
+
+func ensureImportClientAvailable(dbType config.DBType) error {
+	req, err := importClientRequirementForType(dbType)
+	if err != nil {
+		return err
+	}
+
+	if _, lookErr := exec.LookPath(req.binary); lookErr != nil {
+		return fmt.Errorf("%s not found in PATH (required binary: %s).\n\n%s", req.label, req.binary, importClientSetupHint(req.binary))
+	}
+
+	return nil
+}
+
+func importClientSetupHint(binary string) string {
+	switch runtime.GOOS {
+	case "linux":
+		switch binary {
+		case "psql":
+			return "Install PostgreSQL client tools and retry.\nUbuntu/Debian: sudo apt install postgresql-client\nFedora/RHEL: sudo dnf install postgresql\nArch: sudo pacman -S postgresql"
+		case "mysql":
+			return "Install MySQL client tools and retry.\nUbuntu/Debian: sudo apt install mysql-client\nFedora/RHEL: sudo dnf install community-mysql\nArch: sudo pacman -S mysql-clients"
+		}
+	case "darwin":
+		switch binary {
+		case "psql":
+			return "Install PostgreSQL client tools and retry.\nHomebrew: brew install libpq && brew link --force libpq"
+		case "mysql":
+			return "Install MySQL client tools and retry.\nHomebrew: brew install mysql-client\nThen add to PATH (if needed): export PATH=\"$(brew --prefix)/opt/mysql-client/bin:$PATH\""
+		}
+	case "windows":
+		switch binary {
+		case "psql":
+			return "Install PostgreSQL command-line tools and retry.\nwinget: winget install PostgreSQL.PostgreSQL\nThen reopen terminal so PATH updates."
+		case "mysql":
+			return "Install MySQL command-line tools and retry.\nwinget: winget install Oracle.MySQL\nThen reopen terminal so PATH updates."
+		}
+	}
+
+	return fmt.Sprintf("Install %q and ensure it is available in PATH, then retry.", binary)
+}
+
+func (a *App) beginImportRun(cancel context.CancelFunc, notify func()) bool {
+	a.importMu.Lock()
+	defer a.importMu.Unlock()
+
+	if a.importRunning {
+		return false
+	}
+
+	a.importRunning = true
+	a.importCancelRequested = false
+	a.importCancel = cancel
+	a.importCancelNotify = notify
+	return true
+}
+
+func (a *App) setImportCancelNotifier(notify func()) {
+	a.importMu.Lock()
+	defer a.importMu.Unlock()
+
+	if !a.importRunning {
+		return
+	}
+	a.importCancelNotify = notify
+}
+
+func (a *App) isImportRunning() bool {
+	a.importMu.Lock()
+	defer a.importMu.Unlock()
+	return a.importRunning
+}
+
+func (a *App) requestImportCancel() bool {
+	var cancel func()
+	var notify func()
+
+	a.importMu.Lock()
+	if !a.importRunning || a.importCancelRequested {
+		a.importMu.Unlock()
+		return false
+	}
+	a.importCancelRequested = true
+	cancel = a.importCancel
+	notify = a.importCancelNotify
+	a.importMu.Unlock()
+
+	if notify != nil {
+		notify()
+	}
+	if cancel != nil {
+		cancel()
+	}
+	return true
+}
+
+func (a *App) finishImportRun() {
+	a.importMu.Lock()
+	defer a.importMu.Unlock()
+
+	a.importRunning = false
+	a.importCancelRequested = false
+	a.importCancel = nil
+	a.importCancelNotify = nil
+}
+
+func (a *App) shouldRefreshAfterImport(importCfg *config.ConnectionConfig) bool {
+	if a == nil || a.db == nil || importCfg == nil {
+		return false
+	}
+
+	activeCfg := a.currentConnectionConfig()
+	if activeCfg == nil {
+		return false
+	}
+
+	return sameImportConnection(activeCfg, importCfg)
+}
+
+func sameImportConnection(activeCfg, importCfg *config.ConnectionConfig) bool {
+	if activeCfg == nil || importCfg == nil {
+		return false
+	}
+
+	if activeCfg.Type != importCfg.Type {
+		return false
+	}
+
+	if !strings.EqualFold(strings.TrimSpace(activeCfg.Host), strings.TrimSpace(importCfg.Host)) {
+		return false
+	}
+
+	if normalizeImportPort(activeCfg) != normalizeImportPort(importCfg) {
+		return false
+	}
+
+	if strings.TrimSpace(activeCfg.User) != strings.TrimSpace(importCfg.User) {
+		return false
+	}
+
+	if strings.TrimSpace(activeCfg.Database) != strings.TrimSpace(importCfg.Database) {
+		return false
+	}
+
+	return true
+}
+
+func normalizeImportPort(cfg *config.ConnectionConfig) string {
+	if cfg == nil {
+		return ""
+	}
+
+	port := strings.TrimSpace(cfg.Port)
+	if port != "" {
+		return port
+	}
+	if cfg.Type == config.MySQL {
+		return "3306"
+	}
+	if cfg.Type == config.PostgreSQL {
+		return "5432"
+	}
+	return ""
+}
+
+func buildImportSuccessMessage(cfg *config.ConnectionConfig, sqlPath, returnPage string, refreshedWorkspace bool) string {
+	msg := fmt.Sprintf("%s SQL import complete.\n\nType: %s\nDatabase: %s\nFile: %s",
+		iconSuccess,
+		cfg.TypeLabel(),
+		nonEmptyOr(cfg.Database, "database"),
+		sqlPath,
+	)
+
+	if refreshedWorkspace {
+		msg += "\nWorkspace: refreshed"
+		return msg
+	}
+
+	if returnPage == "dashboard" {
+		msg += "\nTip: Press Enter on this connection to inspect imported data."
+	}
+	return msg
+}
+
+func mapImportCommandError(ctx context.Context, clientName, tailOutput string, runErr error) error {
+	if runErr == nil {
+		return nil
+	}
+
+	if errors.Is(ctx.Err(), context.Canceled) {
+		return errImportCancelled
+	}
+
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return fmt.Errorf("%s import timed out after %s", clientName, importCommandTimeout.Round(time.Minute))
+	}
+
+	detail := strings.TrimSpace(tailOutput)
+	if detail == "" {
+		detail = runErr.Error()
+	}
+	return fmt.Errorf("%s import failed: %s", clientName, detail)
 }
 
 func runPostgresSQLImport(ctx context.Context, cfg *config.ConnectionConfig, sqlPath string, stopOnError bool, emit func(string)) error {
-	if _, err := exec.LookPath("psql"); err != nil {
-		return fmt.Errorf("psql not found in PATH. Install PostgreSQL client tools (for example: postgresql-client)")
+	if err := ensureImportClientAvailable(config.PostgreSQL); err != nil {
+		return err
 	}
 
 	database := strings.TrimSpace(cfg.Database)
@@ -285,23 +619,12 @@ func runPostgresSQLImport(ctx context.Context, cfg *config.ConnectionConfig, sql
 	}
 
 	tail, err := runStreamingCommand(cmd, emit, importTailLineLimit)
-	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
-			return fmt.Errorf("psql import timed out after %s", importCommandTimeout.Round(time.Minute))
-		}
-
-		detail := strings.TrimSpace(tail)
-		if detail == "" {
-			detail = err.Error()
-		}
-		return fmt.Errorf("psql import failed: %s", detail)
-	}
-	return nil
+	return mapImportCommandError(ctx, "psql", tail, err)
 }
 
 func runMySQLSQLImport(ctx context.Context, cfg *config.ConnectionConfig, sqlPath string, stopOnError bool, emit func(string)) error {
-	if _, err := exec.LookPath("mysql"); err != nil {
-		return fmt.Errorf("mysql not found in PATH. Install MySQL client tools (for example: mysql-client)")
+	if err := ensureImportClientAvailable(config.MySQL); err != nil {
+		return err
 	}
 
 	database := strings.TrimSpace(cfg.Database)
@@ -337,18 +660,7 @@ func runMySQLSQLImport(ctx context.Context, cfg *config.ConnectionConfig, sqlPat
 	}
 
 	tail, err := runStreamingCommand(cmd, emit, importTailLineLimit)
-	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
-			return fmt.Errorf("mysql import timed out after %s", importCommandTimeout.Round(time.Minute))
-		}
-
-		detail := strings.TrimSpace(tail)
-		if detail == "" {
-			detail = err.Error()
-		}
-		return fmt.Errorf("mysql import failed: %s", detail)
-	}
-	return nil
+	return mapImportCommandError(ctx, "mysql", tail, err)
 }
 
 func resolveImportSQLPath(rawPath string) (string, error) {
