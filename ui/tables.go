@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/shreyam1008/dbterm/config"
 	"github.com/shreyam1008/dbterm/utils"
 )
 
@@ -36,22 +37,40 @@ func (a *App) LoadTables() error {
 	currentSelection := a.selectedTable
 	foundSelection := false
 
+	if a.dbType == config.PostgreSQL {
+		appendInstanceDatabasesSection(a, currentSelection)
+	}
+
 	count := 0
 	selectedIndex := 0
+	lastNamespace := ""
 	for rows.Next() {
 		var tableName string
 		if err := rows.Scan(&tableName); err != nil {
 			return fmt.Errorf("could not read table name: %w", err)
 		}
+
+		namespace := namespaceForTable(a.dbType, tableName)
+		if namespace != "" && namespace != lastNamespace {
+			a.tables.AddItem(
+				fmt.Sprintf("[#6c7086]── %s %s (%s) ──[-]", iconTables, namespaceKindLabel(a.dbType), namespace),
+				"",
+				0,
+				nil,
+			)
+			lastNamespace = namespace
+		}
+
 		a.tables.AddItem(tableName, "", 0, nil)
+		itemIndex := a.tables.GetItemCount() - 1
 		if tableName == currentSelection {
-			selectedIndex = count
+			selectedIndex = itemIndex
 			foundSelection = true
 		}
 		count++
 	}
 
-	if !foundSelection && currentIndex >= 0 && currentIndex < count {
+	if !foundSelection && currentIndex >= 0 && currentIndex < a.tables.GetItemCount() {
 		selectedIndex = currentIndex
 	}
 
@@ -66,6 +85,9 @@ func (a *App) LoadTables() error {
 		a.selectedTable = ""
 		a.tables.AddItem(fmt.Sprintf("[gray]%s No tables found[-]", iconInfo), "", 0, nil)
 	} else {
+		if !isSelectableTableListItem(a.tables, selectedIndex) {
+			selectedIndex = firstSelectableTableIndex(a.tables)
+		}
 		a.tables.SetCurrentItem(selectedIndex)
 		if tableName, _ := a.tables.GetItemText(selectedIndex); !strings.HasPrefix(tableName, "[") {
 			a.selectedTable = tableName
@@ -87,4 +109,95 @@ func (a *App) LoadTables() error {
 	a.loadDatabaseObjects()
 
 	return rows.Err()
+}
+
+func appendInstanceDatabasesSection(a *App, currentSelection string) {
+	if a == nil || a.db == nil {
+		return
+	}
+
+	query := utils.ListDatabasesQuery(a.dbType)
+	if query == "" {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	rows, err := a.db.QueryContext(ctx, query)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	var databases []string
+	for rows.Next() {
+		var databaseName string
+		if err := rows.Scan(&databaseName); err != nil {
+			return
+		}
+		databases = append(databases, databaseName)
+	}
+	if len(databases) == 0 {
+		return
+	}
+
+	a.tables.AddItem(fmt.Sprintf("[#6c7086]── %s Instance Databases (%d) ──[-]", iconDatabase, len(databases)), "", 0, nil)
+	for _, databaseName := range databases {
+		label := databaseName
+		if strings.EqualFold(databaseName, currentSelection) || strings.EqualFold(databaseName, activeDatabaseName(a)) {
+			label += " [green](current)[-]"
+		}
+		a.tables.AddItem(fmt.Sprintf("[#6c7086]%s[-]", label), "", 0, nil)
+	}
+	a.tables.AddItem("[#6c7086]────────[-]", "", 0, nil)
+}
+
+func namespaceForTable(dbType config.DBType, tableName string) string {
+	parts := strings.SplitN(tableName, ".", 2)
+	if len(parts) == 2 {
+		return parts[0]
+	}
+	if dbType == config.PostgreSQL {
+		return "public"
+	}
+	return ""
+}
+
+func namespaceKindLabel(dbType config.DBType) string {
+	switch dbType {
+	case config.PostgreSQL:
+		return "Schema"
+	case config.MySQL:
+		return "Database"
+	default:
+		return "Group"
+	}
+}
+
+func activeDatabaseName(a *App) string {
+	if a == nil || a.activeConn == nil {
+		return ""
+	}
+	return strings.TrimSpace(a.activeConn.Database)
+}
+
+func firstSelectableTableIndex(list interface {
+	GetItemCount() int
+	GetItemText(index int) (string, string)
+}) int {
+	count := list.GetItemCount()
+	for i := 0; i < count; i++ {
+		if isSelectableTableListItem(list, i) {
+			return i
+		}
+	}
+	return 0
+}
+
+func isSelectableTableListItem(list interface {
+	GetItemText(index int) (string, string)
+}, index int) bool {
+	label, _ := list.GetItemText(index)
+	return !strings.HasPrefix(label, "[")
 }

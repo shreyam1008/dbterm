@@ -112,7 +112,7 @@ func (a *App) showImportModalForConnection(cfg *config.ConnectionConfig, returnP
 			return
 		}
 
-		if err := ensureImportClientAvailable(targetCfg.Type); err != nil {
+		if err := ensureImportClientAvailableForFile(targetCfg.Type, sqlPath); err != nil {
 			a.ShowAlert(fmt.Sprintf("%s %v", iconWarn, err), pageImportModal)
 			return
 		}
@@ -172,7 +172,7 @@ func (a *App) runSQLImport(cfg *config.ConnectionConfig, sqlPath string, stopOnE
 		return
 	}
 
-	if err := ensureImportClientAvailable(targetCfg.Type); err != nil {
+	if err := ensureImportClientAvailableForFile(targetCfg.Type, sqlPath); err != nil {
 		a.ShowAlert(fmt.Sprintf("%s %v", iconWarn, err), returnPage)
 		return
 	}
@@ -351,7 +351,7 @@ func importStopOnErrorHint(dbType config.DBType) string {
 	if dbType == config.MySQL {
 		return "Disable stop-on-error to run with mysql --force."
 	}
-	return "PostgreSQL uses ON_ERROR_STOP when enabled."
+	return "PostgreSQL uses ON_ERROR_STOP for .sql and --exit-on-error for .dump."
 }
 
 func importClientRequirementForType(dbType config.DBType) (importClientRequirement, error) {
@@ -391,11 +391,23 @@ func ensureImportClientAvailable(dbType config.DBType) error {
 	return nil
 }
 
+func ensureImportClientAvailableForFile(dbType config.DBType, path string) error {
+	if dbType == config.PostgreSQL && isPostgresArchiveDump(path) {
+		if _, err := exec.LookPath("pg_restore"); err != nil {
+			return fmt.Errorf("PostgreSQL restore tool not found in PATH (required binary: pg_restore).\n\n%s", importClientSetupHint("pg_restore"))
+		}
+		return nil
+	}
+	return ensureImportClientAvailable(dbType)
+}
+
 func importClientSetupHint(binary string) string {
 	switch runtime.GOOS {
 	case "linux":
 		switch binary {
 		case "psql":
+			return "Install PostgreSQL client tools and retry.\nUbuntu/Debian: sudo apt install postgresql-client\nFedora/RHEL: sudo dnf install postgresql\nArch: sudo pacman -S postgresql"
+		case "pg_restore":
 			return "Install PostgreSQL client tools and retry.\nUbuntu/Debian: sudo apt install postgresql-client\nFedora/RHEL: sudo dnf install postgresql\nArch: sudo pacman -S postgresql"
 		case "mysql":
 			return "Install MySQL client tools and retry.\nUbuntu/Debian: sudo apt install mysql-client\nFedora/RHEL: sudo dnf install community-mysql\nArch: sudo pacman -S mysql-clients"
@@ -404,12 +416,16 @@ func importClientSetupHint(binary string) string {
 		switch binary {
 		case "psql":
 			return "Install PostgreSQL client tools and retry.\nHomebrew: brew install libpq && brew link --force libpq"
+		case "pg_restore":
+			return "Install PostgreSQL client tools and retry.\nHomebrew: brew install libpq && brew link --force libpq"
 		case "mysql":
 			return "Install MySQL client tools and retry.\nHomebrew: brew install mysql-client\nThen add to PATH (if needed): export PATH=\"$(brew --prefix)/opt/mysql-client/bin:$PATH\""
 		}
 	case "windows":
 		switch binary {
 		case "psql":
+			return "Install PostgreSQL command-line tools and retry.\nwinget: winget install PostgreSQL.PostgreSQL\nThen reopen terminal so PATH updates."
+		case "pg_restore":
 			return "Install PostgreSQL command-line tools and retry.\nwinget: winget install PostgreSQL.PostgreSQL\nThen reopen terminal so PATH updates."
 		case "mysql":
 			return "Install MySQL command-line tools and retry.\nwinget: winget install Oracle.MySQL\nThen reopen terminal so PATH updates."
@@ -582,6 +598,9 @@ func mapImportCommandError(ctx context.Context, clientName, tailOutput string, r
 }
 
 func runPostgresSQLImport(ctx context.Context, cfg *config.ConnectionConfig, sqlPath string, stopOnError bool, emit func(string)) error {
+	if isPostgresArchiveDump(sqlPath) {
+		return runPostgresArchiveImport(ctx, cfg, sqlPath, stopOnError, emit)
+	}
 	if err := ensureImportClientAvailable(config.PostgreSQL); err != nil {
 		return err
 	}
@@ -620,6 +639,51 @@ func runPostgresSQLImport(ctx context.Context, cfg *config.ConnectionConfig, sql
 
 	tail, err := runStreamingCommand(cmd, emit, importTailLineLimit)
 	return mapImportCommandError(ctx, "psql", tail, err)
+}
+
+func runPostgresArchiveImport(ctx context.Context, cfg *config.ConnectionConfig, dumpPath string, stopOnError bool, emit func(string)) error {
+	if err := ensureImportClientAvailableForFile(config.PostgreSQL, dumpPath); err != nil {
+		return err
+	}
+
+	database := strings.TrimSpace(cfg.Database)
+	if database == "" {
+		return fmt.Errorf("active PostgreSQL connection is missing a database name")
+	}
+
+	args := []string{
+		"--host", nonEmptyOr(cfg.Host, "localhost"),
+		"--port", defaultPortFor(cfg),
+		"--dbname", database,
+		"--clean",
+		"--if-exists",
+		"--no-owner",
+		"--no-privileges",
+	}
+	if user := strings.TrimSpace(cfg.User); user != "" {
+		args = append(args, "--username", user)
+	}
+	if stopOnError {
+		args = append(args, "--exit-on-error")
+	}
+	if strings.TrimSpace(cfg.Password) == "" {
+		args = append(args, "--no-password")
+	}
+	args = append(args, dumpPath)
+
+	emitImportCommand(emit, "pg_restore", args, "")
+
+	cmd := exec.CommandContext(ctx, "pg_restore", args...)
+	cmd.Env = append(os.Environ(), "LC_ALL=C")
+	if cfg.Password != "" {
+		cmd.Env = append(cmd.Env, "PGPASSWORD="+cfg.Password)
+	}
+	if cfg.SSLMode != "" {
+		cmd.Env = append(cmd.Env, "PGSSLMODE="+cfg.SSLMode)
+	}
+
+	tail, err := runStreamingCommand(cmd, emit, importTailLineLimit)
+	return mapImportCommandError(ctx, "pg_restore", tail, err)
 }
 
 func runMySQLSQLImport(ctx context.Context, cfg *config.ConnectionConfig, sqlPath string, stopOnError bool, emit func(string)) error {
@@ -697,6 +761,15 @@ func resolveImportSQLPath(rawPath string) (string, error) {
 	_ = f.Close()
 
 	return cleaned, nil
+}
+
+func isPostgresArchiveDump(path string) bool {
+	switch strings.ToLower(filepath.Ext(strings.TrimSpace(path))) {
+	case ".dump", ".backup", ".pgdump":
+		return true
+	default:
+		return false
+	}
 }
 
 func expandHomePath(path string) (string, error) {

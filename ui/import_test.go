@@ -117,6 +117,23 @@ func TestResolveImportSQLPath(t *testing.T) {
 	}
 }
 
+func TestIsPostgresArchiveDump(t *testing.T) {
+	tests := map[string]bool{
+		"/tmp/app.dump":    true,
+		"/tmp/app.backup":  true,
+		"/tmp/app.pgdump":  true,
+		"/tmp/app.sql":     false,
+		"/tmp/app.tar.gz":  false,
+		"  /tmp/app.dump ": true,
+	}
+
+	for path, want := range tests {
+		if got := isPostgresArchiveDump(path); got != want {
+			t.Fatalf("isPostgresArchiveDump(%q) = %v, want %v", path, got, want)
+		}
+	}
+}
+
 func TestMapImportCommandError(t *testing.T) {
 	t.Run("nil run error", func(t *testing.T) {
 		if err := mapImportCommandError(context.Background(), "psql", "", nil); err != nil {
