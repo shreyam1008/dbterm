@@ -40,6 +40,10 @@ func (a *App) showHelp() {
   S ................. Sort by current column (in Results)
   Enter ............. Open row details (in Results)
   Space ............. Toggle current row selection (in Results)
+  PgDn / ] .......... Next page of results
+  PgUp / [ .......... Previous page of results
+  Home .............. First page of results
+  End ............... Last page of results
   Alt + = / - ....... Increase / decrease preview row limit
   Alt + 0 ........... Toggle preview limit (100 ↔ all rows)
   Ctrl + = / - ...... Zoom all result columns wider / narrower

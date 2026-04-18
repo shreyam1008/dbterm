@@ -57,6 +57,10 @@ type App struct {
 	queryStart    time.Time
 	resultLimit   int // >0 preview rows, -1 means no limit (all rows)
 
+	// Pagination state
+	pageOffset    int // current OFFSET for paginated table browsing
+	totalRowCount int // cached COUNT(*) for the selected table (-1 = unknown)
+
 	// Layout components for scaling
 	rightFlex *tview.Flex
 	mainFlex  *tview.Flex
@@ -116,12 +120,13 @@ func NewApp() *App {
 	}
 
 	return &App{
-		app:         tview.NewApplication(),
-		store:       store,
-		settings:    settings,
-		keymap:      keymap,
-		historyMgr:  historyMgr,
-		resultLimit: defaultTablePreviewLimit,
+		app:           tview.NewApplication(),
+		store:         store,
+		settings:      settings,
+		keymap:        keymap,
+		historyMgr:    historyMgr,
+		resultLimit:   defaultTablePreviewLimit,
+		totalRowCount: -1,
 	}
 }
 
@@ -201,6 +206,28 @@ func (a *App) setupUI() {
 			return nil
 		case ' ':
 			a.toggleCurrentResultRowSelection()
+			return nil
+		case ']':
+			a.nextPage()
+			return nil
+		case '[':
+			a.prevPage()
+			return nil
+		}
+
+		// Pagination: PgDn/PgUp for next/prev page, Home/End for first/last page
+		switch event.Key() {
+		case tcell.KeyPgDn:
+			a.nextPage()
+			return nil
+		case tcell.KeyPgUp:
+			a.prevPage()
+			return nil
+		case tcell.KeyHome:
+			a.firstPage()
+			return nil
+		case tcell.KeyEnd:
+			a.lastPage()
 			return nil
 		}
 
@@ -312,6 +339,9 @@ func (a *App) updateStatusBar(extra string, rowCount int) {
 	}
 	if width >= 84 {
 		parts = append(parts, a.resultLimitStatus(width))
+	}
+	if width >= 70 {
+		parts = append(parts, a.paginationStatus(width))
 	}
 	if width >= 104 {
 		parts = append(parts, a.sortStatus(width))
@@ -457,6 +487,7 @@ func (a *App) setResultLimit(limit int) {
 
 	prevLimit := a.resultLimit
 	a.resultLimit = limit
+	a.pageOffset = 0 // reset to first page when page size changes
 	if a.db == nil || a.selectedTable == "" {
 		a.updateStatusBar("", a.currentResultRowCount())
 		return
@@ -530,6 +561,31 @@ func (a *App) resultLimitStatus(width int) string {
 		return "[#a6adc8]preview[-] [yellow]all[-]"
 	}
 	return fmt.Sprintf("[#a6adc8]preview[-] [yellow]%d[-]", limit)
+}
+
+func (a *App) paginationStatus(width int) string {
+	limit := a.effectiveResultLimit()
+	if limit <= 0 {
+		return ""
+	}
+	page := (a.pageOffset / limit) + 1
+	if a.totalRowCount >= 0 {
+		totalPages := (a.totalRowCount + limit - 1) / limit
+		if totalPages < 1 {
+			totalPages = 1
+		}
+		if width < 120 {
+			return fmt.Sprintf("[#a6adc8]pg[-]:[yellow]%d/%d[-]", page, totalPages)
+		}
+		return fmt.Sprintf("[#a6adc8]page[-] [yellow]%d/%d[-]", page, totalPages)
+	}
+	if a.pageOffset > 0 {
+		if width < 120 {
+			return fmt.Sprintf("[#a6adc8]pg[-]:[yellow]%d[-]", page)
+		}
+		return fmt.Sprintf("[#a6adc8]page[-] [yellow]%d[-]", page)
+	}
+	return ""
 }
 
 func (a *App) sortStatus(width int) string {

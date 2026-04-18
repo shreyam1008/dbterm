@@ -36,6 +36,7 @@ type resultSelectionState struct {
 }
 
 // LoadResults loads data from the selected table into the results view
+// using OFFSET/LIMIT pagination to bound memory usage.
 func (a *App) LoadResults() error {
 	if a.selectedTable == "" {
 		return nil
@@ -50,9 +51,10 @@ func (a *App) LoadResults() error {
 
 	// DB-specific quoting for identifiers
 	quotedTable := quoteIdentifier(a.dbType, a.selectedTable)
+	limit := a.effectiveResultLimit()
 	query := fmt.Sprintf("SELECT * FROM %s", quotedTable)
-	if limit := a.effectiveResultLimit(); limit > 0 {
-		query = fmt.Sprintf("%s LIMIT %d", query, limit)
+	if limit > 0 {
+		query = fmt.Sprintf("%s LIMIT %d OFFSET %d", query, limit, a.pageOffset)
 	}
 
 	a.queryStart = time.Now()
@@ -84,13 +86,121 @@ func (a *App) LoadResults() error {
 
 	a.restoreResultSelection(selection, rowCount)
 
-	elapsed := time.Since(a.queryStart)
-	a.results.SetTitle(fmt.Sprintf(" %s [yellow]%s[-] — [green]%d rows[-] in [teal]%s[-] ",
-		iconResults, a.selectedTable, rowCount, formatDuration(elapsed)))
+	// Fetch total row count asynchronously for pagination display
+	go a.fetchTotalRowCount(quotedTable)
 
+	elapsed := time.Since(a.queryStart)
+	a.results.SetTitle(a.paginatedResultTitle(rowCount, elapsed))
 	a.updateStatusBar("", rowCount)
 
 	return nil
+}
+
+// fetchTotalRowCount queries COUNT(*) for the selected table and updates the title.
+func (a *App) fetchTotalRowCount(quotedTable string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var total int
+	err := a.db.QueryRowContext(ctx, fmt.Sprintf("SELECT COUNT(*) FROM %s", quotedTable)).Scan(&total)
+	if err != nil {
+		return
+	}
+
+	a.app.QueueUpdateDraw(func() {
+		a.totalRowCount = total
+		a.results.SetTitle(a.paginatedResultTitle(a.currentResultRowCount(), time.Since(a.queryStart)))
+		a.updateStatusBar("", a.currentResultRowCount())
+	})
+}
+
+// paginatedResultTitle builds the results panel title with page info.
+func (a *App) paginatedResultTitle(rowCount int, elapsed time.Duration) string {
+	limit := a.effectiveResultLimit()
+	base := fmt.Sprintf(" %s [yellow]%s[-] — [green]%d rows[-] in [teal]%s[-]",
+		iconResults, a.selectedTable, rowCount, formatDuration(elapsed))
+
+	if limit > 0 && a.totalRowCount >= 0 {
+		page := (a.pageOffset / limit) + 1
+		totalPages := (a.totalRowCount + limit - 1) / limit
+		if totalPages < 1 {
+			totalPages = 1
+		}
+		return fmt.Sprintf("%s [#a6adc8](page %d/%d, %d total)[-] ", base, page, totalPages, a.totalRowCount)
+	}
+	if limit > 0 && a.pageOffset > 0 {
+		page := (a.pageOffset / limit) + 1
+		return fmt.Sprintf("%s [#a6adc8](page %d)[-] ", base, page)
+	}
+	return base + " "
+}
+
+// resetPagination resets page offset and cached total (call when switching tables).
+func (a *App) resetPagination() {
+	a.pageOffset = 0
+	a.totalRowCount = -1
+}
+
+// nextPage advances to the next page of results.
+func (a *App) nextPage() {
+	limit := a.effectiveResultLimit()
+	if limit <= 0 {
+		return
+	}
+	// Don't advance past the last page
+	if a.totalRowCount >= 0 && a.pageOffset+limit >= a.totalRowCount {
+		return
+	}
+	a.pageOffset += limit
+	if err := a.LoadResults(); err != nil {
+		a.pageOffset -= limit
+		a.ShowAlert(fmt.Sprintf("%s Could not load next page:\n\n%v", iconWarn, err), "main")
+	}
+}
+
+// prevPage goes back one page of results.
+func (a *App) prevPage() {
+	limit := a.effectiveResultLimit()
+	if limit <= 0 || a.pageOffset <= 0 {
+		return
+	}
+	a.pageOffset -= limit
+	if a.pageOffset < 0 {
+		a.pageOffset = 0
+	}
+	if err := a.LoadResults(); err != nil {
+		a.ShowAlert(fmt.Sprintf("%s Could not load previous page:\n\n%v", iconWarn, err), "main")
+	}
+}
+
+// firstPage jumps to the first page.
+func (a *App) firstPage() {
+	if a.pageOffset == 0 {
+		return
+	}
+	a.pageOffset = 0
+	if err := a.LoadResults(); err != nil {
+		a.ShowAlert(fmt.Sprintf("%s Could not load first page:\n\n%v", iconWarn, err), "main")
+	}
+}
+
+// lastPage jumps to the last page.
+func (a *App) lastPage() {
+	limit := a.effectiveResultLimit()
+	if limit <= 0 || a.totalRowCount < 0 {
+		return
+	}
+	lastOffset := ((a.totalRowCount - 1) / limit) * limit
+	if lastOffset < 0 {
+		lastOffset = 0
+	}
+	if a.pageOffset == lastOffset {
+		return
+	}
+	a.pageOffset = lastOffset
+	if err := a.LoadResults(); err != nil {
+		a.ShowAlert(fmt.Sprintf("%s Could not load last page:\n\n%v", iconWarn, err), "main")
+	}
 }
 
 func (a *App) captureResultSelection() resultSelectionState {
