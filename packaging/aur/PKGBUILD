@@ -1,0 +1,52 @@
+# Maintainer: Shreyam Adhikari <shreyam1008@gmail.com>
+pkgname=dbterm-bin
+pkgver=0.4.1
+pkgrel=1
+pkgdesc="Keyboard-first terminal database client for PostgreSQL, MySQL, SQLite, Turso, and Cloudflare D1"
+arch=('x86_64' 'aarch64')
+url="https://shreyam1008.github.io/dbterm/"
+license=('MIT')
+depends=()
+provides=('dbterm')
+conflicts=('dbterm' 'dbterm-git')
+
+source_x86_64=("dbterm-linux-amd64::https://github.com/shreyam1008/dbterm/releases/download/v${pkgver}/dbterm-linux-amd64")
+source_aarch64=("dbterm-linux-arm64::https://github.com/shreyam1008/dbterm/releases/download/v${pkgver}/dbterm-linux-arm64")
+
+# TODO: Replace sha256sums with actual values from GitHub Releases.
+# Run: sha256sum dbterm-linux-amd64   after downloading the binary.
+sha256sums_x86_64=('SKIP')
+sha256sums_aarch64=('SKIP')
+
+package() {
+    cd "$srcdir"
+
+    if [ "$CARCH" = "x86_64" ]; then
+        install -Dm755 "dbterm-linux-amd64" "$pkgdir/usr/bin/dbterm"
+    elif [ "$CARCH" = "aarch64" ]; then
+        install -Dm755 "dbterm-linux-arm64" "$pkgdir/usr/bin/dbterm"
+    fi
+
+    install -Dm644 /dev/stdin "$pkgdir/usr/share/licenses/$pkgname/LICENSE" << 'EOF'
+MIT License — Copyright (c) 2026 Shreyam Adhikari
+See https://github.com/shreyam1008/dbterm/blob/main/LICENSE for full text.
+EOF
+}
+
+# HOW TO PUBLISH TO AUR:
+#
+# 1. Create an AUR account at https://aur.archlinux.org
+# 2. Add your SSH key in AUR account settings.
+# 3. Clone the empty AUR package repo:
+#      git clone ssh://aur@aur.archlinux.org/dbterm-bin.git
+# 4. Copy this PKGBUILD into that directory.
+# 5. Generate .SRCINFO:
+#      makepkg --printsrcinfo > .SRCINFO
+# 6. Commit and push:
+#      git add PKGBUILD .SRCINFO
+#      git commit -m "Initial release v0.4.1"
+#      git push
+# 7. Test install before pushing:
+#      makepkg -si
+#
+# Also consider a dbterm-git package that builds from HEAD.
