@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+PackageIdentifier: ShreyamAdhikari.dbterm
+PackageVersion: 0.4.1
+DefaultLocale: en-US
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0
+
+PackageName: dbterm
+Publisher: Shreyam Adhikari
+PublisherUrl: https://shreyam1008.com.np/
+PublisherSupportUrl: https://github.com/shreyam1008/dbterm/issues
+Author: Shreyam Adhikari
+License: MIT
+LicenseUrl: https://github.com/shreyam1008/dbterm/blob/main/LICENSE
+Copyright: Copyright (c) 2026 Shreyam Adhikari
+ShortDescription: Keyboard-first terminal database client for PostgreSQL, MySQL, SQLite, Turso, and D1
+Description: |-
+  dbterm is a keyboard-first terminal SQL client. Like DBeaver or DataGrip
+  but for the terminal. Supports PostgreSQL, MySQL, SQLite, Turso/LibSQL,
+  and Cloudflare D1. Features include a query editor with results paging,
+  schema and table browsing, service controls, backup, and import helpers.
+  Single static binary, low memory, works over SSH.
+Moniker: dbterm
+Tags:
+  - database
+  - sql
+  - terminal
+  - tui
+  - postgresql
+  - mysql
+  - sqlite
+  - turso
+  - cloudflare-d1
+  - cli
+PackageUrl: https://shreyam1008.github.io/dbterm/
+ReleaseNotesUrl: https://github.com/shreyam1008/dbterm/releases/tag/v0.4.1

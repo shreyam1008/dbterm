@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.6.0.schema.json
+PackageIdentifier: ShreyamAdhikari.dbterm
+PackageVersion: 0.4.1
+ManifestType: installer
+ManifestVersion: 1.6.0
+
+InstallerLocale: en-US
+InstallerType: portable
+UpgradeBehavior: install
+
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/shreyam1008/dbterm/releases/download/v0.4.1/dbterm-windows-amd64.exe
+    # TODO: Replace with actual SHA256 of the Windows amd64 binary.
+    # Run: sha256sum dbterm-windows-amd64.exe   (Linux/macOS)
+    # or:  certutil -hashfile dbterm-windows-amd64.exe SHA256  (Windows)
+    InstallerSha256: 0000000000000000000000000000000000000000000000000000000000000000
+    PortableCommandAlias: dbterm
+
+  - Architecture: arm64
+    InstallerUrl: https://github.com/shreyam1008/dbterm/releases/download/v0.4.1/dbterm-windows-arm64.exe
+    # TODO: Replace with actual SHA256 of the Windows arm64 binary.
+    InstallerSha256: 0000000000000000000000000000000000000000000000000000000000000000
+    PortableCommandAlias: dbterm
