@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -23,12 +24,23 @@ func (a *App) showSelectedTableMetadata() {
 	}
 
 	tableName := a.selectedTable
-	a.showLoadingModal(fmt.Sprintf("%s Inspecting %s...", iconTables, tableName))
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	var canceled atomic.Bool
+	a.showLoadingModal(fmt.Sprintf("%s Inspecting %s...", iconTables, tableName),
+		withLoadingCancel("Press Esc to cancel schema inspection.", func() {
+			canceled.Store(true)
+			cancel()
+		}))
 
 	go func() {
-		summary, err := a.buildSelectedTableMetadata(tableName)
+		defer cancel()
+		summary, err := a.buildSelectedTableMetadata(ctx, tableName)
 		a.app.QueueUpdateDraw(func() {
 			a.pages.RemovePage("loading")
+			if canceled.Load() {
+				a.ShowAlert(fmt.Sprintf("%s Schema inspection canceled for %s.", iconWarn, tableName), "main")
+				return
+			}
 			if err != nil {
 				a.ShowAlert(fmt.Sprintf("%s Could not inspect %s:\n\n%v", iconWarn, tableName, err), "main")
 				return
@@ -72,25 +84,22 @@ func (a *App) showMetadataModal(tableName, summary string) {
 	a.app.SetFocus(view)
 }
 
-func (a *App) buildSelectedTableMetadata(tableName string) (string, error) {
+func (a *App) buildSelectedTableMetadata(ctx context.Context, tableName string) (string, error) {
 	switch a.dbType {
 	case config.PostgreSQL:
-		return a.buildPostgresTableMetadata(tableName)
+		return a.buildPostgresTableMetadata(ctx, tableName)
 	case config.MySQL:
-		return a.buildMySQLTableMetadata(tableName)
+		return a.buildMySQLTableMetadata(ctx, tableName)
 	case config.SQLite, config.Turso, config.CloudflareD1:
-		return a.buildSQLiteTableMetadata(tableName)
+		return a.buildSQLiteTableMetadata(ctx, tableName)
 	default:
 		return "", fmt.Errorf("schema inspection is not supported for %s", a.dbType)
 	}
 }
 
-func (a *App) buildPostgresTableMetadata(tableName string) (string, error) {
+func (a *App) buildPostgresTableMetadata(ctx context.Context, tableName string) (string, error) {
 	schemaName, tableOnly := splitQualifiedIdentifier(tableName)
 	schemaName = a.defaultObjectNamespace(schemaName)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-	defer cancel()
 
 	var out strings.Builder
 	out.WriteString(fmt.Sprintf("[::b][#89b4fa]%s[-][-]\n\n", tableName))
@@ -188,12 +197,9 @@ ORDER BY indexname`, schemaName, tableOnly)
 	return strings.TrimSpace(out.String()), nil
 }
 
-func (a *App) buildMySQLTableMetadata(tableName string) (string, error) {
+func (a *App) buildMySQLTableMetadata(ctx context.Context, tableName string) (string, error) {
 	schemaName, tableOnly := splitQualifiedIdentifier(tableName)
 	schemaName = a.defaultObjectNamespace(schemaName)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-	defer cancel()
 
 	var out strings.Builder
 	out.WriteString(fmt.Sprintf("[::b][#f9e2af]%s[-][-]\n\n", tableName))
@@ -273,12 +279,9 @@ ORDER BY index_name, seq_in_index`, schemaName, tableOnly)
 	return strings.TrimSpace(out.String()), nil
 }
 
-func (a *App) buildSQLiteTableMetadata(tableName string) (string, error) {
+func (a *App) buildSQLiteTableMetadata(ctx context.Context, tableName string) (string, error) {
 	_, tableOnly := splitQualifiedIdentifier(tableName)
 	target := quoteIdentifier(a.dbType, tableOnly)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-	defer cancel()
 
 	var out strings.Builder
 	out.WriteString(fmt.Sprintf("[::b][#a6e3a1]%s[-][-]\n\n", tableName))
