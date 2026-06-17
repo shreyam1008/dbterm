@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -141,10 +142,15 @@ func (a *App) runDatabaseBackup(cfg *config.ConnectionConfig, outputPath, return
 		return
 	}
 
-	a.showLoadingModal(fmt.Sprintf("%s Creating %s...", iconBackup, plan.formatLabel))
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
+	var canceled atomic.Bool
+	a.showLoadingModal(fmt.Sprintf("%s Creating %s...", iconBackup, plan.formatLabel),
+		withLoadingCancel("Press Esc to cancel backup.", func() {
+			canceled.Store(true)
+			cancel()
+		}))
 
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 		defer cancel()
 
 		dumpErr := runDatabaseDump(ctx, cfg, outputPath)
@@ -160,6 +166,11 @@ func (a *App) runDatabaseBackup(cfg *config.ConnectionConfig, outputPath, return
 
 		a.app.QueueUpdateDraw(func() {
 			a.pages.RemovePage("loading")
+
+			if canceled.Load() {
+				a.ShowAlert(fmt.Sprintf("%s Backup canceled.", iconWarn), returnPage)
+				return
+			}
 
 			if dumpErr != nil {
 				a.ShowAlert(fmt.Sprintf("%s Backup failed:\n\n%v", iconFail, dumpErr), returnPage)
