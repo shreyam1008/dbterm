@@ -79,7 +79,8 @@ func cloneSettings(settings *config.Settings) *config.Settings {
 	}
 
 	cloned := &config.Settings{
-		Keymap: make(map[string][]string, len(settings.Keymap)),
+		Keymap:                make(map[string][]string, len(settings.Keymap)),
+		DashboardHealthChecks: settings.DashboardHealthChecks,
 	}
 
 	for action, bindings := range settings.Keymap {
@@ -118,7 +119,7 @@ func (a *App) showSettings() {
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignCenter)
 	summary.SetBackgroundColor(bg)
-	summary.SetText("[#6c7086]Use | to separate bindings (example: alt+t | ctrl+t). Saved at ~/.config/dbterm/settings.json[-]")
+	summary.SetText("[#6c7086]Use | to separate bindings. Dashboard health checks: auto or manual. Saved at ~/.config/dbterm/settings.json[-]")
 
 	form := tview.NewForm()
 	form.SetBorder(true).
@@ -131,6 +132,8 @@ func (a *App) showSettings() {
 		SetButtonTextColor(green).
 		SetLabelColor(text).
 		SetFieldTextColor(text)
+
+	form.AddInputField("Dashboard Health Checks", settings.DashboardHealthChecks, 48, nil, nil)
 
 	for _, field := range fields {
 		form.AddInputField(field.Label, keymapFieldValue(settings, field.Action), 48, nil, nil)
@@ -153,6 +156,17 @@ func (a *App) showSettings() {
 		updated := cloneSettings(settings)
 		if updated.Keymap == nil {
 			updated.Keymap = map[string][]string{}
+		}
+
+		mode := strings.ToLower(strings.TrimSpace(formInputValue(form, "Dashboard Health Checks")))
+		switch mode {
+		case "", "auto":
+			updated.DashboardHealthChecks = "auto"
+		case "manual", "disabled", "off":
+			updated.DashboardHealthChecks = "manual"
+		default:
+			a.ShowAlert(fmt.Sprintf("%s Dashboard Health Checks must be auto or manual.", iconWarn), pageSettings)
+			return
 		}
 
 		for _, field := range fields {
@@ -183,6 +197,7 @@ func (a *App) showSettings() {
 
 	resetFunc := func() {
 		defaults := config.DefaultSettings()
+		setFormInputValue(form, "Dashboard Health Checks", defaults.DashboardHealthChecks)
 		for _, field := range fields {
 			setFormInputValue(form, field.Label, keymapFieldValue(defaults, field.Action))
 		}
