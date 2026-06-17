@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"database/sql"
 	"encoding/csv"
 	"fmt"
 	"os"
@@ -31,6 +32,99 @@ type resultRowSelectionRef string
 
 const resultRowRefSelected resultRowSelectionRef = "selected"
 
+type paginationMode string
+
+const (
+	paginationModeOffset paginationMode = "offset"
+	paginationModeKeyset paginationMode = "keyset"
+)
+
+func (a *App) paginationMode() paginationMode {
+	if a.pageKey != "" {
+		return paginationModeKeyset
+	}
+	return paginationModeOffset
+}
+
+func (a *App) paginationModeLabel() string {
+	if a.pageKey != "" {
+		return "keyset:" + a.pageKey
+	}
+	return "offset"
+}
+
+func (a *App) placeholder(n int) string {
+	if a.dbType == config.PostgreSQL {
+		return fmt.Sprintf("$%d", n)
+	}
+	return "?"
+}
+
+func (a *App) detectPaginationKey(tableName string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	schemaName, tableOnly := splitQualifiedIdentifier(tableName)
+	schemaName = a.defaultObjectNamespace(schemaName)
+
+	switch a.dbType {
+	case config.PostgreSQL:
+		return a.querySingleColumnKey(ctx, `SELECT MIN(kcu.column_name)
+FROM information_schema.table_constraints tc
+JOIN information_schema.key_column_usage kcu
+  ON tc.constraint_name = kcu.constraint_name
+ AND tc.table_schema = kcu.table_schema
+ AND tc.table_name = kcu.table_name
+WHERE tc.table_schema = $1
+  AND tc.table_name = $2
+  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')
+GROUP BY tc.constraint_name
+HAVING COUNT(*) = 1
+ORDER BY CASE WHEN MAX(tc.constraint_type) = 'PRIMARY KEY' THEN 0 ELSE 1 END, tc.constraint_name
+LIMIT 1`, schemaName, tableOnly)
+	case config.MySQL:
+		return a.querySingleColumnKey(ctx, `SELECT MIN(column_name)
+FROM information_schema.statistics
+WHERE table_schema = ? AND table_name = ? AND non_unique = 0
+GROUP BY index_name
+HAVING COUNT(*) = 1
+ORDER BY CASE WHEN index_name = 'PRIMARY' THEN 0 ELSE 1 END, index_name
+LIMIT 1`, schemaName, tableOnly)
+	case config.SQLite, config.Turso, config.CloudflareD1:
+		return a.detectSQLitePaginationKey(ctx, tableOnly)
+	default:
+		return ""
+	}
+}
+
+func (a *App) querySingleColumnKey(ctx context.Context, query string, args ...any) string {
+	var column string
+	if err := a.db.QueryRowContext(ctx, query, args...).Scan(&column); err != nil {
+		return ""
+	}
+	return column
+}
+
+func (a *App) detectSQLitePaginationKey(ctx context.Context, tableOnly string) string {
+	rows, err := a.db.QueryContext(ctx, fmt.Sprintf(`PRAGMA table_info(%s)`, quoteIdentifier(a.dbType, tableOnly)))
+	if err != nil {
+		return ""
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid, notNull, pk int
+		var name, dataType string
+		var defaultValue sql.NullString
+		if err := rows.Scan(&cid, &name, &dataType, &notNull, &defaultValue, &pk); err != nil {
+			return ""
+		}
+		if pk == 1 {
+			return name
+		}
+	}
+	return ""
+}
+
 type resultSelectionState struct {
 	row             int
 	col             int
@@ -41,7 +135,7 @@ type resultSelectionState struct {
 }
 
 // LoadResults loads data from the selected table into the results view
-// using OFFSET/LIMIT pagination to bound memory usage.
+// using keyset pagination when possible, with OFFSET/LIMIT as a fallback.
 func (a *App) LoadResults() error {
 	if a.selectedTable == "" {
 		return nil
@@ -54,16 +148,31 @@ func (a *App) LoadResults() error {
 	// Reset per-column width overrides when loading a new table
 	a.clearColumnOverrides()
 
-	// DB-specific quoting for identifiers
 	quotedTable := quoteIdentifier(a.dbType, a.selectedTable)
 	requestedLimit := a.effectiveResultLimit()
 	queryLimit := requestedLimit
 	if queryLimit == adaptiveTablePreviewLimit || queryLimit > maxResultRows {
 		queryLimit = maxResultRows
 	}
+
+	if a.pageKey == "" && a.pageOffset == 0 && len(a.pageAnchors) == 0 {
+		a.pageKey = a.detectPaginationKey(a.selectedTable)
+	}
+
 	query := fmt.Sprintf("SELECT * FROM %s", quotedTable)
+	var args []any
 	if queryLimit > 0 {
-		query = fmt.Sprintf("%s LIMIT %d OFFSET %d", query, queryLimit, a.pageOffset)
+		if a.pageKey != "" {
+			quotedKey := quoteIdentifier(a.dbType, a.pageKey)
+			if a.lastSeenKey != nil {
+				query = fmt.Sprintf("%s WHERE %s > %s ORDER BY %s LIMIT %d", query, quotedKey, a.placeholder(1), quotedKey, queryLimit)
+				args = append(args, a.lastSeenKey)
+			} else {
+				query = fmt.Sprintf("%s ORDER BY %s LIMIT %d", query, quotedKey, queryLimit)
+			}
+		} else {
+			query = fmt.Sprintf("%s LIMIT %d OFFSET %d", query, queryLimit, a.pageOffset)
+		}
 	}
 
 	a.queryStart = time.Now()
@@ -73,7 +182,7 @@ func (a *App) LoadResults() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	rows, err := a.db.QueryContext(ctx, query)
+	rows, err := a.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		a.results.SetTitle(fmt.Sprintf(" %s Results — [red]%s error[-] ", iconResults, iconFail))
 		return err
@@ -88,9 +197,12 @@ func (a *App) LoadResults() error {
 	pageLimit := resolvedResultLimit(requestedLimit, len(columnNames))
 	a.pageSize = pageLimit
 
-	rowCount, _, err := populateTableWithLimit(a.results, rows, pageLimit)
+	rowCount, _, lastKey, err := populateTableWithLimitAndKey(a.results, rows, pageLimit, a.pageKey)
 	if err != nil {
 		return err
+	}
+	if a.pageKey != "" && lastKey != nil {
+		a.lastSeenKey = lastKey
 	}
 
 	// Re-apply sort if active
@@ -102,9 +214,6 @@ func (a *App) LoadResults() error {
 	a.applyColumnWidths()
 
 	a.restoreResultSelection(selection, rowCount)
-
-	// Fetch total row count asynchronously for pagination display
-	go a.fetchTotalRowCount(quotedTable)
 
 	elapsed := time.Since(a.queryStart)
 	a.results.SetTitle(a.paginatedResultTitle(rowCount, elapsed))
@@ -134,22 +243,53 @@ func (a *App) fetchTotalRowCount(quotedTable string) {
 // paginatedResultTitle builds the results panel title with page info.
 func (a *App) paginatedResultTitle(rowCount int, elapsed time.Duration) string {
 	limit := a.currentPageLimit()
-	base := fmt.Sprintf(" %s [yellow]%s[-] — [green]%d rows[-] in [teal]%s[-]",
-		iconResults, a.selectedTable, rowCount, formatDuration(elapsed))
+	base := fmt.Sprintf(" %s [yellow]%s[-] — [green]%d rows[-] in [teal]%s[-] [#a6adc8](%s)[-]",
+		iconResults, a.selectedTable, rowCount, formatDuration(elapsed), a.paginationModeLabel())
 
 	if limit > 0 && a.totalRowCount >= 0 {
-		page := (a.pageOffset / limit) + 1
+		page := a.currentPageNumber(limit)
 		totalPages := (a.totalRowCount + limit - 1) / limit
 		if totalPages < 1 {
 			totalPages = 1
 		}
 		return fmt.Sprintf("%s [#a6adc8](page %d/%d, %d total)[-] ", base, page, totalPages, a.totalRowCount)
 	}
-	if limit > 0 && a.pageOffset > 0 {
-		page := (a.pageOffset / limit) + 1
-		return fmt.Sprintf("%s [#a6adc8](page %d)[-] ", base, page)
+	if limit > 0 {
+		page := a.currentPageNumber(limit)
+		if page > 1 {
+			return fmt.Sprintf("%s [#a6adc8](page %d, total unknown — End calculates)[-] ", base, page)
+		}
+		return fmt.Sprintf("%s [#a6adc8](total unknown — End calculates)[-] ", base)
 	}
 	return base + " "
+}
+
+func (a *App) currentPageNumber(limit int) int {
+	if limit <= 0 {
+		return 1
+	}
+	if a.pageKey != "" {
+		return len(a.pageAnchors) + 1
+	}
+	return (a.pageOffset / limit) + 1
+}
+
+func (a *App) calculateTotalRowCount() error {
+	if a.db == nil || a.selectedTable == "" {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	quotedTable := quoteIdentifier(a.dbType, a.selectedTable)
+	var total int
+	if err := a.db.QueryRowContext(ctx, fmt.Sprintf("SELECT COUNT(*) FROM %s", quotedTable)).Scan(&total); err != nil {
+		return err
+	}
+	a.totalRowCount = total
+	a.results.SetTitle(a.paginatedResultTitle(a.currentResultRowCount(), time.Since(a.queryStart)))
+	a.updateStatusBar("", a.currentResultRowCount())
+	return nil
 }
 
 // resetPagination resets page offset and cached total (call when switching tables).
@@ -157,6 +297,9 @@ func (a *App) resetPagination() {
 	a.pageOffset = 0
 	a.pageSize = 0
 	a.totalRowCount = -1
+	a.pageKey = ""
+	a.pageAnchors = nil
+	a.lastSeenKey = nil
 }
 
 // nextPage advances to the next page of results.
@@ -165,13 +308,24 @@ func (a *App) nextPage() {
 	if limit <= 0 {
 		return
 	}
-	// Don't advance past the last page
-	if a.totalRowCount >= 0 && a.pageOffset+limit >= a.totalRowCount {
-		return
+	if a.pageKey != "" {
+		if a.lastSeenKey == nil || a.currentResultRowCount() < limit {
+			return
+		}
+		a.pageAnchors = append(a.pageAnchors, a.lastSeenKey)
+	} else {
+		// Don't advance past the last page
+		if a.totalRowCount >= 0 && a.pageOffset+limit >= a.totalRowCount {
+			return
+		}
+		a.pageOffset += limit
 	}
-	a.pageOffset += limit
 	if err := a.LoadResults(); err != nil {
-		a.pageOffset -= limit
+		if a.pageKey != "" {
+			a.pageAnchors = a.pageAnchors[:max(0, len(a.pageAnchors)-1)]
+		} else {
+			a.pageOffset -= limit
+		}
 		a.ShowAlert(fmt.Sprintf("%s Could not load next page:\n\n%v", iconWarn, err), "main")
 	}
 }
@@ -179,12 +333,26 @@ func (a *App) nextPage() {
 // prevPage goes back one page of results.
 func (a *App) prevPage() {
 	limit := a.currentPageLimit()
-	if limit <= 0 || a.pageOffset <= 0 {
+	if limit <= 0 {
 		return
 	}
-	a.pageOffset -= limit
-	if a.pageOffset < 0 {
-		a.pageOffset = 0
+	if a.pageKey != "" {
+		if len(a.pageAnchors) == 0 {
+			return
+		}
+		a.pageAnchors = a.pageAnchors[:len(a.pageAnchors)-1]
+		a.lastSeenKey = nil
+		if len(a.pageAnchors) > 0 {
+			a.lastSeenKey = a.pageAnchors[len(a.pageAnchors)-1]
+		}
+	} else {
+		if a.pageOffset <= 0 {
+			return
+		}
+		a.pageOffset -= limit
+		if a.pageOffset < 0 {
+			a.pageOffset = 0
+		}
 	}
 	if err := a.LoadResults(); err != nil {
 		a.ShowAlert(fmt.Sprintf("%s Could not load previous page:\n\n%v", iconWarn, err), "main")
@@ -193,10 +361,12 @@ func (a *App) prevPage() {
 
 // firstPage jumps to the first page.
 func (a *App) firstPage() {
-	if a.pageOffset == 0 {
+	if a.pageOffset == 0 && len(a.pageAnchors) == 0 && a.lastSeenKey == nil {
 		return
 	}
 	a.pageOffset = 0
+	a.pageAnchors = nil
+	a.lastSeenKey = nil
 	if err := a.LoadResults(); err != nil {
 		a.ShowAlert(fmt.Sprintf("%s Could not load first page:\n\n%v", iconWarn, err), "main")
 	}
@@ -205,8 +375,22 @@ func (a *App) firstPage() {
 // lastPage jumps to the last page.
 func (a *App) lastPage() {
 	limit := a.currentPageLimit()
-	if limit <= 0 || a.totalRowCount < 0 {
+	if limit <= 0 {
 		return
+	}
+	if a.pageKey != "" {
+		if a.totalRowCount < 0 {
+			if err := a.calculateTotalRowCount(); err != nil {
+				a.ShowAlert(fmt.Sprintf("%s Could not calculate total rows:\n\n%v", iconWarn, err), "main")
+			}
+		}
+		return
+	}
+	if a.totalRowCount < 0 {
+		if err := a.calculateTotalRowCount(); err != nil {
+			a.ShowAlert(fmt.Sprintf("%s Could not calculate total rows:\n\n%v", iconWarn, err), "main")
+			return
+		}
 	}
 	lastOffset := ((a.totalRowCount - 1) / limit) * limit
 	if lastOffset < 0 {

@@ -58,9 +58,12 @@ type App struct {
 	resultLimit   int // >0 preview rows, -1 means adaptive safe max
 
 	// Pagination state
-	pageOffset    int // current OFFSET for paginated table browsing
+	pageOffset    int // current OFFSET for fallback paginated table browsing
 	pageSize      int // actual rows shown per page after safety limits
 	totalRowCount int // cached COUNT(*) for the selected table (-1 = unknown)
+	pageKey       string
+	pageAnchors   []any
+	lastSeenKey   any
 
 	// Layout components for scaling
 	rightFlex *tview.Flex
@@ -580,8 +583,8 @@ func (a *App) paginationStatus(width int) string {
 	if limit <= 0 {
 		return ""
 	}
-	page := (a.pageOffset / limit) + 1
-	if a.totalRowCount >= 0 {
+	page := a.currentPageNumber(limit)
+	if a.totalRowCount >= 0 && a.pageKey == "" {
 		totalPages := (a.totalRowCount + limit - 1) / limit
 		if totalPages < 1 {
 			totalPages = 1
@@ -591,13 +594,22 @@ func (a *App) paginationStatus(width int) string {
 		}
 		return fmt.Sprintf("[#a6adc8]page[-] [yellow]%d/%d[-]", page, totalPages)
 	}
-	if a.pageOffset > 0 {
+	if page > 1 {
 		if width < 120 {
 			return fmt.Sprintf("[#a6adc8]pg[-]:[yellow]%d[-]", page)
 		}
 		return fmt.Sprintf("[#a6adc8]page[-] [yellow]%d[-]", page)
 	}
-	return ""
+	if a.pageKey != "" {
+		if width < 120 {
+			return "[#a6adc8]pg[-]:[yellow]keyset[-]"
+		}
+		return fmt.Sprintf("[#a6adc8]page[-] [yellow]%d keyset:%s[-]", page, a.pageKey)
+	}
+	if width < 120 {
+		return "[#a6adc8]pg[-]:[yellow]offset[-]"
+	}
+	return "[#a6adc8]page[-] [yellow]offset[-]"
 }
 
 func (a *App) sortStatus(width int) string {

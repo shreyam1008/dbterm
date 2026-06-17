@@ -56,6 +56,7 @@ func (a *App) ExecuteQuery(query string) {
 	}
 
 	if isRead {
+		a.resetPagination()
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 

@@ -25,9 +25,14 @@ func populateTable(results *tview.Table, rows *sql.Rows) (int, error) {
 // populateTableWithLimit streams rows directly into the table.
 // maxRows <= 0 means no explicit row cap.
 func populateTableWithLimit(results *tview.Table, rows *sql.Rows, maxRows int) (int, bool, error) {
+	rowCount, truncated, _, err := populateTableWithLimitAndKey(results, rows, maxRows, "")
+	return rowCount, truncated, err
+}
+
+func populateTableWithLimitAndKey(results *tview.Table, rows *sql.Rows, maxRows int, keyColumn string) (int, bool, any, error) {
 	columnNames, err := rows.Columns()
 	if err != nil {
-		return 0, false, fmt.Errorf("could not read columns: %w", err)
+		return 0, false, nil, fmt.Errorf("could not read columns: %w", err)
 	}
 
 	if len(columnNames) == 0 {
@@ -36,7 +41,7 @@ func populateTableWithLimit(results *tview.Table, rows *sql.Rows, maxRows int) (
 			Text:  iconInfo + " No columns returned",
 			Color: overlay0,
 		})
-		return 0, false, nil
+		return 0, false, nil, nil
 	}
 
 	results.Clear()
@@ -67,8 +72,19 @@ func populateTableWithLimit(results *tview.Table, rows *sql.Rows, maxRows int) (
 		valuePtrs[i] = &values[i]
 	}
 
+	keyIndex := -1
+	if keyColumn != "" {
+		for i, name := range columnNames {
+			if strings.EqualFold(name, keyColumn) {
+				keyIndex = i
+				break
+			}
+		}
+	}
+
 	truncated := false
 	rowIndex := 0
+	var lastKey any
 	for rows.Next() {
 		if maxRows > 0 && rowIndex >= maxRows {
 			truncated = true
@@ -76,7 +92,11 @@ func populateTableWithLimit(results *tview.Table, rows *sql.Rows, maxRows int) (
 		}
 
 		if err := rows.Scan(valuePtrs...); err != nil {
-			return 0, false, fmt.Errorf("row %d scan error: %w", rowIndex+1, err)
+			return 0, false, nil, fmt.Errorf("row %d scan error: %w", rowIndex+1, err)
+		}
+
+		if keyIndex >= 0 {
+			lastKey = values[keyIndex]
 		}
 
 		for c, val := range values {
@@ -99,7 +119,7 @@ func populateTableWithLimit(results *tview.Table, rows *sql.Rows, maxRows int) (
 
 	if !truncated {
 		if err := rows.Err(); err != nil {
-			return 0, false, fmt.Errorf("result iteration error: %w", err)
+			return 0, false, nil, fmt.Errorf("result iteration error: %w", err)
 		}
 	}
 
@@ -111,7 +131,7 @@ func populateTableWithLimit(results *tview.Table, rows *sql.Rows, maxRows int) (
 		})
 	}
 
-	return rowIndex, truncated, nil
+	return rowIndex, truncated, lastKey, nil
 }
 
 // formatCellValue converts a database value to a display string and color
