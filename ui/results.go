@@ -53,6 +53,7 @@ func (a *App) LoadResults() error {
 
 	// Reset per-column width overrides when loading a new table
 	a.clearColumnOverrides()
+	a.tableResultsActive = true
 
 	// DB-specific quoting for identifiers
 	quotedTable := quoteIdentifier(a.dbType, a.selectedTable)
@@ -62,6 +63,13 @@ func (a *App) LoadResults() error {
 		queryLimit = maxResultRows
 	}
 	query := fmt.Sprintf("SELECT * FROM %s", quotedTable)
+	if sortColumn := a.serverSortColumnName(); sortColumn != "" {
+		direction := "ASC"
+		if !a.sortAsc {
+			direction = "DESC"
+		}
+		query = fmt.Sprintf("%s ORDER BY %s %s", query, quoteIdentifier(a.dbType, sortColumn), direction)
+	}
 	if queryLimit > 0 {
 		query = fmt.Sprintf("%s LIMIT %d OFFSET %d", query, queryLimit, a.pageOffset)
 	}
@@ -93,9 +101,11 @@ func (a *App) LoadResults() error {
 		return err
 	}
 
-	// Re-apply sort if active
-	if a.sortColumn != -1 {
-		a.applySort()
+	if a.sortColumn >= len(columnNames) {
+		a.resetSort()
+	} else if a.sortColumn != -1 {
+		a.sortMode = "server"
+		a.setSortHeaderIndicator()
 	}
 
 	// Re-apply zoom / column width overrides
@@ -157,6 +167,20 @@ func (a *App) resetPagination() {
 	a.pageOffset = 0
 	a.pageSize = 0
 	a.totalRowCount = -1
+}
+
+func (a *App) serverSortColumnName() string {
+	if a.sortColumn < 0 || a.sortMode != "server" || a.results == nil || a.sortColumn >= a.results.GetColumnCount() {
+		return ""
+	}
+	cell := a.results.GetCell(0, a.sortColumn)
+	if cell == nil {
+		return ""
+	}
+	if name, ok := cell.GetReference().(string); ok && strings.TrimSpace(name) != "" {
+		return name
+	}
+	return stripSortIndicator(cell.Text)
 }
 
 // nextPage advances to the next page of results.
