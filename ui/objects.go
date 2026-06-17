@@ -17,11 +17,15 @@ import (
 // All items are read-only display entries (selecting one runs SELECT * for views,
 // or shows a read-only info alert for other object types).
 func (a *App) loadDatabaseObjects() {
-	if a.db == nil {
+	db := a.db
+	dbType := a.dbType
+	dbName := a.dbName
+	generation := a.currentDataGeneration()
+	if db == nil {
 		return
 	}
 
-	objTypes := utils.SupportedObjectTypes(a.dbType)
+	objTypes := utils.SupportedObjectTypes(dbType)
 	if len(objTypes) == 0 {
 		return
 	}
@@ -34,13 +38,13 @@ func (a *App) loadDatabaseObjects() {
 		var groups []objGroup
 
 		for _, ot := range objTypes {
-			query := utils.ListObjectsQuery(a.dbType, ot)
+			query := utils.ListObjectsQuery(dbType, ot)
 			if query == "" {
 				continue
 			}
 
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			rows, err := a.db.QueryContext(ctx, query)
+			rows, err := db.QueryContext(ctx, query)
 			if err != nil {
 				cancel()
 				continue
@@ -67,6 +71,9 @@ func (a *App) loadDatabaseObjects() {
 		}
 
 		a.app.QueueUpdateDraw(func() {
+			if a.db != db || a.dbType != dbType || a.dbName != dbName || !a.isDataGenerationCurrent(generation) {
+				return
+			}
 			for _, g := range groups {
 				icon := objectTypeIcon(g.objType)
 				// Section header (non-selectable styled text)
@@ -94,7 +101,7 @@ func (a *App) loadDatabaseObjects() {
 			}
 			currentTitle := a.tables.GetTitle()
 			if totalObjects > 0 && !strings.Contains(currentTitle, "obj") {
-				a.tables.SetTitle(fmt.Sprintf(" %s Tables (%d) + %d obj [yellow](Alt+T)[-] ", iconTables, a.tableCount, totalObjects))
+				a.tables.SetTitle(fmt.Sprintf(" %s %s Tables (%d) + %d obj [yellow](Alt+T)[-] ", iconTables, a.connectionScopeLabel(), a.tableCount, totalObjects))
 			}
 		})
 	}()

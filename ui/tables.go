@@ -79,7 +79,7 @@ func (a *App) LoadTables() error {
 	a.tables.SetSelectedBackgroundColor(blue)
 
 	// Update title with count
-	a.tables.SetTitle(fmt.Sprintf(" %s Tables (%d) [yellow](Alt+T)[-] ", iconTables, count))
+	a.tables.SetTitle(fmt.Sprintf(" %s %s Tables (%d) [yellow](Alt+T)[-] ", iconTables, a.connectionScopeLabel(), count))
 
 	if count == 0 {
 		a.selectedTable = ""
@@ -109,6 +109,22 @@ func (a *App) LoadTables() error {
 	a.loadDatabaseObjects()
 
 	return rows.Err()
+}
+
+func (a *App) connectionScopeLabel() string {
+	name := strings.TrimSpace(a.dbName)
+	if cfg := a.currentConnectionConfig(); cfg != nil {
+		if cfg.Database != "" {
+			if name != "" {
+				return fmt.Sprintf("[%s/%s]", name, cfg.Database)
+			}
+			return fmt.Sprintf("[%s]", cfg.Database)
+		}
+	}
+	if name != "" {
+		return fmt.Sprintf("[%s]", name)
+	}
+	return ""
 }
 
 func appendInstanceDatabasesSection(a *App, currentSelection string) {

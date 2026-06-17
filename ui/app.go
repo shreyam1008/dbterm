@@ -76,6 +76,10 @@ type App struct {
 	lastScreenH   int
 	focusedPanel  tview.Primitive // cached focus target (avoids lock-unsafe GetFocus calls)
 
+	// Generation state prevents stale async database work from updating the current UI.
+	generationMu   sync.Mutex
+	dataGeneration uint64
+
 	// Import runtime state
 	importMu              sync.Mutex
 	importRunning         bool
@@ -1045,8 +1049,26 @@ func (a *App) clearColumnOverrides() {
 	a.colWidthOverrides = nil
 }
 
+func (a *App) bumpDataGeneration() uint64 {
+	a.generationMu.Lock()
+	defer a.generationMu.Unlock()
+	a.dataGeneration++
+	return a.dataGeneration
+}
+
+func (a *App) currentDataGeneration() uint64 {
+	a.generationMu.Lock()
+	defer a.generationMu.Unlock()
+	return a.dataGeneration
+}
+
+func (a *App) isDataGenerationCurrent(generation uint64) bool {
+	return generation == a.currentDataGeneration()
+}
+
 // cleanup gracefully closes the database connection
 func (a *App) cleanup() {
+	a.bumpDataGeneration()
 	if a.db != nil {
 		a.db.Close()
 		a.db = nil

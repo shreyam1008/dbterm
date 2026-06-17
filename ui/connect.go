@@ -164,7 +164,7 @@ func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex in
 			fieldValues[label] = formInputValue(form, label)
 		}
 		for _, label := range dynamicLabels {
-			idx := form.GetFormItemIndex(label)
+			idx := formItemIndexByLabelPrefix(form, label)
 			if idx >= 0 {
 				form.RemoveFormItem(idx)
 			}
@@ -537,6 +537,9 @@ func connectFooterText(width int, dbType config.DBType) string {
 
 func formInputValue(form *tview.Form, label string) string {
 	item := form.GetFormItemByLabel(label)
+	if item == nil {
+		item = formItemByLabelPrefix(form, label)
+	}
 	if input, ok := item.(*tview.InputField); ok {
 		return strings.TrimSpace(input.GetText())
 	}
@@ -553,9 +556,30 @@ func formCheckboxChecked(form *tview.Form, label string) bool {
 
 func setFormInputValue(form *tview.Form, label, value string) {
 	item := form.GetFormItemByLabel(label)
+	if item == nil {
+		item = formItemByLabelPrefix(form, label)
+	}
 	if input, ok := item.(*tview.InputField); ok {
 		input.SetText(value)
 	}
+}
+
+func formItemByLabelPrefix(form *tview.Form, label string) tview.FormItem {
+	idx := formItemIndexByLabelPrefix(form, label)
+	if idx < 0 {
+		return nil
+	}
+	return form.GetFormItem(idx)
+}
+
+func formItemIndexByLabelPrefix(form *tview.Form, label string) int {
+	for i := 0; i < form.GetFormItemCount(); i++ {
+		item := form.GetFormItem(i)
+		if item != nil && strings.HasPrefix(item.GetLabel(), label) {
+			return i
+		}
+	}
+	return -1
 }
 
 func (a *App) applyConnectionStringToForm(form *tview.Form) (*config.ConnectionConfig, error) {
@@ -792,12 +816,22 @@ func (a *App) connectWithConfig(cfg *config.ConnectionConfig, storeIndex int) {
 				return
 			}
 
-			// Close previous connection only after the new one is ready.
+			// Close previous connection only after the new one is ready, then
+			// immediately clear connection-scoped UI so tables/results from the
+			// previous database cannot remain visible during the new load.
 			a.cleanup()
 			a.db = db
 			a.dbType = cfg.Type
 			a.dbName = cfg.Name
 			a.activeConn = cloneConnectionConfig(cfg)
+			a.bumpDataGeneration()
+			a.selectedTable = ""
+			a.resetPagination()
+			a.tables.Clear()
+			a.tables.SetTitle(fmt.Sprintf(" %s Tables — loading %s [yellow](Alt+T)[-] ", iconTables, cfg.Name))
+			a.results.Clear()
+			a.results.SetTitle(fmt.Sprintf(" %s Results [yellow](Alt+R)[-] ", iconResults))
+			a.updateStatusBar(fmt.Sprintf("[yellow]%s Loading tables for %s[-]", iconRefresh, cfg.Name), 0)
 
 			if storeIndex >= 0 {
 				if err := a.store.MarkUsed(storeIndex); err != nil {
