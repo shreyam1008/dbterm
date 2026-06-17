@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -58,9 +59,10 @@ type App struct {
 	resultLimit   int // >0 preview rows, -1 means adaptive safe max
 
 	// Pagination state
-	pageOffset    int // current OFFSET for paginated table browsing
-	pageSize      int // actual rows shown per page after safety limits
-	totalRowCount int // cached COUNT(*) for the selected table (-1 = unknown)
+	pageOffset       int           // current OFFSET for paginated table browsing
+	pageSize         int           // actual rows shown per page after safety limits
+	totalRowCount    int           // cached COUNT(*) for the selected table (-1 = unknown)
+	resultGeneration atomic.Uint64 // invalidates async result metadata updates
 
 	// Layout components for scaling
 	rightFlex *tview.Flex
@@ -413,6 +415,7 @@ func (a *App) toggleExpandResults() {
 
 // refreshData reloads tables list and current table data
 func (a *App) refreshData() error {
+	a.advanceResultGeneration()
 	if a.db == nil {
 		return nil
 	}
@@ -499,7 +502,9 @@ func (a *App) setResultLimit(limit int) {
 
 	prevLimit := a.resultLimit
 	a.resultLimit = limit
+	a.advanceResultGeneration()
 	a.pageOffset = 0 // reset to first page when page size changes
+	a.totalRowCount = -1
 	if a.db == nil || a.selectedTable == "" {
 		a.updateStatusBar("", a.currentResultRowCount())
 		return
@@ -785,6 +790,8 @@ func (a *App) setupKeyBindings() {
 				return nil
 			}
 			if page == "main" && a.selectedTable != "" {
+				a.advanceResultGeneration()
+				a.totalRowCount = -1
 				if err := a.LoadResults(); err != nil {
 					a.ShowAlert(fmt.Sprintf("Error refreshing table: %v", err), "main")
 				} else {
@@ -1047,11 +1054,26 @@ func (a *App) clearColumnOverrides() {
 
 // cleanup gracefully closes the database connection
 func (a *App) cleanup() {
+	a.advanceResultGeneration()
 	if a.db != nil {
 		a.db.Close()
 		a.db = nil
 	}
 	a.activeConn = nil
+}
+
+func (a *App) advanceResultGeneration() uint64 {
+	if a == nil {
+		return 0
+	}
+	return a.resultGeneration.Add(1)
+}
+
+func (a *App) currentResultGeneration() uint64 {
+	if a == nil {
+		return 0
+	}
+	return a.resultGeneration.Load()
 }
 
 // Run starts the application
