@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"sort"
@@ -57,6 +58,10 @@ type App struct {
 	statusBar          *tview.TextView
 	tableCount         int
 	queryStart         time.Time
+	queryMu            sync.Mutex
+	queryRunning       bool
+	queryStartedAt     time.Time
+	queryCancel        context.CancelFunc
 	resultLimit        int // >0 preview rows, -1 means adaptive safe max
 
 	// Pagination state
@@ -271,8 +276,7 @@ func (a *App) setupUI() {
 				a.ShowAlert(fmt.Sprintf("%s No query to execute.\n\nType a SQL query and press Enter.", iconInfo), "main")
 				return nil
 			}
-			a.queryStart = time.Now()
-			a.ExecuteQuery(query)
+			go a.ExecuteQuery(query)
 			return nil
 		}
 		return event
@@ -284,6 +288,11 @@ func (a *App) updateStatusBar(extra string, rowCount int) {
 	width, _ := a.getScreenSize()
 	actionText := a.statusActionText(width)
 	selectedCount := a.selectedResultRowCount()
+
+	if running := a.queryRunningStatus(width, time.Now()); running != "" {
+		a.statusBar.SetText("  " + running)
+		return
+	}
 
 	if a.db == nil {
 		if width < 58 {
@@ -780,8 +789,13 @@ func (a *App) setupKeyBindings() {
 		page, _ := a.pages.GetFrontPage()
 		action, hasAction := a.resolveAction(event)
 
-		// Ctrl+C cancels import when running; otherwise it quits (except row details modal).
+		// Ctrl+C cancels active work before quitting (except row details modal).
 		if event.Key() == tcell.KeyCtrlC {
+			if a.isQueryRunning() {
+				a.cancelActiveQuery()
+				return nil
+			}
+
 			if a.isImportRunning() {
 				a.requestImportCancel()
 				return nil
@@ -807,6 +821,11 @@ func (a *App) setupKeyBindings() {
 
 		// Escape Handling
 		if event.Key() == tcell.KeyEscape {
+			if a.isQueryRunning() {
+				a.cancelActiveQuery()
+				return nil
+			}
+
 			current := a.app.GetFocus()
 			// If in query input, unfocus to tables
 			if current == a.queryInput {
@@ -1317,4 +1336,15 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func (a *App) queueUpdateDraw(fn func()) {
+	if fn == nil {
+		return
+	}
+	if a.app == nil {
+		fn()
+		return
+	}
+	go a.app.QueueUpdateDraw(fn)
 }
