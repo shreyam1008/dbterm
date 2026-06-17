@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"sort"
@@ -55,6 +56,9 @@ type App struct {
 	statusBar     *tview.TextView
 	tableCount    int
 	queryStart    time.Time
+	queryMu       sync.Mutex
+	queryRunning  bool
+	queryCancel   context.CancelFunc
 	resultLimit   int // >0 preview rows, -1 means adaptive safe max
 
 	// Pagination state
@@ -256,6 +260,13 @@ func (a *App) setupUI() {
 
 	// Execute query on Enter; Shift+Enter or Alt+Enter inserts newline
 	a.queryInput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEsc || event.Key() == tcell.KeyCtrlC {
+			if a.cancelRunningQuery() {
+				a.updateStatusBar("[yellow]Canceling…[-]", a.currentResultRowCount())
+				return nil
+			}
+		}
+
 		if event.Key() == tcell.KeyEnter {
 			// Alt+Enter or Shift+Enter = insert newline (let tview handle it)
 			if event.Modifiers()&tcell.ModAlt != 0 || event.Modifiers()&tcell.ModShift != 0 {
@@ -263,12 +274,7 @@ func (a *App) setupUI() {
 			}
 			// Plain Enter = execute query
 			query := a.queryInput.GetText()
-			if query == "" {
-				a.ShowAlert(fmt.Sprintf("%s No query to execute.\n\nType a SQL query and press Enter.", iconInfo), "main")
-				return nil
-			}
-			a.queryStart = time.Now()
-			a.ExecuteQuery(query)
+			a.startQueryExecution(query)
 			return nil
 		}
 		return event
