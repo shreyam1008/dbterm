@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"database/sql"
 	"encoding/csv"
 	"fmt"
 	"os"
@@ -56,7 +57,12 @@ func (a *App) LoadResults() error {
 	a.tableResultsActive = true
 
 	// DB-specific quoting for identifiers
-	quotedTable := quoteIdentifier(a.dbType, a.selectedTable)
+	db := a.db
+	selectedTable := a.selectedTable
+	dbType := a.dbType
+	generation := a.currentResultGeneration()
+
+	quotedTable := quoteIdentifier(dbType, selectedTable)
 	requestedLimit := a.effectiveResultLimit()
 	queryLimit := requestedLimit
 	if queryLimit == adaptiveTablePreviewLimit || queryLimit > maxResultRows {
@@ -81,7 +87,7 @@ func (a *App) LoadResults() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	rows, err := a.db.QueryContext(ctx, query)
+	rows, err := db.QueryContext(ctx, query)
 	if err != nil {
 		a.results.SetTitle(fmt.Sprintf(" %s Results — [red]%s error[-] ", iconResults, iconFail))
 		return err
@@ -114,7 +120,7 @@ func (a *App) LoadResults() error {
 	a.restoreResultSelection(selection, rowCount)
 
 	// Fetch total row count asynchronously for pagination display
-	go a.fetchTotalRowCount(quotedTable)
+	go a.fetchTotalRowCount(db, selectedTable, quotedTable, dbType, pageLimit, a.pageOffset, generation)
 
 	elapsed := time.Since(a.queryStart)
 	a.results.SetTitle(a.paginatedResultTitle(rowCount, elapsed))
@@ -123,21 +129,31 @@ func (a *App) LoadResults() error {
 	return nil
 }
 
-// fetchTotalRowCount queries COUNT(*) for the selected table and updates the title.
-func (a *App) fetchTotalRowCount(quotedTable string) {
+// fetchTotalRowCount queries COUNT(*) for the captured table and updates the title
+// only if the result still belongs to the active table/connection generation.
+func (a *App) fetchTotalRowCount(db *sql.DB, selectedTable, quotedTable string, dbType config.DBType, pageLimit, pageOffset int, generation uint64) {
+	if db == nil || selectedTable == "" || pageLimit <= 0 {
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	var total int
-	err := a.db.QueryRowContext(ctx, fmt.Sprintf("SELECT COUNT(*) FROM %s", quotedTable)).Scan(&total)
+	err := db.QueryRowContext(ctx, fmt.Sprintf("SELECT COUNT(*) FROM %s", quotedTable)).Scan(&total)
 	if err != nil {
 		return
 	}
 
 	a.app.QueueUpdateDraw(func() {
+		if a.db != db || a.currentResultGeneration() != generation || a.selectedTable != selectedTable || a.dbType != dbType || quoteIdentifier(a.dbType, a.selectedTable) != quotedTable {
+			return
+		}
+
 		a.totalRowCount = total
 		a.results.SetTitle(a.paginatedResultTitle(a.currentResultRowCount(), time.Since(a.queryStart)))
 		a.updateStatusBar("", a.currentResultRowCount())
+		_ = pageOffset // captured for generation identity/debugging if pagination logic changes.
 	})
 }
 
@@ -164,6 +180,7 @@ func (a *App) paginatedResultTitle(rowCount int, elapsed time.Duration) string {
 
 // resetPagination resets page offset and cached total (call when switching tables).
 func (a *App) resetPagination() {
+	a.advanceResultGeneration()
 	a.pageOffset = 0
 	a.pageSize = 0
 	a.totalRowCount = -1
