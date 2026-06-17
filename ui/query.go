@@ -56,6 +56,9 @@ func (a *App) ExecuteQuery(query string) {
 	}
 
 	if isRead {
+		a.tableResultsActive = false
+		a.resetSort()
+
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 

@@ -106,6 +106,7 @@ func (a *App) onDatabaseObjectSelected(objType utils.DBObjectType, name string) 
 	case utils.ObjViews:
 		// Views can be queried like tables
 		a.selectedTable = name
+		a.resetSort()
 		a.resetPagination()
 		if err := a.LoadResults(); err != nil {
 			a.ShowAlert(fmt.Sprintf("%s Could not load view \"%s\":\n\n%v", iconWarn, name, err), "main")
