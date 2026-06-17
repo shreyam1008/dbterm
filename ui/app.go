@@ -48,14 +48,15 @@ type App struct {
 	activeConn *config.ConnectionConfig
 
 	// Main UI components
-	tables        *tview.List
-	selectedTable string
-	results       *tview.Table
-	queryInput    *tview.TextArea
-	statusBar     *tview.TextView
-	tableCount    int
-	queryStart    time.Time
-	resultLimit   int // >0 preview rows, -1 means adaptive safe max
+	tables             *tview.List
+	selectedTable      string
+	tableResultsActive bool
+	results            *tview.Table
+	queryInput         *tview.TextArea
+	statusBar          *tview.TextView
+	tableCount         int
+	queryStart         time.Time
+	resultLimit        int // >0 preview rows, -1 means adaptive safe max
 
 	// Pagination state
 	pageOffset    int // current OFFSET for paginated table browsing
@@ -67,8 +68,9 @@ type App struct {
 	mainFlex  *tview.Flex
 
 	// Sorting state
-	sortColumn int  // current sort column index (-1 = none)
-	sortAsc    bool // true = ascending
+	sortColumn int    // current sort column index (-1 = none)
+	sortAsc    bool   // true = ascending
+	sortMode   string // "page" for local visible-row sort, "server" for table ORDER BY
 
 	// UI state
 	tableExpanded bool // results fullscreen mode
@@ -457,15 +459,46 @@ func (a *App) refreshData() error {
 
 // toggleSort updates sort state and applies it
 func (a *App) toggleSort(col int) {
-	// Toggle sort direction if same column, else reset to ascending
+	if a.results == nil || col < 0 || col >= a.results.GetColumnCount() {
+		a.resetSort()
+		a.updateStatusBar("", a.currentResultRowCount())
+		return
+	}
+
+	// Toggle sort direction if same column, else reset to ascending.
 	if a.sortColumn == col {
 		a.sortAsc = !a.sortAsc
 	} else {
 		a.sortColumn = col
 		a.sortAsc = true
 	}
+
+	// Table browsing can be safely re-issued with ORDER BY so pagination is sorted
+	// across the full table, not just the rows currently loaded in the UI.
+	if a.isTableResultActive() {
+		a.sortMode = "server"
+		a.pageOffset = 0
+		if err := a.LoadResults(); err != nil {
+			a.resetSort()
+			a.ShowAlert(fmt.Sprintf("%s Could not sort table results:\n\n%v", iconWarn, err), "main")
+			return
+		}
+		a.updateStatusBar("", a.currentResultRowCount())
+		return
+	}
+
 	a.applySort()
 	a.updateStatusBar("", a.currentResultRowCount())
+}
+
+func (a *App) resetSort() {
+	a.sortColumn = -1
+	a.sortAsc = true
+	a.sortMode = ""
+}
+
+func (a *App) isTableResultActive() bool {
+	return a.selectedTable != "" && a.tableResultsActive
 }
 
 func (a *App) effectiveResultLimit() int {
@@ -624,14 +657,22 @@ func (a *App) sortStatus(width int) string {
 		if !a.sortAsc {
 			dir = "↓"
 		}
-		return fmt.Sprintf("[#a6adc8]s[-]:[yellow]%s%s[-]", truncateForDisplay(col, 8), dir)
+		mode := "p"
+		if a.sortMode == "server" {
+			mode = "s"
+		}
+		return fmt.Sprintf("[#a6adc8]s[-]:[yellow]%s%s[-][#6c7086]%s[-]", truncateForDisplay(col, 7), dir, mode)
 	}
 
 	dir := "asc"
 	if !a.sortAsc {
 		dir = "desc"
 	}
-	return fmt.Sprintf("[#a6adc8]sort[-] [yellow]%s %s[-]", truncateForDisplay(col, 14), dir)
+	mode := "page"
+	if a.sortMode == "server" {
+		mode = "server"
+	}
+	return fmt.Sprintf("[#a6adc8]sort[-] [yellow]%s %s[-] [#6c7086](%s)[-]", truncateForDisplay(col, 14), dir, mode)
 }
 
 // applySort sorts the results table based on current sort state
@@ -643,6 +684,8 @@ func (a *App) applySort() {
 
 	rowCount := a.results.GetRowCount()
 	if rowCount <= 2 { // header + at most 1 row, nothing to sort
+		a.sortMode = "page"
+		a.setSortHeaderIndicator()
 		return
 	}
 
@@ -694,12 +737,22 @@ func (a *App) applySort() {
 		}
 	}
 
-	// Update header to show sort indicator
+	a.sortMode = "page"
+	a.setSortHeaderIndicator()
+}
+
+func (a *App) setSortHeaderIndicator() {
+	if a.results == nil {
+		return
+	}
+	colCount := a.results.GetColumnCount()
 	for c := 0; c < colCount; c++ {
 		headerCell := a.results.GetCell(0, c)
-		// Strip any existing sort indicators
-		name := strings.TrimSuffix(strings.TrimSuffix(headerCell.Text, " ▲"), " ▼")
-		if c == col {
+		if headerCell == nil {
+			continue
+		}
+		name := stripSortIndicator(headerCell.Text)
+		if c == a.sortColumn {
 			if a.sortAsc {
 				headerCell.Text = name + " ▲"
 			} else {
@@ -709,6 +762,12 @@ func (a *App) applySort() {
 			headerCell.Text = name
 		}
 	}
+}
+
+func stripSortIndicator(text string) string {
+	name := strings.TrimSpace(text)
+	name = strings.TrimSuffix(strings.TrimSuffix(name, " ▲"), " ▼")
+	return name
 }
 
 func (a *App) setupKeyBindings() {
