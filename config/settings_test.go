@@ -87,3 +87,45 @@ func TestLoadSettingsInvalidJSONFallsBackToDefaults(t *testing.T) {
 		t.Fatalf("expected default fallback for %s, got %#v", ActionFocusQuery, got)
 	}
 }
+
+func TestLoadSettingsIncludesDashboardHealthCheckDefault(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	settings, err := LoadSettings()
+	if err != nil {
+		t.Fatalf("LoadSettings() error = %v", err)
+	}
+
+	if settings.DashboardHealthChecks != "auto" {
+		t.Fatalf("expected default dashboard health checks to be auto, got %q", settings.DashboardHealthChecks)
+	}
+}
+
+func TestLoadSettingsMergesDashboardHealthCheckOverride(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	path := filepath.Join(home, ".config", "dbterm", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	data := []byte(`{
+  "dashboard_health_checks": "disabled",
+  "keymap": {}
+}
+`)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	settings, err := LoadSettings()
+	if err != nil {
+		t.Fatalf("LoadSettings() error = %v", err)
+	}
+
+	if settings.DashboardHealthChecks != "manual" {
+		t.Fatalf("expected disabled alias to normalize to manual, got %q", settings.DashboardHealthChecks)
+	}
+}
