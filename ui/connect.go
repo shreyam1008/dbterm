@@ -256,13 +256,13 @@ func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex in
 		}
 		if isEdit {
 			if err := a.store.Update(editIndex, *cfg); err != nil {
-				a.ShowAlert(fmt.Sprintf("%s Could not update connection:\n\n%v", iconWarn, err), "connectModal")
+				a.showErrorStatus("Could not update connection", err.Error(), a.currentResultRowCount())
 				return
 			}
 			a.connectWithConfig(cfg, editIndex)
 		} else {
 			if err := a.store.Add(*cfg); err != nil {
-				a.ShowAlert(fmt.Sprintf("%s Could not save connection:\n\n%v", iconWarn, err), "connectModal")
+				a.showErrorStatus("Could not save connection", err.Error(), a.currentResultRowCount())
 				return
 			}
 			idx := len(a.store.Connections) - 1
@@ -277,12 +277,12 @@ func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex in
 		}
 		if isEdit {
 			if err := a.store.Update(editIndex, *cfg); err != nil {
-				a.ShowAlert(fmt.Sprintf("%s Could not update connection:\n\n%v", iconWarn, err), "connectModal")
+				a.showErrorStatus("Could not update connection", err.Error(), a.currentResultRowCount())
 				return
 			}
 		} else {
 			if err := a.store.Add(*cfg); err != nil {
-				a.ShowAlert(fmt.Sprintf("%s Could not save connection:\n\n%v", iconWarn, err), "connectModal")
+				a.showErrorStatus("Could not save connection", err.Error(), a.currentResultRowCount())
 				return
 			}
 		}
@@ -301,7 +301,7 @@ func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex in
 
 	form.AddButton("Parse DSN", func() {
 		if _, err := a.applyConnectionStringToForm(form); err != nil {
-			a.ShowAlert(fmt.Sprintf("%s Could not parse connection string:\n\n%v", iconWarn, err), "connectModal")
+			a.showErrorStatus("Could not parse connection string", err.Error(), a.currentResultRowCount())
 		}
 	})
 
@@ -371,8 +371,7 @@ func (a *App) testConnection(cfg *config.ConnectionConfig) {
 					err.Error(), connectionHint(err, cfg)), "connectModal")
 				return
 			}
-			a.ShowAlert(fmt.Sprintf("%s Connection successful\n\n%s -> %s", iconSuccess,
-				cfg.TypeLabel(), cfg.Name), "connectModal")
+			a.showStatusMessage(statusSuccess, fmt.Sprintf("Connection OK: %s -> %s", cfg.TypeLabel(), cfg.Name), a.currentResultRowCount())
 		})
 	}()
 }
@@ -383,7 +382,7 @@ func (a *App) buildConfigFromForm(form *tview.Form) *config.ConnectionConfig {
 
 	name := getText(connLabelName)
 	if name == "" {
-		a.ShowAlert(fmt.Sprintf("%s Connection name is required.\n\nGive it a short, descriptive name like \"local-dev\" or \"prod-db\".", iconInfo), "connectModal")
+		a.showStatusMessage(statusInfo, "Connection name is required (for example: local-dev).", a.currentResultRowCount())
 		return nil
 	}
 
@@ -410,7 +409,7 @@ func (a *App) buildConfigFromForm(form *tview.Form) *config.ConnectionConfig {
 		if connString := getText(connLabelDSN); connString != "" {
 			parsedCfg, err := parseConnectionString(dbType, connString)
 			if err != nil {
-				a.ShowAlert(fmt.Sprintf("%s Could not parse connection string:\n\n%v", iconWarn, err), "connectModal")
+				a.showErrorStatus("Could not parse connection string", err.Error(), a.currentResultRowCount())
 				return nil
 			}
 			if parsedCfg.Host != "" {
@@ -443,27 +442,27 @@ func (a *App) buildConfigFromForm(form *tview.Form) *config.ConnectionConfig {
 	switch dbType {
 	case config.SQLite:
 		if cfg.FilePath == "" {
-			a.ShowAlert(fmt.Sprintf("%s File path is required for SQLite.\n\nExample: /home/user/data.db\nA new file will be created if it doesn't exist.", iconInfo), "connectModal")
+			a.showStatusMessage(statusInfo, "SQLite file path is required (example: /home/user/data.db).", a.currentResultRowCount())
 			return nil
 		}
 		// Check parent directory exists for new files
 		dir := filepath.Dir(cfg.FilePath)
 		if dir != "." && dir != "" {
 			if _, err := os.Stat(dir); os.IsNotExist(err) {
-				a.ShowAlert(fmt.Sprintf("%s Directory does not exist:\n%s\n\nPlease create it first.", iconWarn, dir), "connectModal")
+				a.showErrorStatus("SQLite directory does not exist", fmt.Sprintf("Directory does not exist:\n%s\n\nPlease create it first.", dir), a.currentResultRowCount())
 				return nil
 			}
 		}
 	case config.Turso:
 		if cfg.Host == "" {
-			a.ShowAlert(fmt.Sprintf("%s Database URL is required for Turso.\n\nExample: libsql://mydb-user.turso.io", iconInfo), "connectModal")
+			a.showStatusMessage(statusInfo, "Turso Database URL is required (example: libsql://mydb-user.turso.io).", a.currentResultRowCount())
 			return nil
 		}
 		// Auth token is usually required for remote, but maybe not for local dev?
 		// We'll leave it optional in validation but robust in practice.
 	case config.CloudflareD1:
 		if cfg.AccountID == "" || cfg.DatabaseID == "" || cfg.AuthToken == "" {
-			a.ShowAlert(fmt.Sprintf("%s Account ID, Database ID, and API Token are required for D1.", iconInfo), "connectModal")
+			a.showStatusMessage(statusInfo, "D1 Account ID, Database ID, and API Token are required.", a.currentResultRowCount())
 			return nil
 		}
 	default:
@@ -478,7 +477,7 @@ func (a *App) buildConfigFromForm(form *tview.Form) *config.ConnectionConfig {
 			missing = append(missing, "Database")
 		}
 		if len(missing) > 0 {
-			a.ShowAlert(fmt.Sprintf("%s Required fields missing:\n\n• %s\n\nFill these to connect to %s.", iconInfo, strings.Join(missing, "\n• "), typeName), "connectModal")
+			a.showStatusMessage(statusInfo, fmt.Sprintf("Missing %s for %s.", strings.Join(missing, ", "), typeName), a.currentResultRowCount())
 			return nil
 		}
 		// Default port
@@ -801,12 +800,12 @@ func (a *App) connectWithConfig(cfg *config.ConnectionConfig, storeIndex int) {
 
 			if storeIndex >= 0 {
 				if err := a.store.MarkUsed(storeIndex); err != nil {
-					a.ShowAlert(fmt.Sprintf("%s Connected, but failed to update saved state:\n\n%v", iconWarn, err), "main")
+					a.showErrorStatus("Connected, but failed to update saved state", err.Error(), a.currentResultRowCount())
 				}
 			}
 
 			if err := a.LoadTables(); err != nil {
-				a.ShowAlert(fmt.Sprintf("%s Connected, but could not load tables:\n\n%v\n\nYou can still run queries manually.", iconWarn, err), "main")
+				a.showErrorStatus("Connected, but could not load tables", fmt.Sprintf("%v\n\nYou can still run queries manually.", err), a.currentResultRowCount())
 			}
 
 			a.updateStatusBar("", 0)

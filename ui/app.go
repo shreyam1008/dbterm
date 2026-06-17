@@ -71,10 +71,11 @@ type App struct {
 	sortAsc    bool // true = ascending
 
 	// UI state
-	tableExpanded bool // results fullscreen mode
-	lastScreenW   int
-	lastScreenH   int
-	focusedPanel  tview.Primitive // cached focus target (avoids lock-unsafe GetFocus calls)
+	tableExpanded    bool // results fullscreen mode
+	lastScreenW      int
+	lastScreenH      int
+	focusedPanel     tview.Primitive // cached focus target (avoids lock-unsafe GetFocus calls)
+	lastErrorDetails string
 
 	// Import runtime state
 	importMu              sync.Mutex
@@ -264,7 +265,7 @@ func (a *App) setupUI() {
 			// Plain Enter = execute query
 			query := a.queryInput.GetText()
 			if query == "" {
-				a.ShowAlert(fmt.Sprintf("%s No query to execute.\n\nType a SQL query and press Enter.", iconInfo), "main")
+				a.showStatusMessage(statusInfo, "Type a SQL query before pressing Enter.", a.currentResultRowCount())
 				return nil
 			}
 			a.queryStart = time.Now()
@@ -507,10 +508,10 @@ func (a *App) setResultLimit(limit int) {
 
 	if err := a.LoadResults(); err != nil {
 		a.resultLimit = prevLimit
-		a.ShowAlert(fmt.Sprintf("%s Could not refresh results after changing preview limit:\n\n%v", iconWarn, err), "main")
+		a.showErrorStatus("Could not refresh results after changing preview limit", err.Error(), a.currentResultRowCount())
 		return
 	}
-	a.flashStatus(fmt.Sprintf("[green]%s Preview %s[-]", iconRefresh, a.resultLimitReadable()), a.currentResultRowCount(), 1400*time.Millisecond)
+	a.showTimedStatusMessage(statusSuccess, fmt.Sprintf("Preview %s", a.resultLimitReadable()), a.currentResultRowCount(), 1400*time.Millisecond)
 }
 
 func (a *App) increaseResultLimit() {
@@ -741,6 +742,11 @@ func (a *App) setupKeyBindings() {
 			return nil
 		}
 
+		if event.Modifiers()&tcell.ModAlt != 0 && (event.Rune() == 'e' || event.Rune() == 'E') && a.lastErrorDetails != "" {
+			a.showLastErrorDetails(page)
+			return nil
+		}
+
 		// Escape Handling
 		if event.Key() == tcell.KeyEscape {
 			current := a.app.GetFocus()
@@ -778,17 +784,17 @@ func (a *App) setupKeyBindings() {
 		if event.Key() == tcell.KeyF5 {
 			if event.Modifiers()&tcell.ModCtrl != 0 {
 				if err := a.refreshData(); err != nil {
-					a.ShowAlert(fmt.Sprintf("Error refreshing database: %v", err), "main")
+					a.showErrorStatus("Database refresh failed", err.Error(), a.currentResultRowCount())
 				} else {
-					a.flashStatus(fmt.Sprintf("[green]%s DB Refreshed[-]", iconRefresh), a.currentResultRowCount(), 1200*time.Millisecond)
+					a.showTimedStatusMessage(statusSuccess, "DB refreshed", a.currentResultRowCount(), 1200*time.Millisecond)
 				}
 				return nil
 			}
 			if page == "main" && a.selectedTable != "" {
 				if err := a.LoadResults(); err != nil {
-					a.ShowAlert(fmt.Sprintf("Error refreshing table: %v", err), "main")
+					a.showErrorStatus("Table refresh failed", err.Error(), a.currentResultRowCount())
 				} else {
-					a.flashStatus(fmt.Sprintf("[green]%s Table Refreshed[-]", iconRefresh), a.currentResultRowCount(), 1200*time.Millisecond)
+					a.showTimedStatusMessage(statusSuccess, "Table refreshed", a.currentResultRowCount(), 1200*time.Millisecond)
 				}
 				return nil
 			}

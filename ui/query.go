@@ -16,14 +16,14 @@ func (a *App) ExecuteQuery(query string) {
 
 	// Check connection health before executing
 	if a.db == nil {
-		a.ShowAlert(fmt.Sprintf("%s Not connected to any database.\n\nPress Alt+D to go to Dashboard and connect.", iconWarn), "main")
+		a.showStatusMessage(statusWarning, "Not connected. Press Alt+D to connect from Dashboard.", 0)
 		return
 	}
 
 	pingCtx, pingCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer pingCancel()
 	if err := a.db.PingContext(pingCtx); err != nil {
-		a.ShowAlert(fmt.Sprintf("%s Connection lost: %v\n\nPress Alt+D to reconnect from Dashboard.", iconWarn, err), "main")
+		a.ShowAlert(fmt.Sprintf("%s Connection lost\n\n%v\n\nPress Alt+D to reconnect from Dashboard.", iconFail, err), "main")
 		return
 	}
 
@@ -43,14 +43,14 @@ func (a *App) ExecuteQuery(query string) {
 		if blockedToken == "" {
 			blockedToken = "UNKNOWN"
 		}
-		a.ShowAlert(
+		a.showErrorStatus(
 			fmt.Sprintf(
-				"%s Read-only connection \"%s\" blocks write queries.\n\nBlocked statement: %s\n\nRun a read query (SELECT/SHOW/EXPLAIN/PRAGMA) or disable Read-Only in connection settings.",
-				iconWarn,
+				"Read-only connection \"%s\" blocked %s",
 				a.dbName,
 				blockedToken,
 			),
-			"main",
+			fmt.Sprintf("Read-only connection \"%s\" blocks write queries.\n\nBlocked statement: %s\n\nRun a read query (SELECT/SHOW/EXPLAIN/PRAGMA) or disable Read-Only in connection settings.", a.dbName, blockedToken),
+			a.currentResultRowCount(),
 		)
 		return
 	}
@@ -68,7 +68,7 @@ func (a *App) ExecuteQuery(query string) {
 
 		columnNames, err := rows.Columns()
 		if err != nil {
-			a.ShowAlert(fmt.Sprintf("%s Could not read query columns:\n\n%v", iconWarn, err), "main")
+			a.showErrorStatus("Could not read query columns", err.Error(), a.currentResultRowCount())
 			return
 		}
 
@@ -76,7 +76,7 @@ func (a *App) ExecuteQuery(query string) {
 		previewLimit := resolvedResultLimit(requestedLimit, len(columnNames))
 		rowCount, truncated, err := populateTableWithLimit(a.results, rows, previewLimit)
 		if err != nil {
-			a.ShowAlert(fmt.Sprintf("%s Error reading results:\n\n%v", iconWarn, err), "main")
+			a.showErrorStatus("Error reading results", err.Error(), a.currentResultRowCount())
 			return
 		}
 
@@ -91,8 +91,9 @@ func (a *App) ExecuteQuery(query string) {
 		a.updateStatusBar(fmt.Sprintf("[teal]%s[-]", formatDuration(elapsed)), rowCount)
 		a.recordQueryHistory(query)
 		if truncated {
-			a.flashStatus(
-				fmt.Sprintf("[yellow]%s Showing first %d rows (%s). Refine with LIMIT/OFFSET or use Alt+0 for auto max.[-]", iconInfo, rowCount, a.resultLimitReadable()),
+			a.showTimedStatusMessage(
+				statusWarning,
+				fmt.Sprintf("Showing first %d rows (%s). Refine with LIMIT/OFFSET or use Alt+0 for auto max.", rowCount, a.resultLimitReadable()),
 				rowCount,
 				2200*time.Millisecond,
 			)
@@ -112,14 +113,11 @@ func (a *App) ExecuteQuery(query string) {
 		elapsed := time.Since(a.queryStart)
 		a.recordQueryHistory(query)
 
-		a.ShowAlert(
-			fmt.Sprintf("%s Query executed successfully\n\nRows affected: %d\nTime: %s", iconSuccess, rowsAffected, formatDuration(elapsed)),
-			"main",
-		)
+		a.showStatusMessage(statusSuccess, fmt.Sprintf("Query executed: %d rows affected in %s", rowsAffected, formatDuration(elapsed)), a.currentResultRowCount())
 
 		// Refresh tables & results in case schema changed
 		if err := a.refreshData(); err != nil {
-			a.ShowAlert(fmt.Sprintf("%s Query succeeded, but refresh failed:\n\n%v", iconWarn, err), "main")
+			a.showErrorStatus("Query succeeded, but refresh failed", err.Error(), a.currentResultRowCount())
 		}
 	}
 }
@@ -150,13 +148,17 @@ func (a *App) showQueryError(err error, query string) {
 		hint = "\n\n💡 Hint: Connection issue. Press Alt+D to check your connection."
 	}
 
-	message := fmt.Sprintf("%s Query error:\n\n%s", iconFail, errMsg)
+	details := fmt.Sprintf("Query error:\n\n%s", errMsg)
 	if displayQuery != "" {
-		message += fmt.Sprintf("\n\nQuery: %s", displayQuery)
+		details += fmt.Sprintf("\n\nQuery: %s", displayQuery)
 	}
-	message += hint
+	details += hint
 
-	a.ShowAlert(message, "main")
+	summary := "Query error"
+	if hint != "" {
+		summary = strings.TrimSpace(strings.TrimPrefix(hint, "\n\n💡 Hint: "))
+	}
+	a.showErrorStatus(summary, details, a.currentResultRowCount())
 }
 
 // formatDuration formats a duration in a human-friendly way

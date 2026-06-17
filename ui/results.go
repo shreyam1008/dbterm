@@ -172,7 +172,7 @@ func (a *App) nextPage() {
 	a.pageOffset += limit
 	if err := a.LoadResults(); err != nil {
 		a.pageOffset -= limit
-		a.ShowAlert(fmt.Sprintf("%s Could not load next page:\n\n%v", iconWarn, err), "main")
+		a.showErrorStatus("Could not load next page", err.Error(), a.currentResultRowCount())
 	}
 }
 
@@ -187,7 +187,7 @@ func (a *App) prevPage() {
 		a.pageOffset = 0
 	}
 	if err := a.LoadResults(); err != nil {
-		a.ShowAlert(fmt.Sprintf("%s Could not load previous page:\n\n%v", iconWarn, err), "main")
+		a.showErrorStatus("Could not load previous page", err.Error(), a.currentResultRowCount())
 	}
 }
 
@@ -198,7 +198,7 @@ func (a *App) firstPage() {
 	}
 	a.pageOffset = 0
 	if err := a.LoadResults(); err != nil {
-		a.ShowAlert(fmt.Sprintf("%s Could not load first page:\n\n%v", iconWarn, err), "main")
+		a.showErrorStatus("Could not load first page", err.Error(), a.currentResultRowCount())
 	}
 }
 
@@ -217,7 +217,7 @@ func (a *App) lastPage() {
 	}
 	a.pageOffset = lastOffset
 	if err := a.LoadResults(); err != nil {
-		a.ShowAlert(fmt.Sprintf("%s Could not load last page:\n\n%v", iconWarn, err), "main")
+		a.showErrorStatus("Could not load last page", err.Error(), a.currentResultRowCount())
 	}
 }
 
@@ -504,17 +504,17 @@ func stripResultSelectionSuffix(title string) string {
 // exportCurrentResultsToCSV writes the currently visible results table to CSV.
 func (a *App) exportCurrentResultsToCSV() {
 	if a.currentResultRowCount() == 0 {
-		a.ShowAlert(fmt.Sprintf("%s No result rows to export.\n\nRun a query or load a table first.", iconInfo), "main")
+		a.showStatusMessage(statusInfo, "No result rows to export. Run a query or load a table first.", a.currentResultRowCount())
 		return
 	}
 
 	path, rows, err := a.writeCurrentResultsToCSV()
 	if err != nil {
-		a.ShowAlert(fmt.Sprintf("%s CSV export failed:\n\n%v", iconWarn, err), "main")
+		a.showErrorStatus("CSV export failed", err.Error(), a.currentResultRowCount())
 		return
 	}
 
-	a.ShowAlert(fmt.Sprintf("%s CSV export complete.\n\nRows: %d\nFile: %s", iconSuccess, rows, path), "main")
+	a.showStatusMessage(statusSuccess, fmt.Sprintf("CSV export complete: %d rows -> %s", rows, path), a.currentResultRowCount())
 }
 
 func (a *App) writeCurrentResultsToCSV() (string, int, error) {

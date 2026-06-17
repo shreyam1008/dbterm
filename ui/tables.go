@@ -101,7 +101,7 @@ func (a *App) LoadTables() error {
 		a.selectedTable = selectedTable
 		a.resetPagination()
 		if err := a.LoadResults(); err != nil {
-			a.ShowAlert(fmt.Sprintf("%s Could not load table \"%s\":\n\n%v", iconWarn, selectedTable, err), "main")
+			a.showErrorStatus(fmt.Sprintf("Could not load table %q", selectedTable), err.Error(), a.currentResultRowCount())
 		}
 	})
 
