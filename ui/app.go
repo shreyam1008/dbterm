@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"sort"
@@ -48,14 +49,18 @@ type App struct {
 	activeConn *config.ConnectionConfig
 
 	// Main UI components
-	tables        *tview.List
-	selectedTable string
-	results       *tview.Table
-	queryInput    *tview.TextArea
-	statusBar     *tview.TextView
-	tableCount    int
-	queryStart    time.Time
-	resultLimit   int // >0 preview rows, -1 means adaptive safe max
+	tables         *tview.List
+	selectedTable  string
+	results        *tview.Table
+	queryInput     *tview.TextArea
+	statusBar      *tview.TextView
+	tableCount     int
+	queryStart     time.Time
+	queryMu        sync.Mutex
+	queryRunning   bool
+	queryStartedAt time.Time
+	queryCancel    context.CancelFunc
+	resultLimit    int // >0 preview rows, -1 means adaptive safe max
 
 	// Pagination state
 	pageOffset    int // current OFFSET for paginated table browsing
@@ -280,6 +285,11 @@ func (a *App) updateStatusBar(extra string, rowCount int) {
 	width, _ := a.getScreenSize()
 	actionText := a.statusActionText(width)
 	selectedCount := a.selectedResultRowCount()
+
+	if running := a.queryRunningStatus(width, time.Now()); running != "" {
+		a.statusBar.SetText("  " + running)
+		return
+	}
 
 	if a.db == nil {
 		if width < 58 {
@@ -716,8 +726,13 @@ func (a *App) setupKeyBindings() {
 		page, _ := a.pages.GetFrontPage()
 		action, hasAction := a.resolveAction(event)
 
-		// Ctrl+C cancels import when running; otherwise it quits (except row details modal).
+		// Ctrl+C cancels active work before quitting (except row details modal).
 		if event.Key() == tcell.KeyCtrlC {
+			if a.isQueryRunning() {
+				a.cancelActiveQuery()
+				return nil
+			}
+
 			if a.isImportRunning() {
 				a.requestImportCancel()
 				return nil
@@ -743,6 +758,11 @@ func (a *App) setupKeyBindings() {
 
 		// Escape Handling
 		if event.Key() == tcell.KeyEscape {
+			if a.isQueryRunning() {
+				a.cancelActiveQuery()
+				return nil
+			}
+
 			current := a.app.GetFocus()
 			// If in query input, unfocus to tables
 			if current == a.queryInput {
@@ -1236,4 +1256,15 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func (a *App) queueUpdateDraw(fn func()) {
+	if fn == nil {
+		return
+	}
+	if a.app == nil {
+		fn()
+		return
+	}
+	go a.app.QueueUpdateDraw(fn)
 }
