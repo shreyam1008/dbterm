@@ -10,6 +10,7 @@
 # 5) If that tag already exists, the workflow fails (prevents duplicate releases).
 #
 # Newest entry first:
+0.4.2|Kaveri|Cancellable query lifecycle, safer async UI updates, bounded dashboard checks, and stable connection forms.
 0.4.1|Indra|Guarded result paging, engine-aware backups, and schema inspection.
 0.4.0|Hampi|Added support for PostgreSQL and MSSQL dump import.
 0.4.0|Ganpatipapa|Import sql dump, setting paage with custom key binds, and much more.
