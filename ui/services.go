@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -608,11 +609,15 @@ func (a *App) confirmAndRunServiceCmd(action string, info *serviceInfo, password
 // runServiceCmdWithSudo executes the systemctl command, piping password if provided
 func (a *App) runServiceCmdWithSudo(action string, info *serviceInfo, password string) {
 	actionTitle := strings.ToUpper(action[:1]) + action[1:]
-	a.showLoadingModal(fmt.Sprintf("%s %s %s...", iconServices, actionTitle, info.name))
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	var canceled atomic.Bool
+	a.showLoadingModal(fmt.Sprintf("%s %s %s...", iconServices, actionTitle, info.name),
+		withLoadingCancel("Press Esc to cancel.", func() {
+			canceled.Store(true)
+			cancel()
+		}))
 
 	go func() {
-		// Create a context with timeout to prevent hanging
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 
 		var cmd *exec.Cmd
@@ -632,6 +637,11 @@ func (a *App) runServiceCmdWithSudo(action string, info *serviceInfo, password s
 		a.app.QueueUpdateDraw(func() {
 			// Remove loading modal
 			a.pages.RemovePage("loading")
+
+			if canceled.Load() {
+				a.ShowAlert(fmt.Sprintf("%s %s %s canceled.", iconWarn, actionTitle, info.name), "services")
+				return
+			}
 
 			if err != nil {
 				errMsg := err.Error()
@@ -660,14 +670,48 @@ func (a *App) runServiceCmdWithSudo(action string, info *serviceInfo, password s
 	}()
 }
 
-// showLoadingModal displays a non-interactive loading spinner
-func (a *App) showLoadingModal(message string) {
+type loadingModalOptions struct {
+	cancelText string
+	onCancel   func()
+}
+
+type loadingModalOption func(*loadingModalOptions)
+
+func withLoadingCancel(cancelText string, onCancel func()) loadingModalOption {
+	return func(opts *loadingModalOptions) {
+		opts.cancelText = cancelText
+		opts.onCancel = onCancel
+	}
+}
+
+// showLoadingModal displays a loading spinner with optional cancellation.
+func (a *App) showLoadingModal(message string, options ...loadingModalOption) {
+	opts := loadingModalOptions{
+		cancelText: "Please wait; this step cannot be cancelled safely.",
+	}
+	for _, option := range options {
+		option(&opts)
+	}
+
+	modalText := fmt.Sprintf("\n%s %s\n\n%s", iconRefresh, message, opts.cancelText)
 	modal := tview.NewModal().
-		SetText(fmt.Sprintf("\n%s %s\n\nPlease wait...", iconRefresh, message)).
+		SetText(modalText).
 		SetBackgroundColor(bg).
 		SetTextColor(text)
 
-	// No buttons, so it catches input but doesn't do anything
+	if opts.onCancel != nil {
+		cancel := opts.onCancel
+		modal.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+			if event.Key() == tcell.KeyEscape {
+				a.pages.RemovePage("loading")
+				a.updateStatusBar("[yellow]Operation canceled.[-]", 0)
+				cancel()
+				return nil
+			}
+			return event
+		})
+	}
+
 	a.pages.AddPage("loading", modal, true, true)
 	a.app.SetFocus(modal)
 }
