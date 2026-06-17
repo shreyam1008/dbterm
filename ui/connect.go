@@ -92,6 +92,57 @@ const (
 	connLabelDatabaseID = "Database ID (UUID)"
 )
 
+type connectFieldKey string
+
+const (
+	connFieldName       connectFieldKey = "name"
+	connFieldType       connectFieldKey = "type"
+	connFieldReadOnly   connectFieldKey = "read_only"
+	connFieldDSN        connectFieldKey = "dsn"
+	connFieldHost       connectFieldKey = "host"
+	connFieldPort       connectFieldKey = "port"
+	connFieldUser       connectFieldKey = "user"
+	connFieldPassword   connectFieldKey = "password"
+	connFieldDatabase   connectFieldKey = "database"
+	connFieldFilePath   connectFieldKey = "file_path"
+	connFieldAuthToken  connectFieldKey = "auth_token"
+	connFieldAccountID  connectFieldKey = "account_id"
+	connFieldDatabaseID connectFieldKey = "database_id"
+)
+
+var connectFieldLabels = map[connectFieldKey]string{
+	connFieldName:       connLabelName,
+	connFieldType:       connLabelType,
+	connFieldReadOnly:   connLabelReadOnly,
+	connFieldDSN:        connLabelDSN,
+	connFieldHost:       connLabelHost,
+	connFieldPort:       connLabelPort,
+	connFieldUser:       connLabelUser,
+	connFieldPassword:   connLabelPassword,
+	connFieldDatabase:   connLabelDatabase,
+	connFieldFilePath:   connLabelFilePath,
+	connFieldAuthToken:  connLabelAuthToken,
+	connFieldAccountID:  connLabelAccountID,
+	connFieldDatabaseID: connLabelDatabaseID,
+}
+
+var dynamicConnectFields = []connectFieldKey{
+	connFieldDSN,
+	connFieldHost,
+	connFieldPort,
+	connFieldUser,
+	connFieldPassword,
+	connFieldDatabase,
+	connFieldFilePath,
+	connFieldAuthToken,
+	connFieldAccountID,
+	connFieldDatabaseID,
+}
+
+func connectFieldLabel(key connectFieldKey) string {
+	return connectFieldLabels[key]
+}
+
 // showConnectionForm displays a form for new or editing a connection
 func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex int) {
 	isEdit := editConn != nil
@@ -133,38 +184,28 @@ func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex in
 	form.AddDropDown(connLabelType, dbTypes, initialType, nil)
 	form.AddCheckbox(connLabelReadOnly, readOnlyDefault, nil)
 
-	dynamicLabels := []string{
-		connLabelDSN,
-		connLabelHost,
-		connLabelPort,
-		connLabelUser,
-		connLabelPassword,
-		connLabelDatabase,
-		connLabelFilePath,
-		connLabelAuthToken,
-		connLabelAccountID,
-		connLabelDatabaseID,
-	}
-	fieldValues := map[string]string{
-		connLabelDSN:        connStringDefault,
-		connLabelHost:       hostDefault,
-		connLabelPort:       portDefault,
-		connLabelUser:       userDefault,
-		connLabelPassword:   passDefault,
-		connLabelDatabase:   dbDefault,
-		connLabelFilePath:   fileDefault,
-		connLabelAuthToken:  authTokenDefault,
-		connLabelAccountID:  accountIDDefault,
-		connLabelDatabaseID: dbIDDefault,
+	fieldValues := map[connectFieldKey]string{
+		connFieldDSN:        connStringDefault,
+		connFieldHost:       hostDefault,
+		connFieldPort:       portDefault,
+		connFieldUser:       userDefault,
+		connFieldPassword:   passDefault,
+		connFieldDatabase:   dbDefault,
+		connFieldFilePath:   fileDefault,
+		connFieldAuthToken:  authTokenDefault,
+		connFieldAccountID:  accountIDDefault,
+		connFieldDatabaseID: dbIDDefault,
 	}
 
 	removeDynamicFields := func() {
 		// Preserve latest typed values before rebuilding type-specific fields.
-		for _, label := range dynamicLabels {
-			fieldValues[label] = formInputValue(form, label)
+		for _, key := range dynamicConnectFields {
+			if form.GetFormItemIndex(connectFieldLabel(key)) >= 0 {
+				fieldValues[key] = formInputValue(form, key)
+			}
 		}
-		for _, label := range dynamicLabels {
-			idx := form.GetFormItemIndex(label)
+		for _, key := range dynamicConnectFields {
+			idx := form.GetFormItemIndex(connectFieldLabel(key))
 			if idx >= 0 {
 				form.RemoveFormItem(idx)
 			}
@@ -172,28 +213,28 @@ func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex in
 	}
 
 	addNetworkFields := func() {
-		form.AddInputField(connLabelDSN, fieldValues[connLabelDSN], 72, nil, nil)
-		form.AddInputField(connLabelHost, fieldValues[connLabelHost], 30, nil, nil)
-		form.AddInputField(connLabelPort, fieldValues[connLabelPort], 10, nil, nil)
-		form.AddInputField(connLabelUser, fieldValues[connLabelUser], 30, nil, nil)
-		form.AddPasswordField(connLabelPassword, fieldValues[connLabelPassword], 30, '*', nil)
-		form.AddInputField(connLabelDatabase, fieldValues[connLabelDatabase], 30, nil, nil)
+		form.AddInputField(connLabelDSN, fieldValues[connFieldDSN], 72, nil, nil)
+		form.AddInputField(connLabelHost, fieldValues[connFieldHost], 30, nil, nil)
+		form.AddInputField(connLabelPort, fieldValues[connFieldPort], 10, nil, nil)
+		form.AddInputField(connLabelUser, fieldValues[connFieldUser], 30, nil, nil)
+		form.AddPasswordField(connLabelPassword, fieldValues[connFieldPassword], 30, '*', nil)
+		form.AddInputField(connLabelDatabase, fieldValues[connFieldDatabase], 30, nil, nil)
 	}
 
 	addSQLiteFields := func() {
-		form.AddInputField(connLabelFilePath, fieldValues[connLabelFilePath], 60, nil, nil)
+		form.AddInputField(connLabelFilePath, fieldValues[connFieldFilePath], 60, nil, nil)
 	}
 
 	addTursoFields := func() {
 		// Re-use 'Host' for the Database URL
-		form.AddInputField(connLabelHost+" (libsql://... or https://...)", fieldValues[connLabelHost], 60, nil, nil)
-		form.AddPasswordField(connLabelAuthToken, fieldValues[connLabelAuthToken], 60, '*', nil)
+		form.AddInputField(connLabelHost, fieldValues[connFieldHost], 60, nil, nil)
+		form.AddPasswordField(connLabelAuthToken, fieldValues[connFieldAuthToken], 60, '*', nil)
 	}
 
 	addD1Fields := func() {
-		form.AddInputField(connLabelAccountID, fieldValues[connLabelAccountID], 40, nil, nil)
-		form.AddInputField(connLabelDatabaseID, fieldValues[connLabelDatabaseID], 40, nil, nil)
-		form.AddPasswordField(connLabelAuthToken+" (API Token)", fieldValues[connLabelAuthToken], 60, '*', nil)
+		form.AddInputField(connLabelAccountID, fieldValues[connFieldAccountID], 40, nil, nil)
+		form.AddInputField(connLabelDatabaseID, fieldValues[connFieldDatabaseID], 40, nil, nil)
+		form.AddPasswordField(connLabelAuthToken, fieldValues[connFieldAuthToken], 60, '*', nil)
 	}
 
 	_, initialTypeName := form.GetFormItemByLabel(connLabelType).(*tview.DropDown).GetCurrentOption()
@@ -222,12 +263,12 @@ func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex in
 			// Auto-default ports for network DBs if empty or swapped.
 			switch typeName {
 			case "PostgreSQL":
-				if fieldValues[connLabelPort] == "" || fieldValues[connLabelPort] == "3306" {
-					fieldValues[connLabelPort] = "5432"
+				if fieldValues[connFieldPort] == "" || fieldValues[connFieldPort] == "3306" {
+					fieldValues[connFieldPort] = "5432"
 				}
 			case "MySQL":
-				if fieldValues[connLabelPort] == "" || fieldValues[connLabelPort] == "5432" {
-					fieldValues[connLabelPort] = "3306"
+				if fieldValues[connFieldPort] == "" || fieldValues[connFieldPort] == "5432" {
+					fieldValues[connFieldPort] = "3306"
 				}
 			}
 			addNetworkFields()
@@ -379,9 +420,9 @@ func (a *App) testConnection(cfg *config.ConnectionConfig) {
 
 // buildConfigFromForm builds and validates a ConnectionConfig from form fields
 func (a *App) buildConfigFromForm(form *tview.Form) *config.ConnectionConfig {
-	getText := func(label string) string { return formInputValue(form, label) }
+	getText := func(key connectFieldKey) string { return formInputValue(form, key) }
 
-	name := getText(connLabelName)
+	name := getText(connFieldName)
 	if name == "" {
 		a.ShowAlert(fmt.Sprintf("%s Connection name is required.\n\nGive it a short, descriptive name like \"local-dev\" or \"prod-db\".", iconInfo), "connectModal")
 		return nil
@@ -393,21 +434,21 @@ func (a *App) buildConfigFromForm(form *tview.Form) *config.ConnectionConfig {
 	cfg := &config.ConnectionConfig{
 		Name:       name,
 		Type:       dbType,
-		Host:       getText(connLabelHost),
-		Port:       getText(connLabelPort),
-		User:       getText(connLabelUser),
-		Password:   getText(connLabelPassword),
-		Database:   getText(connLabelDatabase),
-		ReadOnly:   formCheckboxChecked(form, connLabelReadOnly),
-		FilePath:   getText(connLabelFilePath),
-		AuthToken:  getText(connLabelAuthToken),
-		AccountID:  getText(connLabelAccountID),
-		DatabaseID: getText(connLabelDatabaseID),
+		Host:       getText(connFieldHost),
+		Port:       getText(connFieldPort),
+		User:       getText(connFieldUser),
+		Password:   getText(connFieldPassword),
+		Database:   getText(connFieldDatabase),
+		ReadOnly:   formCheckboxChecked(form, connFieldReadOnly),
+		FilePath:   getText(connFieldFilePath),
+		AuthToken:  getText(connFieldAuthToken),
+		AccountID:  getText(connFieldAccountID),
+		DatabaseID: getText(connFieldDatabaseID),
 	}
 
 	// Optional network DSN: if present, parse and auto-fill individual fields.
 	if dbType != config.SQLite && dbType != config.Turso && dbType != config.CloudflareD1 {
-		if connString := getText(connLabelDSN); connString != "" {
+		if connString := getText(connFieldDSN); connString != "" {
 			parsedCfg, err := parseConnectionString(dbType, connString)
 			if err != nil {
 				a.ShowAlert(fmt.Sprintf("%s Could not parse connection string:\n\n%v", iconWarn, err), "connectModal")
@@ -415,23 +456,23 @@ func (a *App) buildConfigFromForm(form *tview.Form) *config.ConnectionConfig {
 			}
 			if parsedCfg.Host != "" {
 				cfg.Host = parsedCfg.Host
-				setFormInputValue(form, connLabelHost, parsedCfg.Host)
+				setFormInputValue(form, connFieldHost, parsedCfg.Host)
 			}
 			if parsedCfg.Port != "" {
 				cfg.Port = parsedCfg.Port
-				setFormInputValue(form, connLabelPort, parsedCfg.Port)
+				setFormInputValue(form, connFieldPort, parsedCfg.Port)
 			}
 			if parsedCfg.User != "" {
 				cfg.User = parsedCfg.User
-				setFormInputValue(form, connLabelUser, parsedCfg.User)
+				setFormInputValue(form, connFieldUser, parsedCfg.User)
 			}
 			if parsedCfg.Password != "" {
 				cfg.Password = parsedCfg.Password
-				setFormInputValue(form, connLabelPassword, parsedCfg.Password)
+				setFormInputValue(form, connFieldPassword, parsedCfg.Password)
 			}
 			if parsedCfg.Database != "" {
 				cfg.Database = parsedCfg.Database
-				setFormInputValue(form, connLabelDatabase, parsedCfg.Database)
+				setFormInputValue(form, connFieldDatabase, parsedCfg.Database)
 			}
 			if parsedCfg.SSLMode != "" {
 				cfg.SSLMode = parsedCfg.SSLMode
@@ -535,7 +576,11 @@ func connectFooterText(width int, dbType config.DBType) string {
 	}
 }
 
-func formInputValue(form *tview.Form, label string) string {
+func formInputValue(form *tview.Form, key connectFieldKey) string {
+	return formInputValueByLabel(form, connectFieldLabel(key))
+}
+
+func formInputValueByLabel(form *tview.Form, label string) string {
 	item := form.GetFormItemByLabel(label)
 	if input, ok := item.(*tview.InputField); ok {
 		return strings.TrimSpace(input.GetText())
@@ -543,15 +588,19 @@ func formInputValue(form *tview.Form, label string) string {
 	return ""
 }
 
-func formCheckboxChecked(form *tview.Form, label string) bool {
-	item := form.GetFormItemByLabel(label)
+func formCheckboxChecked(form *tview.Form, key connectFieldKey) bool {
+	item := form.GetFormItemByLabel(connectFieldLabel(key))
 	if checkbox, ok := item.(*tview.Checkbox); ok {
 		return checkbox.IsChecked()
 	}
 	return false
 }
 
-func setFormInputValue(form *tview.Form, label, value string) {
+func setFormInputValue(form *tview.Form, key connectFieldKey, value string) {
+	setFormInputValueByLabel(form, connectFieldLabel(key), value)
+}
+
+func setFormInputValueByLabel(form *tview.Form, label, value string) {
 	item := form.GetFormItemByLabel(label)
 	if input, ok := item.(*tview.InputField); ok {
 		input.SetText(value)
@@ -559,7 +608,7 @@ func setFormInputValue(form *tview.Form, label, value string) {
 }
 
 func (a *App) applyConnectionStringToForm(form *tview.Form) (*config.ConnectionConfig, error) {
-	dsn := formInputValue(form, connLabelDSN)
+	dsn := formInputValue(form, connFieldDSN)
 	if dsn == "" {
 		return nil, fmt.Errorf("connection string is empty")
 	}
@@ -581,11 +630,11 @@ func (a *App) applyConnectionStringToForm(form *tview.Form) (*config.ConnectionC
 		return nil, err
 	}
 
-	setFormInputValue(form, connLabelHost, parsedCfg.Host)
-	setFormInputValue(form, connLabelPort, parsedCfg.Port)
-	setFormInputValue(form, connLabelUser, parsedCfg.User)
-	setFormInputValue(form, connLabelPassword, parsedCfg.Password)
-	setFormInputValue(form, connLabelDatabase, parsedCfg.Database)
+	setFormInputValue(form, connFieldHost, parsedCfg.Host)
+	setFormInputValue(form, connFieldPort, parsedCfg.Port)
+	setFormInputValue(form, connFieldUser, parsedCfg.User)
+	setFormInputValue(form, connFieldPassword, parsedCfg.Password)
+	setFormInputValue(form, connFieldDatabase, parsedCfg.Database)
 	return parsedCfg, nil
 }
 

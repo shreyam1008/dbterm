@@ -170,7 +170,7 @@ func (a *App) showSettings() {
 		}
 
 		for _, field := range fields {
-			bindings := parseBindingList(formInputValue(form, field.Label))
+			bindings := parseBindingList(formInputValueByLabel(form, field.Label))
 			if len(bindings) == 0 {
 				a.ShowAlert(fmt.Sprintf("%s %s binding is required.\n\nUse values like alt+t or ctrl+a.", iconWarn, field.Label), pageSettings)
 				return
@@ -199,7 +199,7 @@ func (a *App) showSettings() {
 		defaults := config.DefaultSettings()
 		setFormInputValue(form, "Dashboard Health Checks", defaults.DashboardHealthChecks)
 		for _, field := range fields {
-			setFormInputValue(form, field.Label, keymapFieldValue(defaults, field.Action))
+			setFormInputValueByLabel(form, field.Label, keymapFieldValue(defaults, field.Action))
 		}
 		a.ShowAlert(fmt.Sprintf("%s Defaults restored in form.\n\nPress Save to persist them.", iconInfo), pageSettings)
 	}
