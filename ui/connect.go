@@ -781,8 +781,17 @@ func splitHostPortWithDefault(address, defaultPort string) (string, string) {
 func (a *App) connectWithConfig(cfg *config.ConnectionConfig, storeIndex int) {
 	a.showLoadingModal(fmt.Sprintf("%s Connecting to %s...", iconConnect, cfg.Name))
 
+	selectedTable := a.selectedTable
+	currentTableIndex := a.tables.GetCurrentItem()
+
 	go func() {
 		db, err := utils.ConnectDB(cfg)
+		var snapshot *tableListSnapshot
+		var tableLoadErr error
+		if err == nil {
+			snapshot, tableLoadErr = loadTableListSnapshot(db, cfg.Type, selectedTable, strings.TrimSpace(cfg.Database), currentTableIndex)
+		}
+
 		a.app.QueueUpdateDraw(func() {
 			a.pages.RemovePage("loading")
 
@@ -805,8 +814,14 @@ func (a *App) connectWithConfig(cfg *config.ConnectionConfig, storeIndex int) {
 				}
 			}
 
-			if err := a.LoadTables(); err != nil {
-				a.ShowAlert(fmt.Sprintf("%s Connected, but could not load tables:\n\n%v\n\nYou can still run queries manually.", iconWarn, err), "main")
+			if tableLoadErr != nil {
+				a.applyTableListSnapshot(&tableListSnapshot{
+					items: []tableListSnapshotItem{{label: fmt.Sprintf("[gray]%s Tables could not be loaded[-]", iconWarn)}},
+				})
+				a.ShowAlert(fmt.Sprintf("%s Connected, but could not load tables:\n\n%v\n\nYou can still run queries manually.", iconWarn, tableLoadErr), "main")
+			} else {
+				a.applyTableListSnapshot(snapshot)
+				a.loadDatabaseObjects()
 			}
 
 			a.updateStatusBar("", 0)
