@@ -49,13 +49,15 @@ var defaultKeymapBindings = map[string][]string{
 
 // Settings stores user-adjustable runtime settings.
 type Settings struct {
-	Keymap map[string][]string `json:"keymap"`
+	Keymap                map[string][]string `json:"keymap"`
+	DashboardHealthChecks string              `json:"dashboard_health_checks"`
 }
 
 // DefaultSettings returns a deep-copied default settings value.
 func DefaultSettings() *Settings {
 	return &Settings{
-		Keymap: DefaultKeymapBindings(),
+		Keymap:                DefaultKeymapBindings(),
+		DashboardHealthChecks: "auto",
 	}
 }
 
@@ -152,15 +154,21 @@ func writeSettings(path string, settings *Settings) error {
 
 func mergeSettings(defaults, loaded *Settings) *Settings {
 	merged := &Settings{
-		Keymap: map[string][]string{},
+		Keymap:                map[string][]string{},
+		DashboardHealthChecks: "auto",
 	}
 
 	if defaults != nil {
 		merged.Keymap = cloneKeymapBindings(defaults.Keymap)
+		merged.DashboardHealthChecks = normalizeDashboardHealthChecks(defaults.DashboardHealthChecks)
 	}
 
 	if loaded == nil {
 		return merged
+	}
+
+	if mode := normalizeDashboardHealthChecks(loaded.DashboardHealthChecks); mode != "" {
+		merged.DashboardHealthChecks = mode
 	}
 
 	for action, bindings := range loaded.Keymap {
@@ -206,4 +214,15 @@ func cleanBindingList(bindings []string) []string {
 		cleaned = append(cleaned, item)
 	}
 	return cleaned
+}
+
+func normalizeDashboardHealthChecks(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "", "auto":
+		return "auto"
+	case "manual", "disabled", "off":
+		return "manual"
+	default:
+		return "auto"
+	}
 }

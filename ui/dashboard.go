@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -14,6 +15,10 @@ import (
 
 // showDashboard displays the saved connections landing page
 func (a *App) showDashboard() {
+	a.showDashboardWithHealthChecks(false)
+}
+
+func (a *App) showDashboardWithHealthChecks(forceHealthChecks bool) {
 	// ── Header ──
 	header := tview.NewTextView().
 		SetDynamicColors(true).
@@ -50,6 +55,11 @@ func (a *App) showDashboard() {
 	if connCount > 0 {
 		connList.SetTitle(fmt.Sprintf(" %s Saved Connections (%d) ", iconDashboard, connCount))
 
+		healthStatusText := "[#6c7086]" + iconRefresh + " checking[-]"
+		if !forceHealthChecks && a.settings != nil && a.settings.DashboardHealthChecks == "manual" {
+			healthStatusText = "[#6c7086]press R to check[-]"
+		}
+
 		for i, conn := range connections {
 			label := dashboardConnectionLabel(conn)
 			detail := dashboardConnectionDetail(conn)
@@ -63,9 +73,9 @@ func (a *App) showDashboard() {
 				shortcut = '0'
 			}
 
-			connList.AddItem(label, detail+"  │  [#6c7086]"+iconRefresh+" checking[-]", shortcut, nil)
+			connList.AddItem(label, detail+"  │  "+healthStatusText, shortcut, nil)
 		}
-		a.runDashboardConnectionChecks(connList, connections, baseDetails)
+		a.runDashboardConnectionChecks(connList, connections, baseDetails, forceHealthChecks)
 	} else {
 		connList.SetTitle(fmt.Sprintf(" %s Saved Connections ", iconDashboard))
 		connList.AddItem(fmt.Sprintf("  [#6c7086]%s No saved connections yet[-]", iconInfo), "       Press [green]N[-] to add your first database "+iconConnect, 0, nil)
@@ -179,9 +189,9 @@ func (a *App) showDashboard() {
 			}
 			return nil
 		case 'r', 'R':
-			// Reopen dashboard to refresh live availability checks.
+			// Reopen dashboard to refresh live availability checks, bypassing manual mode and cache.
 			a.pages.RemovePage("dashboard")
-			a.showDashboard()
+			a.showDashboardWithHealthChecks(true)
 			return nil
 		case 'g', 'G':
 			a.showSettings()
@@ -312,9 +322,61 @@ func dashboardConnectionDetail(conn config.ConnectionConfig) string {
 	return detail
 }
 
-func (a *App) runDashboardConnectionChecks(connList *tview.List, conns []config.ConnectionConfig, baseDetails []string) {
+type dashboardHealthCacheEntry struct {
+	reachable bool
+	checkedAt time.Time
+}
+
+var dashboardHealthCache = struct {
+	sync.Mutex
+	items map[string]dashboardHealthCacheEntry
+}{items: map[string]dashboardHealthCacheEntry{}}
+
+const dashboardHealthCacheTTL = 45 * time.Second
+
+func dashboardHealthCacheKey(conn config.ConnectionConfig) string {
+	return fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s", conn.Name, conn.Type, conn.Host, conn.Port, conn.Database, conn.User, conn.FilePath)
+}
+
+func dashboardConnectionReachableCached(conn config.ConnectionConfig, timeout time.Duration, force bool) bool {
+	key := dashboardHealthCacheKey(conn)
+	now := time.Now()
+
+	if !force {
+		dashboardHealthCache.Lock()
+		entry, ok := dashboardHealthCache.items[key]
+		dashboardHealthCache.Unlock()
+		if ok && now.Sub(entry.checkedAt) < dashboardHealthCacheTTL {
+			return entry.reachable
+		}
+	}
+
+	reachable := dashboardConnectionReachable(conn, timeout)
+	dashboardHealthCache.Lock()
+	dashboardHealthCache.items[key] = dashboardHealthCacheEntry{reachable: reachable, checkedAt: now}
+	dashboardHealthCache.Unlock()
+	return reachable
+}
+
+func (a *App) runDashboardConnectionChecks(connList *tview.List, conns []config.ConnectionConfig, baseDetails []string, force bool) {
 	if len(conns) == 0 {
 		return
+	}
+
+	if !force && a.settings != nil && a.settings.DashboardHealthChecks == "manual" {
+		return
+	}
+
+	checkLimit := len(conns)
+	if !force && len(conns) > 50 {
+		_, screenH := a.getScreenSize()
+		visibleRows := screenH - 10
+		if visibleRows < 1 {
+			visibleRows = 1
+		}
+		if visibleRows < checkLimit {
+			checkLimit = visibleRows
+		}
 	}
 
 	type checkResult struct {
@@ -323,20 +385,36 @@ func (a *App) runDashboardConnectionChecks(connList *tview.List, conns []config.
 	}
 
 	go func() {
-		results := make(chan checkResult, len(conns))
-		for i, conn := range conns {
-			idx := i
-			cfg := conn
+		const maxConcurrentChecks = 4
+		workers := maxConcurrentChecks
+		if checkLimit < workers {
+			workers = checkLimit
+		}
+
+		jobs := make(chan int)
+		results := make(chan checkResult, checkLimit)
+		var wg sync.WaitGroup
+		for range workers {
+			wg.Add(1)
 			go func() {
-				results <- checkResult{
-					index:     idx,
-					reachable: dashboardConnectionReachable(cfg, 3*time.Second),
+				defer wg.Done()
+				for idx := range jobs {
+					reachable := dashboardConnectionReachableCached(conns[idx], 3*time.Second, force)
+					results <- checkResult{index: idx, reachable: reachable}
 				}
 			}()
 		}
 
-		for range conns {
-			res := <-results
+		go func() {
+			for i := 0; i < checkLimit; i++ {
+				jobs <- i
+			}
+			close(jobs)
+			wg.Wait()
+			close(results)
+		}()
+
+		for res := range results {
 			a.app.QueueUpdateDraw(func() {
 				if res.index < 0 || res.index >= connList.GetItemCount() || res.index >= len(baseDetails) {
 					return
