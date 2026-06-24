@@ -12,6 +12,11 @@ import (
 	"github.com/shreyam1008/dbterm/utils"
 )
 
+type databaseObjectListItem struct {
+	objType utils.DBObjectType
+	name    string
+}
+
 // loadDatabaseObjects fetches views, functions, triggers, stored procedures,
 // and extensions for the current connection and appends them to the tables list.
 // All items are read-only display entries (selecting one runs SELECT * for views,
@@ -83,13 +88,15 @@ func (a *App) loadDatabaseObjects() {
 				for _, name := range g.names {
 					objName := name
 					objType := g.objType
+					itemIndex := a.tables.GetItemCount()
 					a.tables.AddItem(
 						fmt.Sprintf("  [#a6adc8]%s[-] %s", icon, objName),
-						"", 0,
-						func() {
-							a.onDatabaseObjectSelected(objType, objName)
-						},
+						"", 0, nil,
 					)
+					a.databaseObjects[itemIndex] = databaseObjectListItem{
+						objType: objType,
+						name:    objName,
+					}
 				}
 			}
 

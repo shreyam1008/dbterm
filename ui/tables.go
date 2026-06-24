@@ -115,6 +115,7 @@ func loadTableListSnapshot(db *sql.DB, dbType config.DBType, selectedTable, acti
 
 func (a *App) applyTableListSnapshot(snapshot *tableListSnapshot) {
 	a.tables.Clear()
+	a.databaseObjects = map[int]databaseObjectListItem{}
 	a.tableCount = 0
 	if snapshot == nil {
 		return
@@ -135,8 +136,12 @@ func (a *App) applyTableListSnapshot(snapshot *tableListSnapshot) {
 		a.selectedTable = snapshot.selectedTable
 	}
 
-	a.tables.SetSelectedFunc(func(_ int, selectedTable string, _ string, _ rune) {
-		if strings.HasPrefix(selectedTable, "[") {
+	a.tables.SetSelectedFunc(func(index int, selectedTable string, _ string, _ rune) {
+		if obj, ok := a.databaseObjects[index]; ok {
+			a.onDatabaseObjectSelected(obj.objType, obj.name)
+			return
+		}
+		if !isSelectableTableLabel(selectedTable) {
 			return
 		}
 		a.selectedTable = selectedTable
@@ -228,7 +233,7 @@ func isSelectableTableListSnapshotItem(snapshot *tableListSnapshot, index int) b
 	if snapshot == nil || index < 0 || index >= len(snapshot.items) {
 		return false
 	}
-	return !strings.HasPrefix(snapshot.items[index].label, "[")
+	return isSelectableTableLabel(snapshot.items[index].label)
 }
 
 func firstSelectableTableIndex(list interface {
@@ -248,5 +253,9 @@ func isSelectableTableListItem(list interface {
 	GetItemText(index int) (string, string)
 }, index int) bool {
 	label, _ := list.GetItemText(index)
-	return !strings.HasPrefix(label, "[")
+	return isSelectableTableLabel(label)
+}
+
+func isSelectableTableLabel(label string) bool {
+	return !strings.HasPrefix(strings.TrimSpace(label), "[")
 }
