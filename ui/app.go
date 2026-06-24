@@ -51,6 +51,7 @@ type App struct {
 
 	// Main UI components
 	tables             *tview.List
+	databaseObjects    map[int]databaseObjectListItem
 	selectedTable      string
 	tableResultsActive bool
 	results            *tview.Table
