@@ -1,12 +1,12 @@
 Package: dbterm
-Version: 0.4.2
+Version: 0.4.3
 Architecture: arm64
 Maintainer: dbterm maintainers <shreyam1008@users.noreply.github.com>
-Filename: pool/main/d/dbterm/dbterm_0.4.2_arm64.deb
-Size: 4320304
-MD5sum: 3362214289d1e0127430fad2cc6ccf5b
-SHA1: 169a784237f782ab40cf5154648d80cec6a2b427
-SHA256: 64889b8ea4f873f1c5b2f74b5a6fb85455fbac18dbe0e1c90531cfdbded5405f
+Filename: pool/main/d/dbterm/dbterm_0.4.3_arm64.deb
+Size: 4321750
+MD5sum: 21efc0fcdbdf3913be3135595aa46099
+SHA1: ad86e9da733644598f51cabdaed66cb5c4baabf4
+SHA256: 3c55ae196b4bb1aa964d372c3b3a2de75779067e11868626824097679bea3683
 Section: database
 Priority: optional
 Description: Multi-database terminal client (PostgreSQL, MySQL, SQLite)
