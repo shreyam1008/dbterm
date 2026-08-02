@@ -838,7 +838,7 @@ func (a *App) connectWithConfig(cfg *config.ConnectionConfig, storeIndex int) {
 		var snapshot *tableListSnapshot
 		var tableLoadErr error
 		if err == nil {
-			snapshot, tableLoadErr = loadTableListSnapshot(db, cfg.Type, selectedTable, strings.TrimSpace(cfg.Database), currentTableIndex)
+			snapshot, tableLoadErr = loadTableListSnapshot(db, cfg.Type, selectedTable, currentTableIndex)
 		}
 
 		a.app.QueueUpdateDraw(func() {

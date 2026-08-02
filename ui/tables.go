@@ -25,7 +25,7 @@ type tableListSnapshot struct {
 // LoadTables fetches the list of tables from the connected database and applies it to the UI.
 func (a *App) LoadTables() error {
 	currentIndex := a.tables.GetCurrentItem()
-	snapshot, err := loadTableListSnapshot(a.db, a.dbType, a.selectedTable, activeDatabaseName(a), currentIndex)
+	snapshot, err := loadTableListSnapshot(a.db, a.dbType, a.selectedTable, currentIndex)
 	if err != nil {
 		return err
 	}
@@ -37,7 +37,7 @@ func (a *App) LoadTables() error {
 	return nil
 }
 
-func loadTableListSnapshot(db *sql.DB, dbType config.DBType, selectedTable, activeDatabase string, currentIndex int) (*tableListSnapshot, error) {
+func loadTableListSnapshot(db *sql.DB, dbType config.DBType, selectedTable string, currentIndex int) (*tableListSnapshot, error) {
 	if db == nil {
 		return nil, fmt.Errorf("not connected to any database")
 	}
@@ -58,10 +58,6 @@ func loadTableListSnapshot(db *sql.DB, dbType config.DBType, selectedTable, acti
 
 	snapshot := &tableListSnapshot{selectedIndex: 0}
 	foundSelection := false
-
-	if dbType == config.PostgreSQL {
-		appendInstanceDatabasesSectionSnapshot(ctx, db, dbType, selectedTable, activeDatabase, snapshot)
-	}
 
 	lastNamespace := ""
 	for rows.Next() {
@@ -153,44 +149,6 @@ func (a *App) applyTableListSnapshot(snapshot *tableListSnapshot) {
 	})
 }
 
-func appendInstanceDatabasesSectionSnapshot(ctx context.Context, db *sql.DB, dbType config.DBType, currentSelection, activeDatabase string, snapshot *tableListSnapshot) {
-	query := utils.ListDatabasesQuery(dbType)
-	if query == "" {
-		return
-	}
-
-	dbCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
-	rows, err := db.QueryContext(dbCtx, query)
-	if err != nil {
-		return
-	}
-	defer rows.Close()
-
-	var databases []string
-	for rows.Next() {
-		var databaseName string
-		if err := rows.Scan(&databaseName); err != nil {
-			return
-		}
-		databases = append(databases, databaseName)
-	}
-	if len(databases) == 0 {
-		return
-	}
-
-	snapshot.items = append(snapshot.items, tableListSnapshotItem{label: fmt.Sprintf("[#6c7086]── %s Instance Databases (%d) ──[-]", iconDatabase, len(databases))})
-	for _, databaseName := range databases {
-		label := databaseName
-		if strings.EqualFold(databaseName, currentSelection) || strings.EqualFold(databaseName, activeDatabase) {
-			label += " [green](current)[-]"
-		}
-		snapshot.items = append(snapshot.items, tableListSnapshotItem{label: fmt.Sprintf("[#6c7086]%s[-]", label)})
-	}
-	snapshot.items = append(snapshot.items, tableListSnapshotItem{label: "[#6c7086]────────[-]"})
-}
-
 func namespaceForTable(dbType config.DBType, tableName string) string {
 	parts := strings.SplitN(tableName, ".", 2)
 	if len(parts) == 2 {
@@ -211,13 +169,6 @@ func namespaceKindLabel(dbType config.DBType) string {
 	default:
 		return "Group"
 	}
-}
-
-func activeDatabaseName(a *App) string {
-	if a == nil || a.activeConn == nil {
-		return ""
-	}
-	return strings.TrimSpace(a.activeConn.Database)
 }
 
 func firstSelectableTableSnapshotIndex(snapshot *tableListSnapshot) int {
