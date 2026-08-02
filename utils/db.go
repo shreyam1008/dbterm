@@ -162,9 +162,16 @@ func SupportedObjectTypes(dbType config.DBType) []DBObjectType {
 func ListDatabasesQuery(dbType config.DBType) string {
 	switch dbType {
 	case config.PostgreSQL:
-		return `SELECT datname FROM pg_database WHERE datistemplate = false ORDER BY datname`
+		return `SELECT datname
+FROM pg_database
+WHERE datistemplate = false
+  AND has_database_privilege(datname, 'CONNECT')
+ORDER BY datname`
 	case config.MySQL:
-		return `SHOW DATABASES`
+		return `SELECT schema_name
+FROM information_schema.schemata
+WHERE schema_name NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys')
+ORDER BY schema_name`
 	default:
 		return ""
 	}

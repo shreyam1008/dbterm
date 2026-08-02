@@ -55,6 +55,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubus
 | Turso (LibSQL) | Cloud SQLite-compatible querying + schema inspector + `.sql` logical export |
 | Cloudflare D1 | D1 API-backed SQL querying + schema inspector + `.sql` logical export |
 
+For MySQL or PostgreSQL, a new connection does not require you to remember the database name. Enter the server credentials, choose **Find DBs**, and select from the databases visible to that account; dbterm fills the Database field and an empty connection Name automatically.
+
 ## CLI reference
 
 | Command | Purpose |

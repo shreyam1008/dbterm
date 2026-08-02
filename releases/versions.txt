@@ -10,6 +10,7 @@
 # 5) If that tag already exists, the workflow fails (prevents duplicate releases).
 #
 # Newest entry first:
+0.4.4|Godavari|Discover accessible MySQL and PostgreSQL databases from new-connection credentials and select one without typing its name.
 0.4.3|Narmada|Database-scoped browsing and reliable MySQL view, trigger, function, and procedure selection.
 0.4.2|Kaveri|Cancellable query lifecycle, safer async UI updates, bounded dashboard checks, and stable connection forms.
 0.4.1|Indra|Guarded result paging, engine-aware backups, and schema inspection.

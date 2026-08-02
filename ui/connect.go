@@ -332,6 +332,10 @@ func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex in
 		a.showDashboard()
 	})
 
+	form.AddButton("Find DBs", func() {
+		a.discoverConnectionDatabases(form)
+	})
+
 	form.AddButton("Test", func() {
 		cfg := a.buildConfigFromForm(form)
 		if cfg == nil {
@@ -569,9 +573,9 @@ func connectFooterText(width int, dbType config.DBType) string {
 	default:
 		switch {
 		case width < 78:
-			return fmt.Sprintf(" [yellow]Tab[-] Next  │  [yellow]Esc[-] Back %s  │  [yellow]Parse DSN[-] %s", iconBack, iconDropdown)
+			return fmt.Sprintf(" [yellow]Tab[-] Next  │  [yellow]Esc[-] Back %s  │  [yellow]Find DBs[-] %s", iconBack, iconDropdown)
 		default:
-			return fmt.Sprintf(" [yellow]Tab[-] Navigate  │  [yellow]Esc[-] Back %s  │  [yellow]Parse DSN[-] %s auto-fills host/user/db[-]", iconBack, iconDropdown)
+			return fmt.Sprintf(" [yellow]Tab[-] Navigate  │  [yellow]Esc[-] Back %s  │  [yellow]Find DBs[-] %s uses entered server credentials[-]", iconBack, iconDropdown)
 		}
 	}
 }
@@ -897,7 +901,7 @@ func connectionHint(err error, cfg *config.ConnectionConfig) string {
 		return "💡 Check your username and password."
 	case strings.Contains(errStr, "does not exist") || strings.Contains(errStr, "unknown database"):
 		return fmt.Sprintf("💡 Database \"%s\" not found. Check the name.", cfg.Database)
-	case strings.Contains(errStr, "timeout") || strings.Contains(errStr, "timed out"):
+	case strings.Contains(errStr, "timeout") || strings.Contains(errStr, "timed out") || strings.Contains(errStr, "deadline exceeded"):
 		return "💡 Connection timed out. Check if the server is reachable."
 	case strings.Contains(errStr, "no such file") || strings.Contains(errStr, "unable to open"):
 		return fmt.Sprintf("💡 SQLite file not found: %s", cfg.FilePath)

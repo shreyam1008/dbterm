@@ -33,3 +33,22 @@ func TestMySQLMetadataQueriesStayInCurrentDatabase(t *testing.T) {
 		})
 	}
 }
+
+func TestMySQLDatabaseDiscoveryHidesSystemSchemas(t *testing.T) {
+	query := strings.ToLower(ListDatabasesQuery(config.MySQL))
+	if !strings.Contains(query, "from information_schema.schemata") {
+		t.Fatalf("discovery query does not read visible schemas:\n%s", query)
+	}
+	for _, systemSchema := range []string{"information_schema", "mysql", "performance_schema", "sys"} {
+		if !strings.Contains(query, "'"+systemSchema+"'") {
+			t.Fatalf("discovery query does not exclude %q:\n%s", systemSchema, query)
+		}
+	}
+}
+
+func TestPostgreSQLDatabaseDiscoveryRequiresConnectPrivilege(t *testing.T) {
+	query := strings.ToLower(ListDatabasesQuery(config.PostgreSQL))
+	if !strings.Contains(query, "has_database_privilege(datname, 'connect')") {
+		t.Fatalf("discovery query does not filter inaccessible databases:\n%s", query)
+	}
+}
