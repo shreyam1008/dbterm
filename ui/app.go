@@ -61,6 +61,7 @@ type App struct {
 	copiedCellValue     string
 	hasCopiedCellValue  bool
 	copiedCellSystem    bool
+	clipboardGeneration atomic.Uint64
 	results             *tview.Table
 	queryInput          *tview.TextArea
 	statusBar           *tview.TextView
@@ -243,17 +244,6 @@ func (a *App) setupUI() {
 			return nil
 		}
 
-		// Terminal-safe all-column sizing. Some terminals cannot distinguish
-		// Ctrl+= or Ctrl+0 from their unmodified keys.
-		if delta, reset, ok := resultAllColumnWidthAction(event); ok {
-			if reset {
-				a.resetTableZoom()
-			} else {
-				a.zoomTable(delta)
-			}
-			return nil
-		}
-
 		// Pagination: PgDn/PgUp for next/prev page, Home/End for first/last page
 		switch event.Key() {
 		case tcell.KeyPgDn:
@@ -270,15 +260,25 @@ func (a *App) setupUI() {
 			return nil
 		}
 
-		// + / - in Results adjusts the selected column width.
-		if isIncreaseKey(event) {
+		// Plain +/- adjusts one column. >/< and 0 remain terminal-safe
+		// fallbacks for all-column zoom/reset.
+		switch resultSizeShortcutFor(event) {
+		case resultSizeSelectedIncrease:
 			_, col := a.results.GetSelection()
 			a.adjustColumnWidth(col, colWidthStep)
 			return nil
-		}
-		if isDecreaseKey(event) {
+		case resultSizeSelectedDecrease:
 			_, col := a.results.GetSelection()
 			a.adjustColumnWidth(col, -colWidthStep)
+			return nil
+		case resultSizeAllIncrease:
+			a.zoomTable(1)
+			return nil
+		case resultSizeAllDecrease:
+			a.zoomTable(-1)
+			return nil
+		case resultSizeAllReset:
+			a.resetTableZoom()
 			return nil
 		}
 
@@ -566,21 +566,67 @@ func (a *App) setResultLimit(limit int) {
 	}
 
 	prevLimit := a.resultLimit
+	prevOffset := a.pageOffset
+	prevPageSize := a.pageSize
+	prevTotal := a.totalRowCount
+	restorePrevious := func() {
+		a.resultLimit = prevLimit
+		a.pageOffset = prevOffset
+		a.pageSize = prevPageSize
+		a.totalRowCount = prevTotal
+	}
 	a.resultLimit = limit
-	a.advanceResultGeneration()
 	a.pageOffset = 0 // reset to first page when page size changes
+	a.pageSize = 0
 	a.totalRowCount = -1
-	if a.db == nil || a.selectedTable == "" {
+	if a.db == nil || !a.isTableResultActive() {
+		a.advanceResultGeneration()
 		a.updateStatusBar("", a.currentResultRowCount())
 		return
 	}
 
-	if err := a.LoadResults(); err != nil {
-		a.resultLimit = prevLimit
-		a.ShowAlert(fmt.Sprintf("%s Could not refresh results after changing preview limit:\n\n%v", iconWarn, err), "main")
+	request, err := a.prepareTableResultRequest()
+	if err != nil || request == nil {
+		restorePrevious()
+		a.advanceResultGeneration()
+		if err == nil {
+			err = fmt.Errorf("table result request is unavailable")
+		}
+		a.ShowAlert(fmt.Sprintf("%s Could not change preview rows:\n\n%v", iconWarn, err), "main")
 		return
 	}
-	a.flashStatus(fmt.Sprintf("[green]%s Preview %s[-]", iconRefresh, a.resultLimitReadable()), a.currentResultRowCount(), 1400*time.Millisecond)
+
+	returnFocus := a.app.GetFocus()
+	restoreFocus := func() {
+		switch returnFocus {
+		case a.tables, a.queryInput, a.results:
+			a.setFocusWithColor(returnFocus)
+		case nil:
+			return
+		default:
+			a.app.SetFocus(returnFocus)
+		}
+	}
+	a.runTableResultRequestAsync(
+		request,
+		fmt.Sprintf("Loading %s...", a.resultLimitReadable()),
+		"Press Esc to cancel changing preview rows.",
+		tableResultAsyncCallbacks{
+			rollback: restorePrevious,
+			onCancel: func() {
+				restoreFocus()
+				a.flashStatus("[yellow]Preview row change canceled[-]", a.currentResultRowCount(), 1400*time.Millisecond)
+			},
+			onError: func(loadErr error) {
+				restoreFocus()
+				a.ShowAlert(fmt.Sprintf("%s Could not change preview rows:\n\n%v", iconWarn, loadErr), "main")
+			},
+			onSuccess: func() {
+				restoreFocus()
+				a.flashStatus(fmt.Sprintf("[green]%s Preview %s[-]", iconRefresh, a.resultLimitReadable()), a.currentResultRowCount(), 1400*time.Millisecond)
+			},
+		},
+	)
 }
 
 func (a *App) increaseResultLimit() {
@@ -854,6 +900,12 @@ func (a *App) setupKeyBindings() {
 			if current == a.tables && a.hasActiveTableSearch() {
 				return event
 			}
+			// In filtered table results, the first Esc removes the filter. A
+			// second Esc follows the normal path back to the Dashboard.
+			if page == "main" && current == a.results && a.isTableResultActive() && a.activeResultFilter(a.selectedTable) != nil {
+				a.clearResultFilterAndReload()
+				return nil
+			}
 			// If in query input, unfocus to tables
 			if current == a.queryInput {
 				a.setFocusWithColor(a.tables)
@@ -885,6 +937,13 @@ func (a *App) setupKeyBindings() {
 				a.showDashboard()
 				return nil
 			}
+		}
+
+		// Loading overlays own the keyboard until they finish or Esc cancels.
+		// This prevents a background completion from stealing focus from a
+		// page opened on top of the operation.
+		if page == "loading" {
+			return event
 		}
 
 		// F5 — Refresh currently selected table results (preserve selection/sort)
@@ -948,19 +1007,34 @@ func (a *App) setupKeyBindings() {
 			return nil
 		}
 
-		// Ctrl+=/- for table zoom, Ctrl+0 for reset (any focus in main)
-		if event.Modifiers()&tcell.ModCtrl != 0 || event.Key() == tcell.KeyCtrlUnderscore {
-			switch {
-			case isIncreaseKey(event):
+		// Modifier-aware result sizing. Ctrl changes every column; Alt changes
+		// the number of rows fetched per page. Plain keys continue to the
+		// Results primitive, where they resize only the selected column.
+		switch resultSizeShortcutFor(event) {
+		case resultSizeAllIncrease:
+			if resultSizeHasControlModifier(event) {
 				a.zoomTable(1)
 				return nil
-			case isDecreaseKey(event):
+			}
+		case resultSizeAllDecrease:
+			if resultSizeHasControlModifier(event) {
 				a.zoomTable(-1)
 				return nil
-			case isZeroKey(event):
+			}
+		case resultSizeAllReset:
+			if resultSizeHasControlModifier(event) {
 				a.resetTableZoom()
 				return nil
 			}
+		case resultSizeRowsIncrease:
+			a.increaseResultLimit()
+			return nil
+		case resultSizeRowsDecrease:
+			a.decreaseResultLimit()
+			return nil
+		case resultSizeRowsToggle:
+			a.toggleAdaptiveResultLimit()
+			return nil
 		}
 
 		if hasAction {
@@ -1027,19 +1101,6 @@ func (a *App) setupKeyBindings() {
 			}
 		}
 
-		if event.Modifiers()&tcell.ModAlt != 0 {
-			switch event.Rune() {
-			case '=', '+':
-				a.increaseResultLimit()
-				return nil
-			case '-', '_':
-				a.decreaseResultLimit()
-				return nil
-			case '0':
-				a.toggleAdaptiveResultLimit()
-				return nil
-			}
-		}
 		return event
 	})
 }
@@ -1068,19 +1129,75 @@ func isZeroKey(event *tcell.EventKey) bool {
 	return event.Rune() == '0'
 }
 
-func resultAllColumnWidthAction(event *tcell.EventKey) (delta int, reset, ok bool) {
-	if event == nil || event.Key() != tcell.KeyRune || event.Modifiers()&(tcell.ModCtrl|tcell.ModAlt|tcell.ModMeta) != 0 {
-		return 0, false, false
+type resultSizeShortcut uint8
+
+const (
+	resultSizeNone resultSizeShortcut = iota
+	resultSizeSelectedIncrease
+	resultSizeSelectedDecrease
+	resultSizeAllIncrease
+	resultSizeAllDecrease
+	resultSizeAllReset
+	resultSizeRowsIncrease
+	resultSizeRowsDecrease
+	resultSizeRowsToggle
+)
+
+func resultSizeHasControlModifier(event *tcell.EventKey) bool {
+	return event != nil && (event.Modifiers()&tcell.ModCtrl != 0 || event.Key() == tcell.KeyCtrlUnderscore)
+}
+
+func resultSizeShortcutFor(event *tcell.EventKey) resultSizeShortcut {
+	if event == nil {
+		return resultSizeNone
 	}
+
+	modifiers := event.Modifiers()
+	hasCtrl := resultSizeHasControlModifier(event)
+	hasAlt := modifiers&tcell.ModAlt != 0
+	hasMeta := modifiers&tcell.ModMeta != 0
+
+	if hasCtrl && !hasAlt && !hasMeta {
+		switch {
+		case isIncreaseKey(event):
+			return resultSizeAllIncrease
+		case isDecreaseKey(event):
+			return resultSizeAllDecrease
+		case isZeroKey(event):
+			return resultSizeAllReset
+		}
+		return resultSizeNone
+	}
+
+	if hasAlt && !hasCtrl && !hasMeta {
+		switch {
+		case isIncreaseKey(event):
+			return resultSizeRowsIncrease
+		case isDecreaseKey(event):
+			return resultSizeRowsDecrease
+		case isZeroKey(event):
+			return resultSizeRowsToggle
+		}
+		return resultSizeNone
+	}
+
+	if hasCtrl || hasAlt || hasMeta {
+		return resultSizeNone
+	}
+
 	switch event.Rune() {
+	case '+', '=':
+		return resultSizeSelectedIncrease
+	case '-', '_':
+		return resultSizeSelectedDecrease
 	case '>':
-		return 1, false, true
+		return resultSizeAllIncrease
 	case '<':
-		return -1, false, true
+		return resultSizeAllDecrease
 	case '0':
-		return 0, true, true
+		return resultSizeAllReset
 	default:
-		return 0, false, false
+		return resultSizeNone
 	}
 }
 
@@ -1274,12 +1391,16 @@ func (a *App) applyResponsiveLayout(width, height int) {
 func (a *App) statusActionText(width int) string {
 	inQuery := a.focusedPanel == a.queryInput
 	inResults := a.focusedPanel == a.results
+	filterActive := a.isTableResultActive() && a.activeResultFilter(a.selectedTable) != nil
 	switch {
 	case width < 72:
 		if inQuery {
 			return "[yellow]Enter[-] Run ▶  │  [yellow]Esc[-] Back"
 		}
 		if inResults {
+			if filterActive {
+				return "[yellow]Esc[-] Clear filter  │  [yellow]C[-] Copy  │  [yellow]/[-] Find"
+			}
 			return "[yellow]C[-] Copy  │  [yellow]/[-] Find  │  [yellow]V[-] Clip"
 		}
 		return "[yellow]Space[-] Select  │  [yellow]Alt+E[-] CSV  │  [yellow]Esc[-] Back"
@@ -1288,6 +1409,9 @@ func (a *App) statusActionText(width int) string {
 			return fmt.Sprintf("[yellow]Enter[-] Run ▶  │  [yellow]Shift+Enter[-] Newline  │  [yellow]Esc[-] Back  │  [yellow]Alt+H[-] Help %s", iconHelp)
 		}
 		if inResults {
+			if filterActive {
+				return "[yellow]Esc[-] Clear filter  │  [yellow]/[-] Change filter  │  [yellow]C[-] Copy cell"
+			}
 			return "[yellow]C[-] Copy cell  │  [yellow]/[-] Filter  │  [yellow]V[-] Filter by clipboard"
 		}
 		return fmt.Sprintf("[yellow]Space[-] Select  │  [yellow]Alt+A/C[-] All/Clear  │  [yellow]Alt+E[-] CSV  │  [yellow]Alt+H[-] %s", iconHelp)
@@ -1297,6 +1421,9 @@ func (a *App) statusActionText(width int) string {
 				iconRefresh, iconDashboard)
 		}
 		if inResults {
+			if filterActive {
+				return fmt.Sprintf("[yellow]Esc[-] Clear filter  │  [yellow]/[-] Change  │  [yellow]C[-] Copy  │  [yellow]Alt+H[-] %s", iconHelp)
+			}
 			return fmt.Sprintf("[yellow]C[-] Copy cell  │  [yellow]/[-] Filter value  │  [yellow]V[-] Clipboard filter  │  [yellow]Enter[-] Detail  │  [yellow]F5[-] %s", iconRefresh)
 		}
 		return fmt.Sprintf("[yellow]F5[-] %s  │  [yellow]Space[-] Toggle Sel  │  [yellow]Alt+A/C/E[-] All/Clear/CSV  │  [yellow]Enter[-] Detail  │  [yellow]Alt+D/Esc[-] Dash %s",
@@ -1307,6 +1434,9 @@ func (a *App) statusActionText(width int) string {
 				iconRefresh, iconHelp, iconDashboard)
 		}
 		if inResults {
+			if filterActive {
+				return fmt.Sprintf("[yellow]Esc[-] Clear filter  │  [yellow]/[-] Change filter  │  [yellow]C[-] Copy cell  │  [yellow]V[-] Clipboard filter  │  [yellow]Alt+H[-] %s", iconHelp)
+			}
 			return fmt.Sprintf("[yellow]C[-] Copy cell  │  [yellow]/[-] Filter value  │  [yellow]V[-] Clipboard filter  │  [yellow]Space[-] Select row  │  [yellow]Enter[-] Detail  │  [yellow]F5[-] %s  │  [yellow]Alt+H[-] %s",
 				iconRefresh, iconHelp)
 		}

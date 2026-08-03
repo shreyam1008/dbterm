@@ -1,8 +1,10 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -18,6 +20,13 @@ type resultValueFilter struct {
 	value  string
 }
 
+type resultFilterViewState struct {
+	filter        *resultValueFilter
+	pageOffset    int
+	pageSize      int
+	totalRowCount int
+}
+
 func (a *App) copyCurrentResultCell() {
 	_, _, column, value, ok := a.currentResultCell()
 	if !ok {
@@ -25,13 +34,13 @@ func (a *App) copyCurrentResultCell() {
 		return
 	}
 
-	err := a.copyValue(value)
 	displayValue := tview.Escape(resultValuePreview(value, 28))
-	if err != nil {
-		a.flashStatus(fmt.Sprintf("[yellow]Copied %s=%s inside dbterm (system clipboard unavailable)[-]",
-			tview.Escape(column), displayValue), a.currentResultRowCount(), 2200*time.Millisecond)
-		return
-	}
+	a.copyValueAsync(value, func(err error) {
+		if err != nil {
+			a.flashStatus(fmt.Sprintf("[yellow]Copied %s=%s inside dbterm (system clipboard unavailable)[-]",
+				tview.Escape(column), displayValue), a.currentResultRowCount(), 2200*time.Millisecond)
+		}
+	})
 	a.flashStatus(fmt.Sprintf("[green]Copied %s=%s[-]", tview.Escape(column), displayValue), a.currentResultRowCount(), 1600*time.Millisecond)
 }
 
@@ -122,14 +131,18 @@ func (a *App) showResultFilterModal() {
 		a.applyResultFilter(column, value)
 	}
 	applyClipboardValue := func() {
-		value, err := a.clipboardValue()
-		if err != nil {
-			a.ShowAlert(fmt.Sprintf("%s Could not read the clipboard:\n\n%v\n\nCopy a cell with C first, or install a clipboard utility.", iconWarn, err), pageResultFilter)
-			return
-		}
 		closeModal()
-		a.applyResultFilter(column, value)
+		a.withClipboardFilterValue(func(value string) {
+			a.applyResultFilter(column, value)
+		})
 	}
+	valueInput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEnter && event.Modifiers() == tcell.ModNone {
+			applyTypedValue()
+			return nil
+		}
+		return event
+	})
 
 	form.AddButton("Search", applyTypedValue)
 	form.AddButton("Use Clipboard", applyClipboardValue)
@@ -138,25 +151,13 @@ func (a *App) showResultFilterModal() {
 		a.clearResultFilterAndReload()
 	})
 	form.AddButton("Cancel", closeModal)
-	form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEscape {
-			closeModal()
-			return nil
-		}
-		if event.Key() == tcell.KeyEnter {
-			formItem, _ := form.GetFocusedItemIndex()
-			if formItem == 0 {
-				applyTypedValue()
-				return nil
-			}
-		}
-		return event
-	})
+	form.SetCancelFunc(closeModal)
+	form.SetFocus(0)
 
 	footer := tview.NewTextView().
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignCenter).
-		SetText(" [yellow]Enter[-] Exact search  │  [yellow]Use Clipboard[-] Cross-table lookup  │  [yellow]Clear[-] Remove filter  │  [yellow]Esc[-] Cancel ")
+		SetText(" [yellow]Enter[-] Search  │  [yellow]Tab / Shift+Tab[-] Next / Previous  │  [yellow]Esc[-] Cancel ")
 	footer.SetBackgroundColor(crust)
 
 	container := tview.NewFlex().
@@ -179,12 +180,9 @@ func (a *App) filterSelectedResultColumnByClipboard() {
 		a.ShowAlert(fmt.Sprintf("%s Clipboard filtering is available while browsing a table.\n\nSelect a table and target column first.", iconInfo), "main")
 		return
 	}
-	value, err := a.clipboardValue()
-	if err != nil {
-		a.ShowAlert(fmt.Sprintf("%s Could not read the clipboard:\n\n%v\n\nCopy a cell with C first, or install a clipboard utility.", iconWarn, err), "main")
-		return
-	}
-	a.applyResultFilter(column, value)
+	a.withClipboardFilterValue(func(value string) {
+		a.applyResultFilter(column, value)
+	})
 }
 
 func (a *App) applyResultFilter(column, value string) {
@@ -192,34 +190,124 @@ func (a *App) applyResultFilter(column, value string) {
 		return
 	}
 
-	previous := a.resultFilter
+	previous := a.captureResultFilterViewState()
 	a.resultFilter = &resultValueFilter{table: a.selectedTable, column: column, value: value}
 	a.resetPagination()
-	if err := a.LoadResults(); err != nil {
-		a.resultFilter = previous
-		a.resetPagination()
-		_ = a.LoadResults()
-		a.ShowAlert(fmt.Sprintf("%s Could not filter %s by %q:\n\n%v", iconWarn, column, value, err), "main")
-		return
-	}
-	a.flashStatus(fmt.Sprintf("[green]Filter: %s = %s[-]", tview.Escape(column), tview.Escape(resultValuePreview(value, 28))), a.currentResultRowCount(), 1800*time.Millisecond)
+	a.reloadResultFilterAsync(
+		previous,
+		fmt.Sprintf("Filtering %s = %s...", tview.Escape(column), tview.Escape(resultValuePreview(value, 30))),
+		fmt.Sprintf("[green]Filter: %s = %s[-]", tview.Escape(column), tview.Escape(resultValuePreview(value, 28))),
+		fmt.Sprintf("Could not filter %s by %q", tview.Escape(column), tview.Escape(resultValuePreview(value, 60))),
+	)
 }
 
 func (a *App) clearResultFilterAndReload() {
 	if a == nil || a.activeResultFilter(a.selectedTable) == nil {
 		return
 	}
-	previous := a.resultFilter
+	previous := a.captureResultFilterViewState()
 	a.resultFilter = nil
 	a.resetPagination()
-	if err := a.LoadResults(); err != nil {
-		a.resultFilter = previous
-		a.resetPagination()
-		_ = a.LoadResults()
-		a.ShowAlert(fmt.Sprintf("%s Could not clear the table filter:\n\n%v", iconWarn, err), "main")
+	a.reloadResultFilterAsync(
+		previous,
+		"Clearing the column filter...",
+		"[green]Column filter cleared[-]",
+		"Could not clear the table filter",
+	)
+}
+
+func (a *App) captureResultFilterViewState() resultFilterViewState {
+	state := resultFilterViewState{
+		pageOffset:    a.pageOffset,
+		pageSize:      a.pageSize,
+		totalRowCount: a.totalRowCount,
+	}
+	if a.resultFilter != nil {
+		filter := *a.resultFilter
+		state.filter = &filter
+	}
+	return state
+}
+
+func (a *App) restoreResultFilterViewState(state resultFilterViewState) {
+	a.resultFilter = nil
+	if state.filter != nil {
+		filter := *state.filter
+		a.resultFilter = &filter
+	}
+	a.pageOffset = state.pageOffset
+	a.pageSize = state.pageSize
+	a.totalRowCount = state.totalRowCount
+}
+
+func (a *App) reloadResultFilterAsync(previous resultFilterViewState, loadingText, successText, failureText string) {
+	request, err := a.prepareTableResultRequest()
+	if err != nil || request == nil {
+		a.restoreResultFilterViewState(previous)
+		a.advanceResultGeneration()
+		if err == nil {
+			err = fmt.Errorf("table result request is unavailable")
+		}
+		a.ShowAlert(fmt.Sprintf("%s %s:\n\n%v", iconWarn, failureText, err), "main")
 		return
 	}
-	a.flashStatus("[green]Column filter cleared[-]", a.currentResultRowCount(), 1400*time.Millisecond)
+
+	a.runTableResultRequestAsync(request, loadingText, "Press Esc to cancel filtering.", tableResultAsyncCallbacks{
+		rollback: func() {
+			a.restoreResultFilterViewState(previous)
+		},
+		onCancel: func() {
+			a.setFocusWithColor(a.results)
+			a.flashStatus("[yellow]Filter change canceled[-]", a.currentResultRowCount(), 1400*time.Millisecond)
+		},
+		onError: func(fetchErr error) {
+			a.setFocusWithColor(a.results)
+			a.ShowAlert(fmt.Sprintf("%s %s:\n\n%v", iconWarn, failureText, fetchErr), "main")
+		},
+		onSuccess: func() {
+			a.setFocusWithColor(a.results)
+			a.flashStatus(successText, a.currentResultRowCount(), 1800*time.Millisecond)
+		},
+	})
+}
+
+func (a *App) withClipboardFilterValue(useValue func(string)) {
+	if useValue == nil {
+		return
+	}
+	if value, ok := a.copiedCellClipboardValue(); ok {
+		useValue(value)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), clipboardReadTimeout)
+	var canceledByUser atomic.Bool
+	a.showLoadingModal("Reading the clipboard...", withLoadingCancel("Press Esc to cancel clipboard reading.", func() {
+		canceledByUser.Store(true)
+		cancel()
+		a.setFocusWithColor(a.results)
+	}))
+
+	go func() {
+		defer cancel()
+		value, err := readFromClipboardContext(ctx)
+		a.queueUpdateDraw(func() {
+			if canceledByUser.Load() {
+				return
+			}
+			a.pages.RemovePage("loading")
+			a.setFocusWithColor(a.results)
+			if err != nil {
+				if fallback, ok := a.cachedCopiedCellValue(); ok {
+					useValue(fallback)
+					return
+				}
+				a.ShowAlert(fmt.Sprintf("%s Could not read the clipboard:\n\n%v\n\nCopy a cell with C first, or install a clipboard utility.", iconWarn, err), "main")
+				return
+			}
+			useValue(value)
+		})
+	}()
 }
 
 func (a *App) activeResultFilter(table string) *resultValueFilter {
@@ -246,7 +334,7 @@ func (a *App) resultFilterBadge() string {
 	if filter == nil {
 		return ""
 	}
-	return fmt.Sprintf(" [#cba6f7](%s = %s)[-]", tview.Escape(filter.column), tview.Escape(resultValuePreview(filter.value, 24)))
+	return fmt.Sprintf(" [#cba6f7](%s = %s • Esc clear)[-]", tview.Escape(filter.column), tview.Escape(resultValuePreview(filter.value, 24)))
 }
 
 func resultValuePreview(value string, maxRunes int) string {

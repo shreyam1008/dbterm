@@ -13,7 +13,8 @@ func keyboardHelpText() string {
   [#89b4fa]Find a table[-]       [yellow]Alt+T[-] → type its name → [yellow]Enter[-]
   [#89b4fa]Cross-table lookup[-] Select a cell → [yellow]C[-] → open another table/column → [yellow]V[-]
   [#89b4fa]Filter a column[-]    Select the column → [yellow]/[-] → type an exact value → [yellow]Enter[-]
-  [#89b4fa]Resize results[-]     [yellow]+ / -[-] one column  │  [yellow]> / <[-] all columns  │  [yellow]0[-] reset
+  [#89b4fa]Clear a filter[-]     Press [yellow]Esc[-] once; press it again to return to the Dashboard
+  [#89b4fa]Resize results[-]     [yellow]+ / -[-] selected column  │  [yellow]Ctrl++ / Ctrl+-[-] all columns  │  [yellow]Alt++ / Alt+-[-] rows
 
 [#a6e3a1]TABLES[-]
   [yellow]Type[-]             Jump to the first matching table and highlight the match
@@ -25,7 +26,8 @@ func keyboardHelpText() string {
 [#a6e3a1]RESULTS — CELLS & FILTERS[-]
   [yellow]C[-]                Copy only the selected cell (full value, even if preview is shortened)
   [yellow]V[-]                Exact-filter selected column using the clipboard value
-  [yellow]/[-]                Exact-filter selected column using typed text or Clipboard button
+  [yellow]/[-]                Open exact filter; Enter searches and Tab / Shift+Tab moves between controls
+  [yellow]Esc[-]              Clear an active filter first; press again to return to the Dashboard
   [yellow]Enter[-]            Open row details; C copies the selected detail cell
   [yellow]Space[-]            Toggle current row selection
   [yellow]Alt+A / Alt+C[-]    Select all / clear selected rows
@@ -33,13 +35,14 @@ func keyboardHelpText() string {
 
 [#a6e3a1]RESULTS — SIZE, SORT & PAGES[-]
   [yellow]+ / -[-]            Widen / narrow only the selected column
-  [yellow]> / <[-]            Widen / narrow all columns (terminal-safe)
-  [yellow]0[-]                Reset all column widths
-  [#6c7086]Ctrl+= / - / 0[-] Legacy all-column aliases; some terminals cannot report these reliably
+  [yellow]Ctrl++ / Ctrl+-[-]  Zoom all result columns in / out
+  [yellow]> / <[-]            Same all-column zoom (fallback when a terminal drops Ctrl)
+  [yellow]0 / Ctrl+0[-]       Reset all column widths
+  [#6c7086]Keyboard note[-]    The + character is already Shift+=, so Shift+plus is not a separate terminal key
   [yellow]S[-]                Sort by the selected column
   [yellow]PgDn / ][-]         Next page        [yellow]PgUp / Left bracket[-] Previous page
   [yellow]Home / End[-]       First / last page
-  [yellow]Alt+= / Alt+-[-]    Increase / decrease preview row limit
+  [yellow]Alt++ / Alt+-[-]    Increase / decrease preview rows per page
   [yellow]Alt+0[-]            Toggle preview limit between 100 and safe maximum
   [yellow]F5 / Ctrl+F5[-]     Refresh current table / refresh tables and current data
   [yellow]Alt+F[-]            Toggle fullscreen results

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -42,33 +43,81 @@ type resultSelectionState struct {
 	selectedRowText []string
 }
 
+type tableResultRequest struct {
+	db             *sql.DB
+	dbType         config.DBType
+	selectedTable  string
+	quotedTable    string
+	query          string
+	countQuery     string
+	queryArgs      []any
+	requestedLimit int
+	pageOffset     int
+	generation     uint64
+	selection      resultSelectionState
+	startedAt      time.Time
+}
+
+type tableResultSnapshot struct {
+	request     *tableResultRequest
+	results     *tview.Table
+	columnNames []string
+	rowCount    int
+	pageLimit   int
+	elapsed     time.Duration
+}
+
+type tableResultAsyncCallbacks struct {
+	rollback  func()
+	onCancel  func()
+	onError   func(error)
+	onSuccess func()
+}
+
 // LoadResults loads data from the selected table into the results view
 // using OFFSET/LIMIT pagination to bound memory usage.
 func (a *App) LoadResults() error {
-	if a.selectedTable == "" {
+	request, err := a.prepareTableResultRequest()
+	if err != nil {
+		return err
+	}
+	if request == nil {
 		return nil
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	snapshot, err := fetchTableResultSnapshot(ctx, request)
+	if err != nil {
+		a.results.SetTitle(fmt.Sprintf(" %s Results — [red]%s error[-] ", iconResults, iconFail))
+		return err
+	}
+	if !a.applyTableResultSnapshot(snapshot) {
+		return fmt.Errorf("table results were superseded by a newer request")
+	}
+	return nil
+}
+
+func (a *App) prepareTableResultRequest() (*tableResultRequest, error) {
+	if a.selectedTable == "" {
+		return nil, nil
+	}
 	if a.db == nil {
-		return fmt.Errorf("not connected")
+		return nil, fmt.Errorf("not connected")
+	}
+	if a.results == nil {
+		return nil, fmt.Errorf("results view is unavailable")
 	}
 
-	// Reset per-column width overrides when loading a new table
-	a.clearColumnOverrides()
-	a.tableResultsActive = true
-
-	// DB-specific quoting for identifiers
-	db := a.db
 	selectedTable := a.selectedTable
 	dbType := a.dbType
-	generation := a.currentResultGeneration()
-
 	quotedTable := quoteIdentifier(dbType, selectedTable)
 	requestedLimit := a.effectiveResultLimit()
 	queryLimit := requestedLimit
 	if queryLimit == adaptiveTablePreviewLimit || queryLimit > maxResultRows {
 		queryLimit = maxResultRows
 	}
+
 	query := fmt.Sprintf("SELECT * FROM %s", quotedTable)
 	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s", quotedTable)
 	queryArgs := []any(nil)
@@ -83,60 +132,187 @@ func (a *App) LoadResults() error {
 		if !a.sortAsc {
 			direction = "DESC"
 		}
-		query = fmt.Sprintf("%s ORDER BY %s %s", query, quoteIdentifier(a.dbType, sortColumn), direction)
+		query = fmt.Sprintf("%s ORDER BY %s %s", query, quoteIdentifier(dbType, sortColumn), direction)
 	}
 	if queryLimit > 0 {
 		query = fmt.Sprintf("%s LIMIT %d OFFSET %d", query, queryLimit, a.pageOffset)
 	}
 
-	a.queryStart = time.Now()
+	return &tableResultRequest{
+		db:             a.db,
+		dbType:         dbType,
+		selectedTable:  selectedTable,
+		quotedTable:    quotedTable,
+		query:          query,
+		countQuery:     countQuery,
+		queryArgs:      queryArgs,
+		requestedLimit: requestedLimit,
+		pageOffset:     a.pageOffset,
+		// Every fetch owns a unique generation so a slower page, sort, or
+		// filter request can never overwrite a newer result set.
+		generation: a.advanceResultGeneration(),
+		selection:  a.captureResultSelection(),
+		startedAt:  time.Now(),
+	}, nil
+}
 
-	selection := a.captureResultSelection()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
-	rows, err := db.QueryContext(ctx, query, queryArgs...)
+func fetchTableResultSnapshot(ctx context.Context, request *tableResultRequest) (*tableResultSnapshot, error) {
+	if request == nil || request.db == nil {
+		return nil, fmt.Errorf("table result request is unavailable")
+	}
+	rows, err := request.db.QueryContext(ctx, request.query, request.queryArgs...)
 	if err != nil {
-		a.results.SetTitle(fmt.Sprintf(" %s Results — [red]%s error[-] ", iconResults, iconFail))
-		return err
+		return nil, err
 	}
 	defer rows.Close()
 
 	columnNames, err := rows.Columns()
 	if err != nil {
-		return fmt.Errorf("could not read columns: %w", err)
+		return nil, fmt.Errorf("could not read columns: %w", err)
 	}
-
-	pageLimit := resolvedResultLimit(requestedLimit, len(columnNames))
-	a.pageSize = pageLimit
-
-	rowCount, _, err := populateTableWithLimit(a.results, rows, pageLimit)
+	pageLimit := resolvedResultLimit(request.requestedLimit, len(columnNames))
+	results := newResultTable()
+	rowCount, _, err := populateTableWithLimit(results, rows, pageLimit)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	return &tableResultSnapshot{
+		request:     request,
+		results:     results,
+		columnNames: columnNames,
+		rowCount:    rowCount,
+		pageLimit:   pageLimit,
+		elapsed:     time.Since(request.startedAt),
+	}, nil
+}
+
+func (a *App) applyTableResultSnapshot(snapshot *tableResultSnapshot) bool {
+	if snapshot == nil || snapshot.request == nil || snapshot.results == nil || a.results == nil {
+		return false
+	}
+	request := snapshot.request
+	if !a.tableResultRequestIsCurrent(request) {
+		return false
 	}
 
-	if a.sortColumn >= len(columnNames) {
+	a.results.Clear()
+	for row := 0; row < snapshot.results.GetRowCount(); row++ {
+		for col := 0; col < snapshot.results.GetColumnCount(); col++ {
+			a.results.SetCell(row, col, snapshot.results.GetCell(row, col))
+		}
+	}
+	a.pageSize = snapshot.pageLimit
+	a.tableResultsActive = true
+	a.queryStart = request.startedAt
+	if a.sortColumn >= len(snapshot.columnNames) {
 		a.resetSort()
 	} else if a.sortColumn != -1 {
 		a.sortMode = "server"
 		a.setSortHeaderIndicator()
 	}
-
-	// Re-apply zoom / column width overrides
+	a.clearColumnOverrides()
 	a.applyColumnWidths()
+	a.restoreResultSelection(request.selection, snapshot.rowCount)
 
-	a.restoreResultSelection(selection, rowCount)
+	countArgs := append([]any(nil), request.queryArgs...)
+	go a.fetchTotalRowCount(request.db, request.selectedTable, request.quotedTable, request.dbType, snapshot.pageLimit, request.pageOffset, request.generation, request.countQuery, countArgs)
+	a.results.SetTitle(a.paginatedResultTitle(snapshot.rowCount, snapshot.elapsed))
+	a.updateStatusBar("", snapshot.rowCount)
+	return true
+}
 
-	// Fetch total row count asynchronously for pagination display
-	countArgs := append([]any(nil), queryArgs...)
-	go a.fetchTotalRowCount(db, selectedTable, quotedTable, dbType, pageLimit, a.pageOffset, generation, countQuery, countArgs)
+func (a *App) tableResultRequestIsCurrent(request *tableResultRequest) bool {
+	return a != nil && request != nil &&
+		a.db == request.db &&
+		a.dbType == request.dbType &&
+		a.selectedTable == request.selectedTable &&
+		a.pageOffset == request.pageOffset &&
+		a.currentResultGeneration() == request.generation
+}
 
-	elapsed := time.Since(a.queryStart)
-	a.results.SetTitle(a.paginatedResultTitle(rowCount, elapsed))
-	a.updateStatusBar("", rowCount)
+func (a *App) runTableResultRequestAsync(request *tableResultRequest, loadingText, cancelText string, callbacks tableResultAsyncCallbacks) {
+	if request == nil {
+		if callbacks.onError != nil {
+			callbacks.onError(fmt.Errorf("table result request is unavailable"))
+		}
+		return
+	}
 
-	return nil
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	var canceledByUser atomic.Bool
+	rollbackIfOwned := func() bool {
+		if !a.tableResultRequestIsCurrent(request) {
+			return false
+		}
+		if callbacks.rollback != nil {
+			callbacks.rollback()
+		}
+		a.advanceResultGeneration()
+		a.restartTotalRowCountFetchIfNeeded()
+		return true
+	}
+
+	a.showLoadingModal(loadingText, withLoadingCancel(cancelText, func() {
+		canceledByUser.Store(true)
+		cancel()
+		if rollbackIfOwned() && callbacks.onCancel != nil {
+			callbacks.onCancel()
+		}
+	}))
+
+	go func() {
+		defer cancel()
+		snapshot, fetchErr := fetchTableResultSnapshot(ctx, request)
+		a.queueUpdateDraw(func() {
+			// A canceled or superseded worker must not remove another
+			// operation's loading page or restore older state.
+			if canceledByUser.Load() || !a.tableResultRequestIsCurrent(request) {
+				return
+			}
+
+			a.pages.RemovePage("loading")
+			if fetchErr != nil {
+				if !rollbackIfOwned() {
+					return
+				}
+				if callbacks.onError != nil {
+					callbacks.onError(fetchErr)
+				}
+				return
+			}
+
+			if !a.applyTableResultSnapshot(snapshot) {
+				return
+			}
+			if callbacks.onSuccess != nil {
+				callbacks.onSuccess()
+			}
+		})
+	}()
+}
+
+func (a *App) restartTotalRowCountFetchIfNeeded() {
+	if a == nil || a.totalRowCount >= 0 || a.db == nil || !a.isTableResultActive() {
+		return
+	}
+	pageLimit := a.currentPageLimit()
+	if pageLimit <= 0 {
+		return
+	}
+
+	db := a.db
+	dbType := a.dbType
+	selectedTable := a.selectedTable
+	quotedTable := quoteIdentifier(dbType, selectedTable)
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s", quotedTable)
+	countArgs := []any(nil)
+	if filter := a.activeResultFilter(selectedTable); filter != nil {
+		countQuery += resultFilterClause(dbType, filter.column)
+		countArgs = append(countArgs, filter.value)
+	}
+	generation := a.currentResultGeneration()
+	pageOffset := a.pageOffset
+	go a.fetchTotalRowCount(db, selectedTable, quotedTable, dbType, pageLimit, pageOffset, generation, countQuery, countArgs)
 }
 
 // fetchTotalRowCount queries COUNT(*) for the captured table and updates the title
@@ -155,14 +331,16 @@ func (a *App) fetchTotalRowCount(db *sql.DB, selectedTable, quotedTable string, 
 		return
 	}
 
-	a.app.QueueUpdateDraw(func() {
+	a.queueUpdateDraw(func() {
 		if a.db != db || a.currentResultGeneration() != generation || a.selectedTable != selectedTable || a.dbType != dbType || quoteIdentifier(a.dbType, a.selectedTable) != quotedTable {
 			return
 		}
 
 		a.totalRowCount = total
 		a.results.SetTitle(a.paginatedResultTitle(a.currentResultRowCount(), time.Since(a.queryStart)))
-		a.updateStatusBar("", a.currentResultRowCount())
+		if a.statusBar != nil {
+			a.updateStatusBar("", a.currentResultRowCount())
+		}
 		_ = pageOffset // captured for generation identity/debugging if pagination logic changes.
 	})
 }

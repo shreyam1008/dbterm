@@ -114,11 +114,12 @@ func (a *App) showRowDetail(row int) {
 				if rawValue, ok := cell.GetReference().(string); ok {
 					value = rawValue
 				}
-				if err := a.copyValue(value); err != nil {
-					a.flashStatus("[yellow]Cell copied inside dbterm (system clipboard unavailable)[-]", a.currentResultRowCount(), 2*time.Second)
-				} else {
-					a.flashStatus("[green]Cell copied to clipboard[-]", a.currentResultRowCount(), 2*time.Second)
-				}
+				a.copyValueAsync(value, func(err error) {
+					if err != nil {
+						a.flashStatus("[yellow]Cell copied inside dbterm (system clipboard unavailable)[-]", a.currentResultRowCount(), 2*time.Second)
+					}
+				})
+				a.flashStatus("[green]Cell copied[-]", a.currentResultRowCount(), 2*time.Second)
 			}
 			return nil
 		}

@@ -91,10 +91,12 @@ For MySQL or PostgreSQL, a new connection does not require you to remember the d
 | `I` (Dashboard) | Import SQL dump into selected saved PostgreSQL/MySQL connection |
 | `Alt + E` | Export current results table to CSV |
 | `C` (Results) | Copy only the selected cell |
-| `/` / `V` (Results) | Exact-filter the selected column by a typed value / clipboard value |
-| `Alt + = / - / 0` | Increase / decrease / toggle preview row limit (`100` ↔ safe max) |
+| `/` / `V` (Results) | Exact-filter the selected column by a typed value / clipboard value (`Enter` searches, `Tab` changes controls) |
+| `Esc` (filtered Results) | Clear the active filter; press again to return to Dashboard |
+| `Alt++ / Alt+- / Alt+0` | Increase / decrease / toggle preview rows per page (`100` ↔ safe max) |
 | `+` / `-` (Results) | Widen / narrow the selected column |
-| `>` / `<` / `0` (Results) | Widen / narrow all columns / reset widths (`Ctrl+=/-/0` remain aliases) |
+| `Ctrl++ / Ctrl+- / Ctrl+0` (Results) | Zoom all columns in / out / reset widths (`Ctrl+=` also zooms in) |
+| `>` / `<` / `0` (Results) | Terminal-safe all-column zoom / reset fallback |
 | `F5 / Ctrl + F5` | Refresh table / full refresh |
 | `Ctrl + C` | Quit |
 

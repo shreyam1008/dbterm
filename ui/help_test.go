@@ -13,8 +13,12 @@ func TestKeyboardHelpHighlightsCoreWorkflows(t *testing.T) {
 		"[yellow]C[-]",
 		"[yellow]V[-]",
 		"[yellow]/[-]",
+		"Clear a filter",
+		"Tab / Shift+Tab",
+		"[yellow]Ctrl++ / Ctrl+-[-]",
+		"[yellow]Alt++ / Alt+-[-]",
 		"[yellow]> / <[-]",
-		"[yellow]0[-]",
+		"[yellow]0 / Ctrl+0[-]",
 	} {
 		if !strings.Contains(help, expected) {
 			t.Fatalf("keyboard help is missing %q", expected)
