@@ -34,6 +34,24 @@ func TestMySQLMetadataQueriesStayInCurrentDatabase(t *testing.T) {
 	}
 }
 
+func TestMySQLMetadataQueriesReturnUnqualifiedNames(t *testing.T) {
+	queries := map[string]string{
+		"tables":     ListTablesQuery(config.MySQL),
+		"views":      ListObjectsQuery(config.MySQL, ObjViews),
+		"functions":  ListObjectsQuery(config.MySQL, ObjFunctions),
+		"triggers":   ListObjectsQuery(config.MySQL, ObjTriggers),
+		"procedures": ListObjectsQuery(config.MySQL, ObjStoredProcedures),
+	}
+
+	for name, query := range queries {
+		t.Run(name, func(t *testing.T) {
+			if strings.Contains(strings.ToLower(query), "concat(") {
+				t.Fatalf("query still prefixes the object with its database:\n%s", query)
+			}
+		})
+	}
+}
+
 func TestMySQLDatabaseDiscoveryHidesSystemSchemas(t *testing.T) {
 	query := strings.ToLower(ListDatabasesQuery(config.MySQL))
 	if !strings.Contains(query, "from information_schema.schemata") {

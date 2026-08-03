@@ -50,20 +50,23 @@ type App struct {
 	activeConn *config.ConnectionConfig
 
 	// Main UI components
-	tables             *tview.List
-	databaseObjects    map[int]databaseObjectListItem
-	selectedTable      string
-	tableResultsActive bool
-	results            *tview.Table
-	queryInput         *tview.TextArea
-	statusBar          *tview.TextView
-	tableCount         int
-	queryStart         time.Time
-	queryMu            sync.Mutex
-	queryRunning       bool
-	queryStartedAt     time.Time
-	queryCancel        context.CancelFunc
-	resultLimit        int // >0 preview rows, -1 means adaptive safe max
+	tables              *tview.List
+	databaseObjects     map[int]databaseObjectListItem
+	tableIdentifiers    map[int]string
+	tableSearch         string
+	databaseObjectCount int
+	selectedTable       string
+	tableResultsActive  bool
+	results             *tview.Table
+	queryInput          *tview.TextArea
+	statusBar           *tview.TextView
+	tableCount          int
+	queryStart          time.Time
+	queryMu             sync.Mutex
+	queryRunning        bool
+	queryStartedAt      time.Time
+	queryCancel         context.CancelFunc
+	resultLimit         int // >0 preview rows, -1 means adaptive safe max
 
 	// Pagination state
 	pageOffset       int           // current OFFSET for paginated table browsing
@@ -166,6 +169,7 @@ func (a *App) setupUI() {
 		SetTitle(fmt.Sprintf(" %s Tables [yellow](Alt+T)[-] ", iconTables)).
 		SetBorderColor(surface1).
 		SetTitleColor(peach)
+	a.tables.SetInputCapture(a.handleTableListInput)
 
 	// ── Query Input ──
 	a.queryInput = tview.NewTextArea().
@@ -433,7 +437,6 @@ func (a *App) refreshData() error {
 	}
 
 	currentTable := a.selectedTable
-	currentTableIndex := a.tables.GetCurrentItem()
 
 	if err := a.LoadTables(); err != nil {
 		return err
@@ -447,14 +450,9 @@ func (a *App) refreshData() error {
 		return nil
 	}
 
-	if currentTable == "" {
-		if name, _ := a.tables.GetItemText(a.tables.GetCurrentItem()); !strings.HasPrefix(name, "[") {
+	if currentTable == "" || !a.tableExistsInList(currentTable) {
+		if name, ok := a.tableIdentifiers[a.tables.GetCurrentItem()]; ok {
 			a.selectedTable = name
-		}
-	} else if !a.tableExistsInList(currentTable) && currentTableIndex >= 0 && currentTableIndex < a.tableCount {
-		if name, _ := a.tables.GetItemText(currentTableIndex); !strings.HasPrefix(name, "[") {
-			a.selectedTable = name
-			a.tables.SetCurrentItem(currentTableIndex)
 		}
 	}
 
@@ -828,6 +826,10 @@ func (a *App) setupKeyBindings() {
 			}
 
 			current := a.app.GetFocus()
+			// Let the Tables list clear an active type-ahead search first.
+			if current == a.tables && a.hasActiveTableSearch() {
+				return event
+			}
 			// If in query input, unfocus to tables
 			if current == a.queryInput {
 				a.setFocusWithColor(a.tables)
@@ -845,6 +847,10 @@ func (a *App) setupKeyBindings() {
 		// Backspace Handling
 		if event.Key() == tcell.KeyBackspace || event.Key() == tcell.KeyBackspace2 {
 			current := a.app.GetFocus()
+			// Let the Tables list edit an active type-ahead search.
+			if current == a.tables && a.hasActiveTableSearch() {
+				return event
+			}
 			// If in query input, let it delete text
 			if current == a.queryInput {
 				return event
@@ -1283,10 +1289,8 @@ func (a *App) flashStatus(extra string, rowCount int, duration time.Duration) {
 }
 
 func (a *App) tableExistsInList(name string) bool {
-	count := a.tables.GetItemCount()
-	for i := 0; i < count; i++ {
-		main, _ := a.tables.GetItemText(i)
-		if main == name {
+	for _, identifier := range a.tableIdentifiers {
+		if identifier == name {
 			return true
 		}
 	}

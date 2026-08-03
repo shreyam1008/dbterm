@@ -55,11 +55,11 @@ WHERE table_type = 'BASE TABLE'
   AND table_schema NOT IN ('pg_catalog', 'information_schema')
 ORDER BY table_schema, table_name`
 	case config.MySQL:
-		return `SELECT CONCAT(table_schema, '.', table_name) AS table_name
+		return `SELECT table_name
 FROM information_schema.tables
 WHERE table_type = 'BASE TABLE'
   AND table_schema = DATABASE()
-ORDER BY table_schema, table_name`
+ORDER BY table_name`
 	case config.SQLite, config.Turso, config.CloudflareD1:
 		return `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name`
 	default:
@@ -111,27 +111,27 @@ ORDER BY routine_schema, routine_name`
 	case config.MySQL:
 		switch objType {
 		case ObjViews:
-			return `SELECT CONCAT(table_schema, '.', table_name) AS name
+			return `SELECT table_name
 FROM information_schema.views
 WHERE table_schema = DATABASE()
-ORDER BY table_schema, table_name`
+ORDER BY table_name`
 		case ObjFunctions:
-			return `SELECT CONCAT(routine_schema, '.', routine_name) AS name
+			return `SELECT routine_name
 FROM information_schema.routines
 WHERE routine_schema = DATABASE()
   AND routine_type = 'FUNCTION'
-ORDER BY routine_schema, routine_name`
+ORDER BY routine_name`
 		case ObjTriggers:
-			return `SELECT CONCAT(trigger_schema, '.', trigger_name) AS name
+			return `SELECT trigger_name
 FROM information_schema.triggers
 WHERE trigger_schema = DATABASE()
-ORDER BY trigger_schema, trigger_name`
+ORDER BY trigger_name`
 		case ObjStoredProcedures:
-			return `SELECT CONCAT(routine_schema, '.', routine_name) AS name
+			return `SELECT routine_name
 FROM information_schema.routines
 WHERE routine_schema = DATABASE()
   AND routine_type = 'PROCEDURE'
-ORDER BY routine_schema, routine_name`
+ORDER BY routine_name`
 		}
 	case config.SQLite, config.Turso, config.CloudflareD1:
 		switch objType {

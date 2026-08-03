@@ -6,13 +6,17 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 
+	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 	"github.com/shreyam1008/dbterm/config"
 	"github.com/shreyam1008/dbterm/utils"
 )
 
 type tableListSnapshotItem struct {
-	label string
+	label      string
+	identifier string
 }
 
 type tableListSnapshot struct {
@@ -74,7 +78,7 @@ func loadTableListSnapshot(db *sql.DB, dbType config.DBType, selectedTable strin
 			lastNamespace = namespace
 		}
 
-		snapshot.items = append(snapshot.items, tableListSnapshotItem{label: tableName})
+		snapshot.items = append(snapshot.items, tableListSnapshotItem{label: tableName, identifier: tableName})
 		itemIndex := len(snapshot.items) - 1
 		if tableName == selectedTable {
 			snapshot.selectedIndex = itemIndex
@@ -100,8 +104,7 @@ func loadTableListSnapshot(db *sql.DB, dbType config.DBType, selectedTable strin
 		snapshot.selectedIndex = firstSelectableTableSnapshotIndex(snapshot)
 	}
 	if snapshot.selectedIndex >= 0 && snapshot.selectedIndex < len(snapshot.items) {
-		tableName := snapshot.items[snapshot.selectedIndex].label
-		if !strings.HasPrefix(tableName, "[") {
+		if tableName := snapshot.items[snapshot.selectedIndex].identifier; tableName != "" {
 			snapshot.selectedTable = tableName
 		}
 	}
@@ -112,19 +115,25 @@ func loadTableListSnapshot(db *sql.DB, dbType config.DBType, selectedTable strin
 func (a *App) applyTableListSnapshot(snapshot *tableListSnapshot) {
 	a.tables.Clear()
 	a.databaseObjects = map[int]databaseObjectListItem{}
+	a.tableIdentifiers = map[int]string{}
+	a.tableSearch = ""
+	a.databaseObjectCount = 0
 	a.tableCount = 0
 	if snapshot == nil {
 		return
 	}
 
-	for _, item := range snapshot.items {
+	for index, item := range snapshot.items {
 		a.tables.AddItem(item.label, "", 0, nil)
+		if item.identifier != "" {
+			a.tableIdentifiers[index] = item.identifier
+		}
 	}
 
 	a.tableCount = snapshot.tableCount
 	a.tables.SetMainTextColor(peach)
 	a.tables.SetSelectedBackgroundColor(blue)
-	a.tables.SetTitle(fmt.Sprintf(" %s Tables (%d) [yellow](Alt+T)[-] ", iconTables, snapshot.tableCount))
+	a.updateTableListTitle()
 	if snapshot.tableCount == 0 {
 		a.selectedTable = ""
 	} else {
@@ -132,12 +141,13 @@ func (a *App) applyTableListSnapshot(snapshot *tableListSnapshot) {
 		a.selectedTable = snapshot.selectedTable
 	}
 
-	a.tables.SetSelectedFunc(func(index int, selectedTable string, _ string, _ rune) {
+	a.tables.SetSelectedFunc(func(index int, _ string, _ string, _ rune) {
 		if obj, ok := a.databaseObjects[index]; ok {
 			a.onDatabaseObjectSelected(obj.objType, obj.name)
 			return
 		}
-		if !isSelectableTableLabel(selectedTable) {
+		selectedTable, ok := a.tableIdentifiers[index]
+		if !ok {
 			return
 		}
 		a.selectedTable = selectedTable
@@ -184,7 +194,7 @@ func isSelectableTableListSnapshotItem(snapshot *tableListSnapshot, index int) b
 	if snapshot == nil || index < 0 || index >= len(snapshot.items) {
 		return false
 	}
-	return isSelectableTableLabel(snapshot.items[index].label)
+	return snapshot.items[index].identifier != ""
 }
 
 func firstSelectableTableIndex(list interface {
@@ -209,4 +219,149 @@ func isSelectableTableListItem(list interface {
 
 func isSelectableTableLabel(label string) bool {
 	return !strings.HasPrefix(strings.TrimSpace(label), "[")
+}
+
+func (a *App) handleTableListInput(event *tcell.EventKey) *tcell.EventKey {
+	if event == nil {
+		return nil
+	}
+
+	switch event.Key() {
+	case tcell.KeyEnter:
+		if !a.hasActiveTableSearch() {
+			return event
+		}
+		matched := a.firstTableSearchMatch(a.tableSearch) >= 0
+		a.clearTableSearch()
+		if matched {
+			return event
+		}
+		return nil
+	case tcell.KeyEscape:
+		if a.hasActiveTableSearch() {
+			a.clearTableSearch()
+			return nil
+		}
+	case tcell.KeyBackspace, tcell.KeyBackspace2:
+		if a.hasActiveTableSearch() {
+			runes := []rune(a.tableSearch)
+			a.tableSearch = string(runes[:len(runes)-1])
+			a.applyTableSearch()
+			return nil
+		}
+	case tcell.KeyRune:
+		if event.Modifiers()&(tcell.ModCtrl|tcell.ModAlt|tcell.ModMeta) == 0 && unicode.IsPrint(event.Rune()) {
+			a.tableSearch += string(event.Rune())
+			a.applyTableSearch()
+			return nil
+		}
+	}
+
+	return event
+}
+
+func (a *App) hasActiveTableSearch() bool {
+	return a != nil && a.tableSearch != ""
+}
+
+func (a *App) clearTableSearch() {
+	if a == nil || a.tableSearch == "" {
+		return
+	}
+	a.tableSearch = ""
+	a.applyTableSearch()
+}
+
+func (a *App) applyTableSearch() {
+	if a == nil || a.tables == nil {
+		return
+	}
+
+	firstMatch := -1
+	for index := 0; index < a.tables.GetItemCount(); index++ {
+		identifier, ok := a.tableIdentifiers[index]
+		if !ok {
+			continue
+		}
+
+		label := identifier
+		if a.tableSearch != "" {
+			if highlighted, matched := highlightTableSearchMatch(identifier, a.tableSearch); matched {
+				label = highlighted
+				if firstMatch < 0 {
+					firstMatch = index
+				}
+			}
+		}
+		a.tables.SetItemText(index, label, "")
+	}
+
+	if firstMatch >= 0 {
+		a.tables.SetCurrentItem(firstMatch)
+	}
+	a.updateTableListTitle()
+}
+
+func (a *App) firstTableSearchMatch(query string) int {
+	if a == nil || query == "" {
+		return -1
+	}
+	for index := 0; a.tables != nil && index < a.tables.GetItemCount(); index++ {
+		if identifier, ok := a.tableIdentifiers[index]; ok {
+			if _, _, matched := tableSearchMatchRange(identifier, query); matched {
+				return index
+			}
+		}
+	}
+	return -1
+}
+
+func highlightTableSearchMatch(identifier, query string) (string, bool) {
+	start, end, matched := tableSearchMatchRange(identifier, query)
+	if !matched {
+		return identifier, false
+	}
+
+	runes := []rune(identifier)
+	return tview.Escape(string(runes[:start])) +
+		"[black:#f9e2af:b]" + tview.Escape(string(runes[start:end])) + "[-:-:-]" +
+		tview.Escape(string(runes[end:])), true
+}
+
+func tableSearchMatchRange(identifier, query string) (int, int, bool) {
+	identifierRunes := []rune(identifier)
+	queryRunes := []rune(query)
+	if len(queryRunes) == 0 || len(queryRunes) > len(identifierRunes) {
+		return 0, 0, false
+	}
+
+	for start := 0; start <= len(identifierRunes)-len(queryRunes); start++ {
+		matched := true
+		for offset := range queryRunes {
+			if unicode.ToLower(identifierRunes[start+offset]) != unicode.ToLower(queryRunes[offset]) {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			return start, start + len(queryRunes), true
+		}
+	}
+	return 0, 0, false
+}
+
+func (a *App) updateTableListTitle() {
+	if a == nil || a.tables == nil {
+		return
+	}
+
+	count := fmt.Sprintf("Tables (%d)", a.tableCount)
+	if a.databaseObjectCount > 0 {
+		count += fmt.Sprintf(" + %d obj", a.databaseObjectCount)
+	}
+	search := ""
+	if a.tableSearch != "" {
+		search = fmt.Sprintf(" [#a6adc8]find:[-] [#f9e2af]%s[-]", tview.Escape(a.tableSearch))
+	}
+	a.tables.SetTitle(fmt.Sprintf(" %s %s%s [yellow](Alt+T)[-] ", iconTables, count, search))
 }

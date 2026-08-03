@@ -19,6 +19,8 @@ func (a *App) showHelp() {
   Alt + H ........... Toggle this Help
   Alt + S ........... Database Services
   Tab ............... Cycle: Tables → Query → Results
+  Type in Tables .... Jump to first matching table; Backspace edits
+  Enter in Tables ... Open match and clear the type-ahead search
   Esc ............... Close / Go back
   Backspace ......... Back to Dashboard (outside Query editor)
   Ctrl+C ............ Quit

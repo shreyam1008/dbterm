@@ -105,10 +105,8 @@ func (a *App) loadDatabaseObjects() {
 			for _, g := range groups {
 				totalObjects += len(g.names)
 			}
-			currentTitle := a.tables.GetTitle()
-			if totalObjects > 0 && !strings.Contains(currentTitle, "obj") {
-				a.tables.SetTitle(fmt.Sprintf(" %s Tables (%d) + %d obj [yellow](Alt+T)[-] ", iconTables, a.tableCount, totalObjects))
-			}
+			a.databaseObjectCount = totalObjects
+			a.updateTableListTitle()
 		})
 	}()
 }

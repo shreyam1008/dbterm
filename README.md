@@ -76,6 +76,7 @@ For MySQL or PostgreSQL, a new connection does not require you to remember the d
 | Shortcut | Action |
 | --- | --- |
 | `Alt + Q / T / R` | Focus Query / Tables / Results |
+| Type while Tables is focused | Jump to and highlight the first matching table; Enter opens it and clears the search |
 | `Enter` | Execute query (in Query panel) |
 | `Shift + Enter` | New line in Query panel |
 | `Alt + Y` | Open query history (newest first) |
