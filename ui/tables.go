@@ -42,17 +42,23 @@ func (a *App) LoadTables() error {
 }
 
 func loadTableListSnapshot(db *sql.DB, dbType config.DBType, selectedTable string, currentIndex int) (*tableListSnapshot, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return loadTableListSnapshotContext(ctx, db, dbType, selectedTable, currentIndex)
+}
+
+func loadTableListSnapshotContext(ctx context.Context, db *sql.DB, dbType config.DBType, selectedTable string, currentIndex int) (*tableListSnapshot, error) {
 	if db == nil {
 		return nil, fmt.Errorf("not connected to any database")
+	}
+	if ctx == nil {
+		ctx = context.Background()
 	}
 
 	query := utils.ListTablesQuery(dbType)
 	if query == "" {
 		return nil, fmt.Errorf("unsupported database type: %s", dbType)
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
 
 	rows, err := db.QueryContext(ctx, query)
 	if err != nil {
@@ -113,6 +119,9 @@ func loadTableListSnapshot(db *sql.DB, dbType config.DBType, selectedTable strin
 }
 
 func (a *App) applyTableListSnapshot(snapshot *tableListSnapshot) {
+	// Invalidate any object-discovery worker that was built against the prior
+	// sidebar. A fresh discovery will capture a newer generation below.
+	a.objectGeneration.Add(1)
 	a.tables.Clear()
 	a.databaseObjects = map[int]databaseObjectListItem{}
 	a.tableIdentifiers = map[int]string{}
@@ -143,6 +152,7 @@ func (a *App) applyTableListSnapshot(snapshot *tableListSnapshot) {
 
 	a.tables.SetSelectedFunc(func(index int, _ string, _ string, _ rune) {
 		if obj, ok := a.databaseObjects[index]; ok {
+			a.clearResultNavigation()
 			a.onDatabaseObjectSelected(obj.objType, obj.name)
 			return
 		}
@@ -150,13 +160,24 @@ func (a *App) applyTableListSnapshot(snapshot *tableListSnapshot) {
 		if !ok {
 			return
 		}
+		previous := a.captureResultNavigationState()
+		previousStack := append([]resultNavigationState(nil), a.resultNavStack...)
 		a.selectedTable = selectedTable
+		a.clearResultNavigation()
 		a.resultFilter = nil
 		a.resetSort()
 		a.resetPagination()
-		if err := a.LoadResults(); err != nil {
-			a.ShowAlert(fmt.Sprintf("%s Could not load table \"%s\":\n\n%v", iconWarn, selectedTable, err), "main")
-		}
+		a.loadCurrentTableAsync(tableLoadOptions{
+			loadingText:  fmt.Sprintf("Loading %s...", selectedTable),
+			cancelText:   "Press Esc to cancel opening this table.",
+			canceledText: "Table loading canceled",
+			errorText:    fmt.Sprintf("Could not load table %q", selectedTable),
+			rollback: func() {
+				a.restoreResultNavigationState(previous)
+				a.resultNavStack = previousStack
+				a.selectTableListIdentifier(previous.table)
+			},
+		})
 	})
 }
 

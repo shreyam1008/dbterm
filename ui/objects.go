@@ -2,8 +2,10 @@ package ui
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -25,6 +27,7 @@ func (a *App) loadDatabaseObjects() {
 	db := a.db
 	dbType := a.dbType
 	dbName := a.dbName
+	generation := a.objectGeneration.Add(1)
 	if db == nil {
 		return
 	}
@@ -75,7 +78,7 @@ func (a *App) loadDatabaseObjects() {
 		}
 
 		a.app.QueueUpdateDraw(func() {
-			if a.db != db || a.dbType != dbType || a.dbName != dbName {
+			if a.db != db || a.dbType != dbType || a.dbName != dbName || a.objectGeneration.Load() != generation {
 				return
 			}
 			for _, g := range groups {
@@ -116,13 +119,24 @@ func (a *App) onDatabaseObjectSelected(objType utils.DBObjectType, name string) 
 	switch objType {
 	case utils.ObjViews:
 		// Views can be queried like tables
+		previous := a.captureResultNavigationState()
+		previousStack := append([]resultNavigationState(nil), a.resultNavStack...)
+		a.clearResultNavigation()
 		a.selectedTable = name
 		a.resultFilter = nil
 		a.resetSort()
 		a.resetPagination()
-		if err := a.LoadResults(); err != nil {
-			a.ShowAlert(fmt.Sprintf("%s Could not load view \"%s\":\n\n%v", iconWarn, name, err), "main")
-		}
+		a.loadCurrentTableAsync(tableLoadOptions{
+			loadingText:  fmt.Sprintf("Loading view %s...", name),
+			cancelText:   "Press Esc to cancel opening this view.",
+			canceledText: "View loading canceled",
+			errorText:    fmt.Sprintf("Could not load view %q", name),
+			rollback: func() {
+				a.restoreResultNavigationState(previous)
+				a.resultNavStack = previousStack
+				a.selectTableListIdentifier(previous.table)
+			},
+		})
 	default:
 		// Show read-only info for functions, triggers, procedures, extensions
 		a.showObjectInfo(objType, name)
@@ -179,55 +193,87 @@ WHERE e.extname = '%s'`, escapeSQLString(objectName))
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	db := a.db
+	dbType := a.dbType
+	generation := a.objectGeneration.Load()
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	var canceled atomic.Bool
+	loadingToken := a.showLoadingModal(fmt.Sprintf("Loading %s %s...", objType, name), withLoadingCancel("Press Esc to cancel object inspection.", func() {
+		canceled.Store(true)
+		cancel()
+		a.setFocusWithColor(a.tables)
+		a.flashStatus("[yellow]Object inspection canceled[-]", a.currentResultRowCount(), 1500*time.Millisecond)
+	}))
 
-	rows, err := a.db.QueryContext(ctx, query)
+	go func() {
+		defer cancel()
+		summary, err := loadDatabaseObjectInfo(ctx, db, query, objType, name)
+		a.queueUpdateDraw(func() {
+			if canceled.Load() || a.db != db || a.dbType != dbType || a.objectGeneration.Load() != generation {
+				return
+			}
+			if !a.finishLoadingModal(loadingToken) {
+				return
+			}
+			if err != nil {
+				a.ShowAlert(fmt.Sprintf("%s Could not fetch %s \"%s\":\n\n%v", iconWarn, objType, name, err), "main")
+				return
+			}
+			a.showDatabaseObjectInfoModal(objType, name, summary)
+		})
+	}()
+}
+
+func loadDatabaseObjectInfo(ctx context.Context, db *sql.DB, query string, objType utils.DBObjectType, name string) (string, error) {
+	if db == nil {
+		return "", fmt.Errorf("not connected")
+	}
+	rows, err := db.QueryContext(ctx, query)
 	if err != nil {
-		a.ShowAlert(fmt.Sprintf("%s Could not fetch %s \"%s\":\n\n%v", iconWarn, objType, name, err), "main")
-		return
+		return "", err
 	}
 	defer rows.Close()
 
-	cols, _ := rows.Columns()
+	cols, err := rows.Columns()
+	if err != nil {
+		return "", err
+	}
 	if len(cols) == 0 {
-		a.ShowAlert(fmt.Sprintf("%s %s: %s\n\n[#a6adc8]No definition available[-]", iconInfo, objType, name), "main")
-		return
+		return "", fmt.Errorf("no definition is available")
 	}
 
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("[::b]%s %s: %s[-]\n\n", objectTypeIcon(objType), objType, name))
-
+	var summary strings.Builder
+	summary.WriteString(fmt.Sprintf("[::b]%s %s: %s[-]\n\n", objectTypeIcon(objType), tview.Escape(string(objType)), tview.Escape(name)))
+	rowCount := 0
 	for rows.Next() {
 		values := make([]any, len(cols))
-		valuePtrs := make([]any, len(cols))
-		for i := range values {
-			valuePtrs[i] = &values[i]
+		valuePointers := make([]any, len(cols))
+		for index := range values {
+			valuePointers[index] = &values[index]
 		}
-		if err := rows.Scan(valuePtrs...); err != nil {
-			continue
+		if err := rows.Scan(valuePointers...); err != nil {
+			return "", err
 		}
-		for i, col := range cols {
-			val := "NULL"
-			if values[i] != nil {
-				switch v := values[i].(type) {
-				case []byte:
-					val = string(v)
-				case string:
-					val = v
-				default:
-					val = fmt.Sprintf("%v", v)
-				}
-			}
-			sb.WriteString(fmt.Sprintf("[#a6adc8]%s:[-] %s\n", col, val))
+		rowCount++
+		for index, column := range cols {
+			summary.WriteString(fmt.Sprintf("[#a6adc8]%s:[-] %s\n", tview.Escape(column), tview.Escape(fullCellValue(values[index]))))
 		}
 	}
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+	if rowCount == 0 {
+		return "", fmt.Errorf("no definition is available")
+	}
+	return summary.String(), nil
+}
 
-	// Show in a scrollable modal
+func (a *App) showDatabaseObjectInfoModal(objType utils.DBObjectType, name, summary string) {
+	// Show in a scrollable modal.
 	detailView := tview.NewTextView().
 		SetDynamicColors(true).
 		SetScrollable(true).
-		SetText(sb.String())
+		SetText(summary)
 	detailView.SetBorder(true).
 		SetTitle(fmt.Sprintf(" %s %s: %s (read-only) ", objectTypeIcon(objType), objType, name)).
 		SetBorderColor(surface1).
@@ -237,7 +283,7 @@ WHERE e.extname = '%s'`, escapeSQLString(objectName))
 	detailView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEscape || event.Key() == tcell.KeyEnter {
 			a.pages.RemovePage("objectInfo")
-			a.app.SetFocus(a.tables)
+			a.setFocusWithColor(a.tables)
 			return nil
 		}
 		return event

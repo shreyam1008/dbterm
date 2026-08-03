@@ -44,19 +44,23 @@ const workspacePanels = [
   },
   {
     panel: "Results",
-    behavior: "Sort columns, select multiple rows, export selected/all CSV, inspect rows, and switch fullscreen.",
-    keys: "Alt+R, S, Space, Alt+A/C/E, Enter, Alt+F, +/−"
+    behavior: "Filter typed values, follow foreign keys, page and sort data, inspect full cells, and export selected/current/all-matching CSV.",
+    keys: "Alt+R, /, V, F, S, PgUp/PgDn, Alt+E, Enter, +/−"
   }
 ];
 
 const shortcutRows = [
+  { combo: "Ctrl + P", action: "Fuzzy-search commands, database objects, and recent SQL (default binding)" },
   { combo: "Alt + Q / T / R", action: "Focus Query, Tables, or Results panel" },
   { combo: "Enter", action: "Execute query (in Query panel)" },
   { combo: "Shift + Enter", action: "New line in query (multiline SQL)" },
   { combo: "Alt + Y", action: "Open per-connection query history" },
   { combo: "Alt + A / Alt + C", action: "Select all result rows / clear selection" },
   { combo: "Space (Results)", action: "Toggle current row selection" },
-  { combo: "Alt + E", action: "Export selected rows to CSV (or all displayed rows)" },
+  { combo: "C (Results)", action: "Copy the selected cell's complete value" },
+  { combo: "/ / V (Results)", action: "Build typed AND filters / filter the selected column by clipboard value" },
+  { combo: "F / Backspace (Results)", action: "Follow a declared foreign key / return to the previous table" },
+  { combo: "Alt + E", action: "Export selected rows, the current page, or all rows matching active table filters" },
   { combo: "Alt + I", action: "Open SQL import modal for active connection (PostgreSQL/MySQL)" },
   { combo: "I (Dashboard)", action: "Import SQL dump into selected saved PostgreSQL/MySQL connection" },
   { combo: "G (Dashboard) / Alt + ,", action: "Open keymap settings page" },
@@ -64,13 +68,14 @@ const shortcutRows = [
   { combo: "Alt + D", action: "Back to dashboard" },
   { combo: "Alt + S", action: "Open services dashboard" },
   { combo: "F5 / Ctrl + F5", action: "Refresh current table / refresh list + table" },
+  { combo: "PgUp / PgDn, Home / End", action: "Navigate previous/next and first/last result pages" },
   { combo: "Alt + F", action: "Toggle fullscreen results" },
   { combo: "Alt + B", action: "Open backup modal (PostgreSQL/MySQL)" },
   { combo: "Alt + = / - / 0", action: "Adjust preview row limit" },
   { combo: "Ctrl + = / -", action: "Zoom table columns wider / narrower" },
   { combo: "Ctrl + 0", action: "Reset zoom to default" },
   { combo: "+ / -", action: "Widen / narrow selected column (in Results)" },
-  { combo: "Ctrl + C", action: "Quit app" }
+  { combo: "Ctrl + C", action: "Cancel an active query/import/export; otherwise quit" }
 ];
 
 const serviceOps = [
@@ -88,7 +93,7 @@ const serviceOps = [
   },
   {
     title: "Backup active database",
-    detail: "Press Alt+B from workspace to open backup flow for PostgreSQL/MySQL."
+    detail: "Press Alt+B from the workspace to open the engine-aware backup/export flow for the active database."
   },
   {
     title: "Import SQL dumps safely",
@@ -112,7 +117,7 @@ const troubleshooting = [
   "Connection issues: run `dbterm --info`, verify host/port/credentials, then reconnect from dashboard.",
   "Query errors: open in-app cheatsheets with Alt+H to validate SQL syntax and DB-specific clauses.",
   "Permission errors on update/uninstall: rerun command with elevated terminal permissions.",
-  "Large result sets: use preview row controls (Alt+=, Alt+-, Alt+0) before exporting or deeper analysis."
+  "Large result sets: keep a safe on-screen preview and choose All matching in Alt+E; dbterm streams the full filtered export with progress and cancellation."
 ];
 
 const installUnix =

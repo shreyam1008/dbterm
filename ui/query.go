@@ -2,9 +2,11 @@ package ui
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/rivo/tview"
@@ -24,10 +26,32 @@ func (a *App) ExecuteQuery(query string) {
 		})
 		return
 	}
-	defer finish()
+
+	// Result ownership is shared by manual queries and table browsing. Capturing
+	// a generation synchronously with the key action means a later table, page,
+	// or filter action always wins. Do not move this claim into the worker: goroutine
+	// scheduling must never reorder user intent.
+	db := a.db
+	resultGeneration := a.advanceResultGeneration()
+	requestedLimit := a.effectiveResultLimit()
+	startedAt := a.queryStartedAt
+	readOnly := a.activeConn != nil && a.activeConn.ReadOnly
+	connectionName := a.dbName
+	connectionKey, _ := a.activeConnectionKey()
+
+	go a.executeQueryWorker(ctx, finish, db, resultGeneration, requestedLimit, startedAt, readOnly, connectionName, connectionKey, query)
+}
+
+func (a *App) executeQueryWorker(ctx context.Context, finish func(), db *sql.DB, resultGeneration uint64, requestedLimit int, startedAt time.Time, readOnly bool, connectionName, connectionKey, query string) {
+	finishOnReturn := true
+	defer func() {
+		if finishOnReturn {
+			finish()
+		}
+	}()
 
 	// Check connection health before executing.
-	if a.db == nil {
+	if db == nil {
 		a.queueUpdateDraw(func() {
 			a.ShowAlert(fmt.Sprintf("%s Not connected to any database.\n\nPress Alt+D to go to Dashboard and connect.", iconWarn), "main")
 		})
@@ -36,7 +60,7 @@ func (a *App) ExecuteQuery(query string) {
 
 	pingCtx, pingCancel := context.WithTimeout(ctx, 5*time.Second)
 	defer pingCancel()
-	if err := a.db.PingContext(pingCtx); err != nil {
+	if err := db.PingContext(pingCtx); err != nil {
 		if a.handleQueryCancellation(err) {
 			return
 		}
@@ -49,7 +73,7 @@ func (a *App) ExecuteQuery(query string) {
 	firstToken := firstSQLToken(query)
 	isRead := isReadSQLToken(firstToken)
 
-	if a.activeConn != nil && a.activeConn.ReadOnly && !isRead {
+	if readOnly && !isRead {
 		blockedToken := firstToken
 		if blockedToken == "" {
 			blockedToken = "UNKNOWN"
@@ -59,7 +83,7 @@ func (a *App) ExecuteQuery(query string) {
 				fmt.Sprintf(
 					"%s Read-only connection \"%s\" blocks write queries.\n\nBlocked statement: %s\n\nRun a read query (SELECT/SHOW/EXPLAIN/PRAGMA) or disable Read-Only in connection settings.",
 					iconWarn,
-					a.dbName,
+					connectionName,
 					blockedToken,
 				),
 				"main",
@@ -69,18 +93,15 @@ func (a *App) ExecuteQuery(query string) {
 	}
 
 	if isRead {
-		a.tableResultsActive = false
-		a.resetSort()
-
 		queryCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 
-		rows, err := a.db.QueryContext(queryCtx, query)
+		rows, err := db.QueryContext(queryCtx, query)
 		if err != nil {
 			if a.handleQueryCancellation(err) {
 				return
 			}
-			a.queueUpdateDraw(func() { a.showQueryError(err, query) })
+			a.queueManualQueryUpdate(db, resultGeneration, func() { a.showQueryError(err, query) })
 			return
 		}
 		defer rows.Close()
@@ -90,11 +111,12 @@ func (a *App) ExecuteQuery(query string) {
 			if a.handleQueryCancellation(err) {
 				return
 			}
-			a.queueUpdateDraw(func() { a.ShowAlert(fmt.Sprintf("%s Could not read query columns:\n\n%v", iconWarn, err), "main") })
+			a.queueManualQueryUpdate(db, resultGeneration, func() {
+				a.ShowAlert(fmt.Sprintf("%s Could not read query columns:\n\n%v", iconWarn, err), "main")
+			})
 			return
 		}
 
-		requestedLimit := a.effectiveResultLimit()
 		previewLimit := resolvedResultLimit(requestedLimit, len(columnNames))
 		newResults := newResultTable()
 		rowCount, truncated, err := populateTableWithLimit(newResults, rows, previewLimit)
@@ -102,13 +124,19 @@ func (a *App) ExecuteQuery(query string) {
 			if a.handleQueryCancellation(err) {
 				return
 			}
-			a.queueUpdateDraw(func() { a.ShowAlert(fmt.Sprintf("%s Error reading results:\n\n%v", iconWarn, err), "main") })
+			a.queueManualQueryUpdate(db, resultGeneration, func() {
+				a.ShowAlert(fmt.Sprintf("%s Error reading results:\n\n%v", iconWarn, err), "main")
+			})
 			return
 		}
 
-		elapsed := time.Since(a.queryStartedAt)
-		a.recordQueryHistory(query)
-		a.queueUpdateDraw(func() {
+		elapsed := time.Since(startedAt)
+		a.recordQueryHistoryForConnection(connectionKey, query)
+		finishOnReturn = false
+		a.queueManualQueryCompletion(db, resultGeneration, finish, func() {
+			a.tableResultsActive = false
+			a.clearResultNavigation()
+			a.resetSort()
 			a.results.Clear()
 			for r := 0; r < newResults.GetRowCount(); r++ {
 				for c := 0; c < newResults.GetColumnCount(); c++ {
@@ -126,29 +154,59 @@ func (a *App) ExecuteQuery(query string) {
 			if truncated {
 				a.flashStatus(fmt.Sprintf("[yellow]%s Showing first %d rows (%s). Refine with LIMIT/OFFSET or use Alt+0 for auto max.[-]", iconInfo, rowCount, a.resultLimitReadable()), rowCount, 2200*time.Millisecond)
 			}
-			a.app.SetFocus(a.results)
+			if page, _ := a.pages.GetFrontPage(); page == "main" {
+				a.setFocusWithColor(a.results)
+			}
 		})
 		return
 	}
 
 	queryCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	res, err := a.db.ExecContext(queryCtx, query)
+	res, err := db.ExecContext(queryCtx, query)
 	if err != nil {
 		if a.handleQueryCancellation(err) {
 			return
 		}
-		a.queueUpdateDraw(func() { a.showQueryError(err, query) })
+		a.queueManualQueryUpdate(db, resultGeneration, func() { a.showQueryError(err, query) })
 		return
 	}
 
 	rowsAffected, _ := res.RowsAffected()
-	elapsed := time.Since(a.queryStartedAt)
-	a.recordQueryHistory(query)
-	a.queueUpdateDraw(func() {
+	elapsed := time.Since(startedAt)
+	a.recordQueryHistoryForConnection(connectionKey, query)
+	finishOnReturn = false
+	a.queueManualQueryCompletion(db, resultGeneration, finish, func() {
 		a.ShowAlert(fmt.Sprintf("%s Query executed successfully\n\nRows affected: %d\nTime: %s", iconSuccess, rowsAffected, formatDuration(elapsed)), "main")
-		if err := a.refreshData(); err != nil {
-			a.ShowAlert(fmt.Sprintf("%s Query succeeded, but refresh failed:\n\n%v", iconWarn, err), "main")
+		a.refreshDataAsync()
+	})
+}
+
+func (a *App) manualQueryResultIsCurrent(db *sql.DB, generation uint64) bool {
+	return a != nil && db != nil && a.db == db && a.currentResultGeneration() == generation
+}
+
+func (a *App) queueManualQueryUpdate(db *sql.DB, generation uint64, update func()) {
+	if update == nil {
+		return
+	}
+	a.queueUpdateDraw(func() {
+		if a.manualQueryResultIsCurrent(db, generation) {
+			update()
+		}
+	})
+}
+
+// queueManualQueryCompletion keeps the lifecycle marked running until the
+// event loop applies (or rejects) the completed result. This prevents export
+// and other result actions from observing the old grid during the handoff.
+func (a *App) queueManualQueryCompletion(db *sql.DB, generation uint64, finish func(), update func()) {
+	a.queueUpdateDraw(func() {
+		if finish != nil {
+			finish()
+		}
+		if update != nil && a.manualQueryResultIsCurrent(db, generation) {
+			update()
 		}
 	})
 }
@@ -269,19 +327,22 @@ func (a *App) startQueryLifecycle() (context.Context, func(), bool) {
 	stopTicker := make(chan struct{})
 	go a.tickQueryStatus(stopTicker)
 
+	var finishOnce sync.Once
 	finish := func() {
-		close(stopTicker)
-		canceled := ctx.Err() == context.Canceled
-		a.queryMu.Lock()
-		a.queryRunning = false
-		a.queryCancel = nil
-		a.queryMu.Unlock()
-		a.queueUpdateDraw(func() {
-			if canceled {
-				a.showQueryCanceled()
-				return
-			}
-			a.updateStatusBar("", a.currentResultRowCount())
+		finishOnce.Do(func() {
+			close(stopTicker)
+			canceled := ctx.Err() == context.Canceled
+			a.queryMu.Lock()
+			a.queryRunning = false
+			a.queryCancel = nil
+			a.queryMu.Unlock()
+			a.queueUpdateDraw(func() {
+				if canceled {
+					a.showQueryCanceled()
+					return
+				}
+				a.updateStatusBar("", a.currentResultRowCount())
+			})
 		})
 	}
 	return ctx, finish, true
@@ -310,6 +371,14 @@ func (a *App) isQueryRunning() bool {
 }
 
 func (a *App) cancelActiveQuery() bool {
+	if !a.requestActiveQueryCancel() {
+		return false
+	}
+	a.showQueryCanceled()
+	return true
+}
+
+func (a *App) requestActiveQueryCancel() bool {
 	a.queryMu.Lock()
 	cancel := a.queryCancel
 	running := a.queryRunning
@@ -318,7 +387,6 @@ func (a *App) cancelActiveQuery() bool {
 		return false
 	}
 	cancel()
-	a.showQueryCanceled()
 	return true
 }
 

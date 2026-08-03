@@ -27,6 +27,7 @@ const (
 	ActionInspectSchema  = "inspect_schema"
 	ActionSelectAll      = "select_all"
 	ActionClearSelection = "clear_selection"
+	ActionCommandPalette = "command_palette"
 )
 
 var defaultKeymapBindings = map[string][]string{
@@ -45,6 +46,7 @@ var defaultKeymapBindings = map[string][]string{
 	ActionInspectSchema:  {"alt+m"},
 	ActionSelectAll:      {"alt+a"},
 	ActionClearSelection: {"alt+c"},
+	ActionCommandPalette: {"ctrl+p"},
 }
 
 // Settings stores user-adjustable runtime settings.

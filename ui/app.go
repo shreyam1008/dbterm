@@ -61,7 +61,12 @@ type App struct {
 	copiedCellValue     string
 	hasCopiedCellValue  bool
 	copiedCellSystem    bool
+	copiedCellIsNull    bool
 	clipboardGeneration atomic.Uint64
+	objectGeneration    atomic.Uint64
+	loadingGeneration   atomic.Uint64
+	loadingMu           sync.Mutex
+	loadingReturns      map[uint64]loadingReturnState
 	results             *tview.Table
 	queryInput          *tview.TextArea
 	statusBar           *tview.TextView
@@ -72,12 +77,16 @@ type App struct {
 	queryStartedAt      time.Time
 	queryCancel         context.CancelFunc
 	resultLimit         int // >0 preview rows, -1 means adaptive safe max
+	resultExportMu      sync.Mutex
+	resultExportRunning bool
+	resultExportCancel  context.CancelFunc
 
 	// Pagination state
 	pageOffset       int           // current OFFSET for paginated table browsing
 	pageSize         int           // actual rows shown per page after safety limits
 	totalRowCount    int           // cached COUNT(*) for the selected table (-1 = unknown)
 	resultGeneration atomic.Uint64 // invalidates async result metadata updates
+	resultNavStack   []resultNavigationState
 
 	// Layout components for scaling
 	rightFlex *tview.Flex
@@ -89,10 +98,12 @@ type App struct {
 	sortMode   string // "page" for local visible-row sort, "server" for table ORDER BY
 
 	// UI state
-	tableExpanded bool // results fullscreen mode
-	lastScreenW   int
-	lastScreenH   int
-	focusedPanel  tview.Primitive // cached focus target (avoids lock-unsafe GetFocus calls)
+	tableExpanded      bool // results fullscreen mode
+	lastScreenW        int
+	lastScreenH        int
+	focusedPanel       tview.Primitive // cached focus target (avoids lock-unsafe GetFocus calls)
+	paletteReturnFocus tview.Primitive
+	paletteReturnPage  string
 
 	// Import runtime state
 	importMu              sync.Mutex
@@ -132,7 +143,8 @@ func NewApp() *App {
 	keymap, keymapErr := newActionKeymap(settings)
 	if keymapErr != nil {
 		fmt.Printf("⚠ Warning: keymap config invalid, using defaults: %v\n", keymapErr)
-		keymap, keymapErr = newActionKeymap(config.DefaultSettings())
+		settings = config.DefaultSettings()
+		keymap, keymapErr = newActionKeymap(settings)
 		if keymapErr != nil {
 			fmt.Printf("⚠ Warning: default keymap unavailable: %v\n", keymapErr)
 		}
@@ -224,6 +236,9 @@ func (a *App) setupUI() {
 		case 'v', 'V':
 			a.filterSelectedResultColumnByClipboard()
 			return nil
+		case 'f', 'F':
+			a.followSelectedForeignKey()
+			return nil
 		case 's', 'S':
 			// Sort by current column
 			row, col := a.results.GetSelection()
@@ -305,7 +320,7 @@ func (a *App) setupUI() {
 				a.ShowAlert(fmt.Sprintf("%s No query to execute.\n\nType a SQL query and press Enter.", iconInfo), "main")
 				return nil
 			}
-			go a.ExecuteQuery(query)
+			a.ExecuteQuery(query)
 			return nil
 		}
 		return event
@@ -332,7 +347,7 @@ func (a *App) updateStatusBar(extra string, rowCount int) {
 			a.statusBar.SetText("  [gray]○ offline[-]  │  [yellow]Alt+H[-] Help  │  [yellow]Q[-] Quit")
 			return
 		}
-		a.statusBar.SetText(fmt.Sprintf("  [gray]○ offline[-]  │  %s no DB  │  [yellow]Alt+H[-] Help  │  [yellow]Q[-] Quit", iconConnect))
+		a.statusBar.SetText(fmt.Sprintf("  [gray]○ offline[-]  │  %s no DB  │  [yellow]%s[-] Palette  │  [yellow]Alt+H[-] Help  │  [yellow]Q[-] Quit", iconConnect, tview.Escape(a.commandPaletteShortcutHint())))
 		return
 	}
 
@@ -453,45 +468,6 @@ func (a *App) toggleExpandResults() {
 	}
 }
 
-// refreshData reloads tables list and current table data
-func (a *App) refreshData() error {
-	a.advanceResultGeneration()
-	if a.db == nil {
-		return nil
-	}
-
-	currentTable := a.selectedTable
-
-	if err := a.LoadTables(); err != nil {
-		return err
-	}
-
-	if a.tableCount == 0 {
-		a.selectedTable = ""
-		a.results.Clear()
-		a.results.SetTitle(fmt.Sprintf(" %s Results [yellow](Alt+R)[-] ", iconResults))
-		a.updateStatusBar(fmt.Sprintf("[green]%s DB Refreshed[-]", iconRefresh), 0)
-		return nil
-	}
-
-	if currentTable == "" || !a.tableExistsInList(currentTable) {
-		if name, ok := a.tableIdentifiers[a.tables.GetCurrentItem()]; ok {
-			a.selectedTable = name
-		}
-	}
-
-	rowCount := 0
-	if a.selectedTable != "" {
-		if err := a.LoadResults(); err != nil {
-			return err
-		}
-		rowCount = a.currentResultRowCount()
-	}
-
-	a.updateStatusBar(fmt.Sprintf("[green]%s DB Refreshed[-]", iconRefresh), rowCount)
-	return nil
-}
-
 // toggleSort updates sort state and applies it
 func (a *App) toggleSort(col int) {
 	if a.results == nil || col < 0 || col >= a.results.GetColumnCount() {
@@ -499,6 +475,8 @@ func (a *App) toggleSort(col int) {
 		a.updateStatusBar("", a.currentResultRowCount())
 		return
 	}
+
+	previous := a.captureResultNavigationState()
 
 	// Toggle sort direction if same column, else reset to ascending.
 	if a.sortColumn == col {
@@ -513,12 +491,19 @@ func (a *App) toggleSort(col int) {
 	if a.isTableResultActive() {
 		a.sortMode = "server"
 		a.pageOffset = 0
-		if err := a.LoadResults(); err != nil {
-			a.resetSort()
-			a.ShowAlert(fmt.Sprintf("%s Could not sort table results:\n\n%v", iconWarn, err), "main")
-			return
+		direction := "ascending"
+		if !a.sortAsc {
+			direction = "descending"
 		}
-		a.updateStatusBar("", a.currentResultRowCount())
+		a.loadCurrentTableAsync(tableLoadOptions{
+			loadingText:  fmt.Sprintf("Sorting %s...", direction),
+			cancelText:   "Press Esc to cancel sorting.",
+			canceledText: "Sort canceled",
+			errorText:    "Could not sort table results",
+			rollback: func() {
+				a.restoreResultNavigationState(previous)
+			},
+		})
 		return
 	}
 
@@ -870,6 +855,10 @@ func (a *App) setupKeyBindings() {
 				return nil
 			}
 
+			if a.cancelActiveResultExport() {
+				return nil
+			}
+
 			// Check if row_details is the front page.
 			// However, pages.GetFrontPage() returns the name of the *visible* page.
 			// Since we add row_details as a layer on top, we need to see if it's there.
@@ -890,7 +879,10 @@ func (a *App) setupKeyBindings() {
 
 		// Escape Handling
 		if event.Key() == tcell.KeyEscape {
-			if a.isQueryRunning() {
+			// The visible workspace owns query cancellation. Front overlays such as
+			// the palette, filter builder, and loading modal must receive the Esc
+			// promised by their own footer/cancel text.
+			if page == "main" && a.isQueryRunning() {
 				a.cancelActiveQuery()
 				return nil
 			}
@@ -931,6 +923,11 @@ func (a *App) setupKeyBindings() {
 			if current == a.queryInput {
 				return event
 			}
+			// Foreign-key hops keep a small navigation stack. In Results,
+			// Backspace returns through it before using the normal Dashboard path.
+			if page == "main" && current == a.results && a.navigateBackFromForeignKey() {
+				return nil
+			}
 			// If anywhere else (tables/results), go back to dashboard
 			if page == "main" {
 				a.pages.HidePage("main")
@@ -942,7 +939,7 @@ func (a *App) setupKeyBindings() {
 		// Loading overlays own the keyboard until they finish or Esc cancels.
 		// This prevents a background completion from stealing focus from a
 		// page opened on top of the operation.
-		if page == "loading" {
+		if page == "loading" || page == pageImportProgressModal || page == pageResultExport || page == pageResultExportProgress {
 			return event
 		}
 
@@ -950,21 +947,11 @@ func (a *App) setupKeyBindings() {
 		// Ctrl+F5 — Full refresh (reload table list + results)
 		if event.Key() == tcell.KeyF5 {
 			if event.Modifiers()&tcell.ModCtrl != 0 {
-				if err := a.refreshData(); err != nil {
-					a.ShowAlert(fmt.Sprintf("Error refreshing database: %v", err), "main")
-				} else {
-					a.flashStatus(fmt.Sprintf("[green]%s DB Refreshed[-]", iconRefresh), a.currentResultRowCount(), 1200*time.Millisecond)
-				}
+				a.refreshDataAsync()
 				return nil
 			}
 			if page == "main" && a.selectedTable != "" {
-				a.advanceResultGeneration()
-				a.totalRowCount = -1
-				if err := a.LoadResults(); err != nil {
-					a.ShowAlert(fmt.Sprintf("Error refreshing table: %v", err), "main")
-				} else {
-					a.flashStatus(fmt.Sprintf("[green]%s Table Refreshed[-]", iconRefresh), a.currentResultRowCount(), 1200*time.Millisecond)
-				}
+				a.refreshCurrentTableAsync()
 				return nil
 			}
 			return nil
@@ -972,6 +959,9 @@ func (a *App) setupKeyBindings() {
 
 		if hasAction {
 			switch action {
+			case actionCommandPalette:
+				a.showCommandPalette()
+				return nil
 			case actionHelp:
 				if page == "help" {
 					a.pages.RemovePage("help")
@@ -1297,7 +1287,11 @@ func (a *App) clearColumnOverrides() {
 // cleanup gracefully closes the database connection
 func (a *App) cleanup() {
 	a.advanceResultGeneration()
+	a.objectGeneration.Add(1)
+	a.requestActiveQueryCancel()
+	a.cancelActiveResultExport()
 	a.resultFilter = nil
+	a.resultNavStack = nil
 	if a.db != nil {
 		a.db.Close()
 		a.db = nil
@@ -1392,6 +1386,8 @@ func (a *App) statusActionText(width int) string {
 	inQuery := a.focusedPanel == a.queryInput
 	inResults := a.focusedPanel == a.results
 	filterActive := a.isTableResultActive() && a.activeResultFilter(a.selectedTable) != nil
+	tableActive := a.isTableResultActive()
+	paletteKey := tview.Escape(a.commandPaletteShortcutHint())
 	switch {
 	case width < 72:
 		if inQuery {
@@ -1401,7 +1397,7 @@ func (a *App) statusActionText(width int) string {
 			if filterActive {
 				return "[yellow]Esc[-] Clear filter  │  [yellow]C[-] Copy  │  [yellow]/[-] Find"
 			}
-			return "[yellow]C[-] Copy  │  [yellow]/[-] Find  │  [yellow]V[-] Clip"
+			return "[yellow]C[-] Copy  │  [yellow]/[-] Filter  │  [yellow]Alt+E[-] CSV"
 		}
 		return "[yellow]Space[-] Select  │  [yellow]Alt+E[-] CSV  │  [yellow]Esc[-] Back"
 	case width < 90:
@@ -1410,9 +1406,9 @@ func (a *App) statusActionText(width int) string {
 		}
 		if inResults {
 			if filterActive {
-				return "[yellow]Esc[-] Clear filter  │  [yellow]/[-] Change filter  │  [yellow]C[-] Copy cell"
+				return "[yellow]Esc[-] Clear filter  │  [yellow]/[-] Change  │  [yellow]Alt+E[-] CSV"
 			}
-			return "[yellow]C[-] Copy cell  │  [yellow]/[-] Filter  │  [yellow]V[-] Filter by clipboard"
+			return "[yellow]C[-] Copy  │  [yellow]/[-] Filter  │  [yellow]V[-] Clipboard  │  [yellow]Alt+E[-] CSV"
 		}
 		return fmt.Sprintf("[yellow]Space[-] Select  │  [yellow]Alt+A/C[-] All/Clear  │  [yellow]Alt+E[-] CSV  │  [yellow]Alt+H[-] %s", iconHelp)
 	case width < 120:
@@ -1422,9 +1418,12 @@ func (a *App) statusActionText(width int) string {
 		}
 		if inResults {
 			if filterActive {
-				return fmt.Sprintf("[yellow]Esc[-] Clear filter  │  [yellow]/[-] Change  │  [yellow]C[-] Copy  │  [yellow]Alt+H[-] %s", iconHelp)
+				return fmt.Sprintf("[yellow]Esc[-] Clear filter  │  [yellow]/[-] Change  │  [yellow]C[-] Copy  │  [yellow]Alt+E[-] CSV  │  [yellow]Alt+H[-] %s", iconHelp)
 			}
-			return fmt.Sprintf("[yellow]C[-] Copy cell  │  [yellow]/[-] Filter value  │  [yellow]V[-] Clipboard filter  │  [yellow]Enter[-] Detail  │  [yellow]F5[-] %s", iconRefresh)
+			if tableActive {
+				return "[yellow]C[-] Copy  │  [yellow]/[-] Filter  │  [yellow]V[-] Clipboard  │  [yellow]F[-] Follow FK  │  [yellow]Alt+E[-] CSV"
+			}
+			return fmt.Sprintf("[yellow]C[-] Copy  │  [yellow]Enter[-] Detail  │  [yellow]Alt+E[-] CSV  │  [yellow]%s[-] Palette", paletteKey)
 		}
 		return fmt.Sprintf("[yellow]F5[-] %s  │  [yellow]Space[-] Toggle Sel  │  [yellow]Alt+A/C/E[-] All/Clear/CSV  │  [yellow]Enter[-] Detail  │  [yellow]Alt+D/Esc[-] Dash %s",
 			iconRefresh, iconDashboard)
@@ -1435,10 +1434,12 @@ func (a *App) statusActionText(width int) string {
 		}
 		if inResults {
 			if filterActive {
-				return fmt.Sprintf("[yellow]Esc[-] Clear filter  │  [yellow]/[-] Change filter  │  [yellow]C[-] Copy cell  │  [yellow]V[-] Clipboard filter  │  [yellow]Alt+H[-] %s", iconHelp)
+				return fmt.Sprintf("[yellow]Esc[-] Clear filters  │  [yellow]/[-] Change  │  [yellow]C[-] Copy  │  [yellow]V[-] Clipboard  │  [yellow]F[-] Follow FK  │  [yellow]Alt+E[-] CSV  │  [yellow]%s[-] Palette", paletteKey)
 			}
-			return fmt.Sprintf("[yellow]C[-] Copy cell  │  [yellow]/[-] Filter value  │  [yellow]V[-] Clipboard filter  │  [yellow]Space[-] Select row  │  [yellow]Enter[-] Detail  │  [yellow]F5[-] %s  │  [yellow]Alt+H[-] %s",
-				iconRefresh, iconHelp)
+			if tableActive {
+				return fmt.Sprintf("[yellow]C[-] Copy  │  [yellow]/[-] Filter  │  [yellow]V[-] Clipboard  │  [yellow]F[-] Follow FK  │  [yellow]Alt+E[-] CSV  │  [yellow]Enter[-] Detail  │  [yellow]F5[-] %s  │  [yellow]%s[-] Palette", iconRefresh, paletteKey)
+			}
+			return fmt.Sprintf("[yellow]C[-] Copy  │  [yellow]Space[-] Select  │  [yellow]Enter[-] Detail  │  [yellow]Alt+E[-] CSV  │  [yellow]%s[-] Palette  │  [yellow]Alt+H[-] %s", paletteKey, iconHelp)
 		}
 		return fmt.Sprintf("[yellow]F5[-] %s  │  [yellow]Space[-] Toggle Sel  │  [yellow]Alt+A[-] All  │  [yellow]Alt+C[-] Clear  │  [yellow]Alt+E[-] CSV  │  [yellow]Enter[-] Detail  │  [yellow]Alt+H[-] Help %s  │  [yellow]Esc/Bksp[-] Dashboard %s",
 			iconRefresh, iconHelp, iconDashboard)

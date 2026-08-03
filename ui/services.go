@@ -611,7 +611,7 @@ func (a *App) runServiceCmdWithSudo(action string, info *serviceInfo, password s
 	actionTitle := strings.ToUpper(action[:1]) + action[1:]
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	var canceled atomic.Bool
-	a.showLoadingModal(fmt.Sprintf("%s %s %s...", iconServices, actionTitle, info.name),
+	loadingToken := a.showLoadingModal(fmt.Sprintf("%s %s %s...", iconServices, actionTitle, info.name),
 		withLoadingCancel("Press Esc to cancel.", func() {
 			canceled.Store(true)
 			cancel()
@@ -635,8 +635,9 @@ func (a *App) runServiceCmdWithSudo(action string, info *serviceInfo, password s
 
 		// Update UI on main thread
 		a.app.QueueUpdateDraw(func() {
-			// Remove loading modal
-			a.pages.RemovePage("loading")
+			if !a.finishLoadingModal(loadingToken) {
+				return
+			}
 
 			if canceled.Load() {
 				a.ShowAlert(fmt.Sprintf("%s %s %s canceled.", iconWarn, actionTitle, info.name), "services")
@@ -675,6 +676,11 @@ type loadingModalOptions struct {
 	onCancel   func()
 }
 
+type loadingReturnState struct {
+	page  string
+	focus tview.Primitive
+}
+
 type loadingModalOption func(*loadingModalOptions)
 
 func withLoadingCancel(cancelText string, onCancel func()) loadingModalOption {
@@ -684,8 +690,32 @@ func withLoadingCancel(cancelText string, onCancel func()) loadingModalOption {
 	}
 }
 
-// showLoadingModal displays a loading spinner with optional cancellation.
-func (a *App) showLoadingModal(message string, options ...loadingModalOption) {
+// showLoadingModal displays a loading spinner with optional cancellation and
+// returns an ownership token. Async completions must finish with that token so
+// an older worker can never dismiss a newer operation's overlay.
+func (a *App) showLoadingModal(message string, options ...loadingModalOption) uint64 {
+	returnPage, _ := a.pages.GetFrontPage()
+	returnState := loadingReturnState{page: returnPage, focus: a.app.GetFocus()}
+	if returnPage == "loading" {
+		// A replacement loader should ultimately return to the page beneath the
+		// first loader, not to the detached modal it replaced.
+		a.loadingMu.Lock()
+		var latestToken uint64
+		for existingToken, existingState := range a.loadingReturns {
+			if existingToken > latestToken {
+				latestToken = existingToken
+				returnState = existingState
+			}
+		}
+		a.loadingMu.Unlock()
+	}
+	token := a.loadingGeneration.Add(1)
+	a.loadingMu.Lock()
+	if a.loadingReturns == nil {
+		a.loadingReturns = make(map[uint64]loadingReturnState)
+	}
+	a.loadingReturns[token] = returnState
+	a.loadingMu.Unlock()
 	opts := loadingModalOptions{
 		cancelText: "Please wait; this step cannot be cancelled safely.",
 	}
@@ -703,9 +733,10 @@ func (a *App) showLoadingModal(message string, options ...loadingModalOption) {
 		cancel := opts.onCancel
 		modal.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 			if event.Key() == tcell.KeyEscape {
-				a.pages.RemovePage("loading")
-				a.updateStatusBar("[yellow]Operation canceled.[-]", 0)
-				cancel()
+				if a.finishLoadingModal(token) {
+					a.updateStatusBar("[yellow]Operation canceled.[-]", 0)
+					cancel()
+				}
 				return nil
 			}
 			return event
@@ -714,6 +745,63 @@ func (a *App) showLoadingModal(message string, options ...loadingModalOption) {
 
 	a.pages.AddPage("loading", modal, true, true)
 	a.app.SetFocus(modal)
+	return token
+}
+
+func (a *App) finishLoadingModal(token uint64) bool {
+	if a == nil || token == 0 {
+		return false
+	}
+	a.loadingMu.Lock()
+	returnState, hasReturnState := a.loadingReturns[token]
+	delete(a.loadingReturns, token)
+	a.loadingMu.Unlock()
+	if !a.loadingGeneration.CompareAndSwap(token, token+1) {
+		return false
+	}
+	loaderWasFront := false
+	if a.pages != nil {
+		frontPage, _ := a.pages.GetFrontPage()
+		loaderWasFront = frontPage == "loading"
+	}
+	if a.pages != nil {
+		a.pages.RemovePage("loading")
+	}
+	// A newer alert/modal may have been layered above this loader. In that
+	// case remove only the underlying loading page and preserve the newer
+	// primitive's keyboard focus.
+	if loaderWasFront && hasReturnState {
+		a.restoreLoadingReturnState(returnState)
+	}
+	return true
+}
+
+func (a *App) restoreLoadingReturnState(state loadingReturnState) {
+	if a == nil || a.app == nil {
+		return
+	}
+	if state.page != "" && a.pages != nil && !a.pages.HasPage(state.page) {
+		state.focus = nil
+	}
+	if state.page == "main" {
+		switch state.focus {
+		case a.tables, a.queryInput, a.results:
+			a.setFocusWithColor(state.focus)
+			return
+		}
+		switch a.focusedPanel {
+		case a.tables, a.queryInput, a.results:
+			a.setFocusWithColor(a.focusedPanel)
+			return
+		}
+		if a.tables != nil {
+			a.setFocusWithColor(a.tables)
+		}
+		return
+	}
+	if state.focus != nil {
+		a.app.SetFocus(state.focus)
+	}
 }
 
 // runCmd runs a command with a 3-second timeout and returns stdout, or empty on error
@@ -796,30 +884,65 @@ func (a *App) showConnectServiceModal() {
 		user := strings.TrimSpace(form.GetFormItemByLabel("User").(*tview.InputField).GetText())
 		password := strings.TrimSpace(form.GetFormItemByLabel("Password").(*tview.InputField).GetText())
 
-		var dbType config.DBType
-		var dsn string
+		cfg := &config.ConnectionConfig{
+			Name:     dbName,
+			Host:     "localhost",
+			User:     user,
+			Password: password,
+			Database: dbName,
+		}
 		if service == "PostgreSQL" {
-			dbType = config.PostgreSQL
-			dsn = fmt.Sprintf("postgres://%s:%s@localhost:5432/%s?sslmode=disable", user, password, dbName)
+			cfg.Type = config.PostgreSQL
+			cfg.Port = "5432"
+			cfg.SSLMode = "disable"
 		} else {
-			dbType = config.MySQL
-			dsn = fmt.Sprintf("%s:%s@tcp(localhost:3306)/%s", user, password, dbName)
+			cfg.Type = config.MySQL
+			cfg.Port = "3306"
 		}
 
 		a.pages.RemovePage("connectService")
-		a.showLoadingModal(fmt.Sprintf("Connecting to %s...", dbName))
+		loadingToken := a.showLoadingModal(fmt.Sprintf("Connecting to %s...", dbName))
+		selectedTable := a.selectedTable
+		currentTableIndex := a.tables.GetCurrentItem()
 
 		go func() {
-			err := a.DirectConnect(dbType, dsn, dbName)
+			db, err := utils.ConnectDB(cfg)
+			var snapshot *tableListSnapshot
+			var tableLoadErr error
+			if err == nil {
+				snapshot, tableLoadErr = loadTableListSnapshot(db, cfg.Type, selectedTable, currentTableIndex)
+			}
 			a.app.QueueUpdateDraw(func() {
-				a.pages.RemovePage("loading")
+				if !a.finishLoadingModal(loadingToken) {
+					if db != nil {
+						_ = db.Close()
+					}
+					return
+				}
 				if err != nil {
 					a.ShowAlert(fmt.Sprintf("Connection failed:\n\n%v", err), "services")
-				} else {
-					a.pages.RemovePage("services")
-					a.pages.ShowPage("main")
-					a.updateStatusBar(fmt.Sprintf("[green]Connected to %s[-]", dbName), 0)
+					return
 				}
+
+				a.cleanup()
+				a.db = db
+				a.dbType = cfg.Type
+				a.dbName = cfg.Name
+				a.activeConn = cloneConnectionConfig(cfg)
+				if tableLoadErr != nil {
+					a.applyTableListSnapshot(&tableListSnapshot{
+						items: []tableListSnapshotItem{{label: fmt.Sprintf("[gray]%s Tables could not be loaded[-]", iconWarn)}},
+					})
+					a.ShowAlert(fmt.Sprintf("%s Connected, but could not load tables:\n\n%v\n\nYou can still run queries manually.", iconWarn, tableLoadErr), "main")
+				} else {
+					a.applyTableListSnapshot(snapshot)
+					a.loadDatabaseObjects()
+				}
+				a.results.SetTitle(fmt.Sprintf(" %s Results [yellow](Alt+R)[-] ", iconResults))
+				a.pages.RemovePage("services")
+				a.pages.ShowPage("main")
+				a.setFocusWithColor(a.tables)
+				a.updateStatusBar(fmt.Sprintf("[green]Connected to %s[-]", dbName), 0)
 			})
 		}()
 	})

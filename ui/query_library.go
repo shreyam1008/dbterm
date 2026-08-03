@@ -25,12 +25,15 @@ type queryLibraryItem struct {
 }
 
 func (a *App) recordQueryHistory(query string) {
-	if a.historyMgr == nil {
-		return
-	}
-
 	connectionKey, ok := a.activeConnectionKey()
 	if !ok {
+		return
+	}
+	a.recordQueryHistoryForConnection(connectionKey, query)
+}
+
+func (a *App) recordQueryHistoryForConnection(connectionKey, query string) {
+	if a == nil || a.historyMgr == nil || strings.TrimSpace(connectionKey) == "" {
 		return
 	}
 

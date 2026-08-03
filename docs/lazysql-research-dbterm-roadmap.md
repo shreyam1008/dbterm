@@ -1,5 +1,7 @@
 # LazySQL Research + dbterm Improvement Roadmap (Lightweight-First)
 
+> Historical planning snapshot from February 2026. Several items marked “missing” below—history, read-only mode, pagination, metadata, filtering, export, keymaps, and the command palette—have since shipped. Use the README and in-app Help for current behavior.
+
 Date: February 20, 2026  
 Scope: Competitive analysis of `jorgerojas26/lazysql`, comparison with current `dbterm`, and a practical feature roadmap with strict lightweight constraints.
 

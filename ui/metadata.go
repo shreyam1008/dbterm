@@ -26,7 +26,7 @@ func (a *App) showSelectedTableMetadata() {
 	tableName := a.selectedTable
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	var canceled atomic.Bool
-	a.showLoadingModal(fmt.Sprintf("%s Inspecting %s...", iconTables, tableName),
+	loadingToken := a.showLoadingModal(fmt.Sprintf("%s Inspecting %s...", iconTables, tableName),
 		withLoadingCancel("Press Esc to cancel schema inspection.", func() {
 			canceled.Store(true)
 			cancel()
@@ -36,7 +36,9 @@ func (a *App) showSelectedTableMetadata() {
 		defer cancel()
 		summary, err := a.buildSelectedTableMetadata(ctx, tableName)
 		a.app.QueueUpdateDraw(func() {
-			a.pages.RemovePage("loading")
+			if !a.finishLoadingModal(loadingToken) {
+				return
+			}
 			if canceled.Load() {
 				a.ShowAlert(fmt.Sprintf("%s Schema inspection canceled for %s.", iconWarn, tableName), "main")
 				return

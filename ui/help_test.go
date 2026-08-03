@@ -19,6 +19,8 @@ func TestKeyboardHelpHighlightsCoreWorkflows(t *testing.T) {
 		"[yellow]Alt++ / Alt+-[-]",
 		"[yellow]> / <[-]",
 		"[yellow]0 / Ctrl+0[-]",
+		"[yellow]Ctrl+P (default)[-]",
+		"Search documented actions, database objects, and recent queries",
 	} {
 		if !strings.Contains(help, expected) {
 			t.Fatalf("keyboard help is missing %q", expected)

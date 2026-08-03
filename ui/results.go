@@ -3,10 +3,7 @@ package ui
 import (
 	"context"
 	"database/sql"
-	"encoding/csv"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -30,8 +27,18 @@ const (
 var tablePreviewSteps = []int{50, 100, 250, 500, 1000}
 
 type resultCellReference struct {
-	value       string
-	rowSelected bool
+	// value remains the complete, lossless string representation used by
+	// clipboard/export callers. Keep it separate from TableCell.Text, which is
+	// intentionally shortened and formatted for terminal display.
+	value string
+	// rawValue and isNull preserve database semantics for typed operations. A
+	// nil rawValue alone is not sufficient because legacy references only set
+	// value, so isNull is the authoritative SQL NULL marker.
+	rawValue     any
+	isNull       bool
+	displayValue string
+	truncated    bool
+	rowSelected  bool
 }
 
 type resultSelectionState struct {
@@ -122,10 +129,10 @@ func (a *App) prepareTableResultRequest() (*tableResultRequest, error) {
 	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s", quotedTable)
 	queryArgs := []any(nil)
 	if filter := a.activeResultFilter(selectedTable); filter != nil {
-		clause := resultFilterClause(dbType, filter.column)
+		clause, filterArgs := resultFilterSQL(dbType, filter)
 		query += clause
 		countQuery += clause
-		queryArgs = append(queryArgs, filter.value)
+		queryArgs = append(queryArgs, filterArgs...)
 	}
 	if sortColumn := a.serverSortColumnName(); sortColumn != "" {
 		direction := "ASC"
@@ -195,6 +202,7 @@ func (a *App) applyTableResultSnapshot(snapshot *tableResultSnapshot) bool {
 		return false
 	}
 
+	preserveWidths := resultHeadersMatch(a.results, snapshot.columnNames)
 	a.results.Clear()
 	for row := 0; row < snapshot.results.GetRowCount(); row++ {
 		for col := 0; col < snapshot.results.GetColumnCount(); col++ {
@@ -210,7 +218,9 @@ func (a *App) applyTableResultSnapshot(snapshot *tableResultSnapshot) bool {
 		a.sortMode = "server"
 		a.setSortHeaderIndicator()
 	}
-	a.clearColumnOverrides()
+	if !preserveWidths {
+		a.clearColumnOverrides()
+	}
 	a.applyColumnWidths()
 	a.restoreResultSelection(request.selection, snapshot.rowCount)
 
@@ -218,6 +228,26 @@ func (a *App) applyTableResultSnapshot(snapshot *tableResultSnapshot) bool {
 	go a.fetchTotalRowCount(request.db, request.selectedTable, request.quotedTable, request.dbType, snapshot.pageLimit, request.pageOffset, request.generation, request.countQuery, countArgs)
 	a.results.SetTitle(a.paginatedResultTitle(snapshot.rowCount, snapshot.elapsed))
 	a.updateStatusBar("", snapshot.rowCount)
+	return true
+}
+
+func resultHeadersMatch(table *tview.Table, columnNames []string) bool {
+	if table == nil || len(columnNames) == 0 || table.GetColumnCount() != len(columnNames) {
+		return false
+	}
+	for column, name := range columnNames {
+		cell := table.GetCell(0, column)
+		if cell == nil {
+			return false
+		}
+		current := stripSortIndicator(cell.Text)
+		if reference, ok := cell.GetReference().(string); ok && strings.TrimSpace(reference) != "" {
+			current = reference
+		}
+		if current != name {
+			return false
+		}
+	}
 	return true
 }
 
@@ -237,6 +267,9 @@ func (a *App) runTableResultRequestAsync(request *tableResultRequest, loadingTex
 		}
 		return
 	}
+	// Any table-result request is a newer data intent than a manual SQL query
+	// still running behind the visible grid.
+	a.cancelActiveQuery()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	var canceledByUser atomic.Bool
@@ -252,7 +285,7 @@ func (a *App) runTableResultRequestAsync(request *tableResultRequest, loadingTex
 		return true
 	}
 
-	a.showLoadingModal(loadingText, withLoadingCancel(cancelText, func() {
+	loadingToken := a.showLoadingModal(loadingText, withLoadingCancel(cancelText, func() {
 		canceledByUser.Store(true)
 		cancel()
 		if rollbackIfOwned() && callbacks.onCancel != nil {
@@ -266,11 +299,20 @@ func (a *App) runTableResultRequestAsync(request *tableResultRequest, loadingTex
 		a.queueUpdateDraw(func() {
 			// A canceled or superseded worker must not remove another
 			// operation's loading page or restore older state.
-			if canceledByUser.Load() || !a.tableResultRequestIsCurrent(request) {
+			if canceledByUser.Load() {
+				return
+			}
+			if !a.tableResultRequestIsCurrent(request) {
+				// Retire this loader only if it is still the visible one. A newer
+				// operation has a different ownership token and remains untouched.
+				a.finishLoadingModal(loadingToken)
 				return
 			}
 
-			a.pages.RemovePage("loading")
+			if !a.finishLoadingModal(loadingToken) {
+				rollbackIfOwned()
+				return
+			}
 			if fetchErr != nil {
 				if !rollbackIfOwned() {
 					return
@@ -307,8 +349,9 @@ func (a *App) restartTotalRowCountFetchIfNeeded() {
 	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s", quotedTable)
 	countArgs := []any(nil)
 	if filter := a.activeResultFilter(selectedTable); filter != nil {
-		countQuery += resultFilterClause(dbType, filter.column)
-		countArgs = append(countArgs, filter.value)
+		clause, filterArgs := resultFilterSQL(dbType, filter)
+		countQuery += clause
+		countArgs = append(countArgs, filterArgs...)
 	}
 	generation := a.currentResultGeneration()
 	pageOffset := a.pageOffset
@@ -398,11 +441,7 @@ func (a *App) nextPage() {
 	if a.totalRowCount >= 0 && a.pageOffset+limit >= a.totalRowCount {
 		return
 	}
-	a.pageOffset += limit
-	if err := a.LoadResults(); err != nil {
-		a.pageOffset -= limit
-		a.ShowAlert(fmt.Sprintf("%s Could not load next page:\n\n%v", iconWarn, err), "main")
-	}
+	a.loadResultPageAsync(a.pageOffset+limit, "next page")
 }
 
 // prevPage goes back one page of results.
@@ -411,13 +450,7 @@ func (a *App) prevPage() {
 	if limit <= 0 || a.pageOffset <= 0 {
 		return
 	}
-	a.pageOffset -= limit
-	if a.pageOffset < 0 {
-		a.pageOffset = 0
-	}
-	if err := a.LoadResults(); err != nil {
-		a.ShowAlert(fmt.Sprintf("%s Could not load previous page:\n\n%v", iconWarn, err), "main")
-	}
+	a.loadResultPageAsync(max(0, a.pageOffset-limit), "previous page")
 }
 
 // firstPage jumps to the first page.
@@ -425,10 +458,7 @@ func (a *App) firstPage() {
 	if a.pageOffset == 0 {
 		return
 	}
-	a.pageOffset = 0
-	if err := a.LoadResults(); err != nil {
-		a.ShowAlert(fmt.Sprintf("%s Could not load first page:\n\n%v", iconWarn, err), "main")
-	}
+	a.loadResultPageAsync(0, "first page")
 }
 
 // lastPage jumps to the last page.
@@ -444,10 +474,7 @@ func (a *App) lastPage() {
 	if a.pageOffset == lastOffset {
 		return
 	}
-	a.pageOffset = lastOffset
-	if err := a.LoadResults(); err != nil {
-		a.ShowAlert(fmt.Sprintf("%s Could not load last page:\n\n%v", iconWarn, err), "main")
-	}
+	a.loadResultPageAsync(lastOffset, "last page")
 }
 
 func (a *App) captureResultSelection() resultSelectionState {
@@ -729,112 +756,4 @@ func stripResultSelectionSuffix(title string) string {
 		return title[:idx]
 	}
 	return title
-}
-
-// exportCurrentResultsToCSV writes the currently visible results table to CSV.
-func (a *App) exportCurrentResultsToCSV() {
-	if a.currentResultRowCount() == 0 {
-		a.ShowAlert(fmt.Sprintf("%s No result rows to export.\n\nRun a query or load a table first.", iconInfo), "main")
-		return
-	}
-
-	path, rows, err := a.writeCurrentResultsToCSV()
-	if err != nil {
-		a.ShowAlert(fmt.Sprintf("%s CSV export failed:\n\n%v", iconWarn, err), "main")
-		return
-	}
-
-	a.ShowAlert(fmt.Sprintf("%s CSV export complete.\n\nRows: %d\nFile: %s", iconSuccess, rows, path), "main")
-}
-
-func (a *App) writeCurrentResultsToCSV() (string, int, error) {
-	fileName := fmt.Sprintf("dbterm_results_%s.csv", time.Now().Format("20060102_150405"))
-
-	candidatePaths := make([]string, 0, 2)
-	if cwd, err := os.Getwd(); err == nil && cwd != "" {
-		candidatePaths = append(candidatePaths, filepath.Join(cwd, fileName))
-	}
-
-	tmpPath := filepath.Join(os.TempDir(), fileName)
-	if len(candidatePaths) == 0 || candidatePaths[0] != tmpPath {
-		candidatePaths = append(candidatePaths, tmpPath)
-	}
-
-	var lastErr error
-	for _, path := range candidatePaths {
-		rows, err := a.writeResultsCSVToPath(path)
-		if err == nil {
-			return path, rows, nil
-		}
-		lastErr = err
-	}
-
-	if lastErr == nil {
-		lastErr = fmt.Errorf("could not determine a writable export path")
-	}
-	return "", 0, lastErr
-}
-
-func (a *App) writeResultsCSVToPath(path string) (int, error) {
-	rowCount := a.results.GetRowCount()
-	colCount := a.results.GetColumnCount()
-	if rowCount <= 1 || colCount == 0 || a.currentResultRowCount() == 0 {
-		return 0, fmt.Errorf("no result data available")
-	}
-
-	rowsToExport := a.selectedResultRows()
-	if len(rowsToExport) == 0 {
-		rowsToExport = make([]int, 0, rowCount-1)
-		for row := 1; row < rowCount; row++ {
-			rowsToExport = append(rowsToExport, row)
-		}
-	}
-
-	file, err := os.Create(path)
-	if err != nil {
-		return 0, fmt.Errorf("create %s: %w", path, err)
-	}
-
-	writer := csv.NewWriter(file)
-	if err := writer.Write(a.resultCSVRecord(0, colCount, true)); err != nil {
-		_ = file.Close()
-		return 0, fmt.Errorf("write csv header: %w", err)
-	}
-
-	for i, row := range rowsToExport {
-		if err := writer.Write(a.resultCSVRecord(row, colCount, false)); err != nil {
-			_ = file.Close()
-			return 0, fmt.Errorf("write csv row %d: %w", i+2, err)
-		}
-	}
-
-	writer.Flush()
-	if err := writer.Error(); err != nil {
-		_ = file.Close()
-		return 0, fmt.Errorf("flush csv writer: %w", err)
-	}
-
-	if err := file.Close(); err != nil {
-		return 0, fmt.Errorf("close %s: %w", path, err)
-	}
-
-	return len(rowsToExport), nil
-}
-
-func (a *App) resultCSVRecord(row, colCount int, header bool) []string {
-	record := make([]string, colCount)
-	for col := 0; col < colCount; col++ {
-		cell := a.results.GetCell(row, col)
-		if cell == nil {
-			continue
-		}
-
-		text := cell.Text
-		if header {
-			// Header cells can include sort arrows in the UI; export clean column names.
-			text = strings.TrimSuffix(strings.TrimSuffix(text, " ▲"), " ▼")
-		}
-		record[col] = text
-	}
-	return record
 }

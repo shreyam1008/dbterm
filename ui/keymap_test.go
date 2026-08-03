@@ -62,6 +62,44 @@ func TestNewActionKeymapRejectsUnknownActions(t *testing.T) {
 	}
 }
 
+func TestNewActionKeymapRejectsTypingAndReservedBindings(t *testing.T) {
+	tests := []struct {
+		name    string
+		binding string
+	}{
+		{name: "bare rune steals input", binding: "p"},
+		{name: "quit key is hard coded", binding: "ctrl+c"},
+		{name: "refresh key is hard coded", binding: "f5"},
+		{name: "result zoom is hard coded", binding: "ctrl+plus"},
+		{name: "result zoom equals alias", binding: "ctrl+="},
+		{name: "preview rows equals alias", binding: "alt+="},
+		{name: "settings save is hard coded", binding: "ctrl+s"},
+		{name: "escape is contextual", binding: "alt+esc"},
+		{name: "tab is contextual", binding: "ctrl+tab"},
+		{name: "shifted runes normalize ambiguously", binding: "alt+shift+p"},
+		{name: "shifted space normalizes ambiguously", binding: "alt+shift+space"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			settings := config.DefaultSettings()
+			settings.Keymap[config.ActionCommandPalette] = []string{test.binding}
+			if _, err := newActionKeymap(settings); err == nil {
+				t.Fatalf("newActionKeymap() accepted unsafe binding %q", test.binding)
+			}
+		})
+	}
+}
+
+func TestNewActionKeymapAcceptsModifiedAndFunctionBindings(t *testing.T) {
+	for _, binding := range []string{"ctrl+p", "alt+p", "f6", "ctrl+shift+f6", "ctrl+shift+enter"} {
+		settings := config.DefaultSettings()
+		settings.Keymap[config.ActionCommandPalette] = []string{binding}
+		if _, err := newActionKeymap(settings); err != nil {
+			t.Fatalf("newActionKeymap() rejected %q: %v", binding, err)
+		}
+	}
+}
+
 func TestActionKeymapResolve(t *testing.T) {
 	resolver, err := newActionKeymap(config.DefaultSettings())
 	if err != nil {

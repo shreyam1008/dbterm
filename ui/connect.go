@@ -401,7 +401,7 @@ func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex in
 
 // testConnection tries to connect and shows a result toast
 func (a *App) testConnection(cfg *config.ConnectionConfig) {
-	a.showLoadingModal(fmt.Sprintf("Testing %s connection...", cfg.TypeLabel()))
+	loadingToken := a.showLoadingModal(fmt.Sprintf("Testing %s connection...", cfg.TypeLabel()))
 
 	go func() {
 		db, err := utils.ConnectDB(cfg)
@@ -410,7 +410,9 @@ func (a *App) testConnection(cfg *config.ConnectionConfig) {
 		}
 
 		a.app.QueueUpdateDraw(func() {
-			a.pages.RemovePage("loading")
+			if !a.finishLoadingModal(loadingToken) {
+				return
+			}
 			if err != nil {
 				a.ShowAlert(fmt.Sprintf("%s Connection failed\n\n%s\n\n%s", iconFail,
 					err.Error(), connectionHint(err, cfg)), "connectModal")
@@ -832,7 +834,7 @@ func splitHostPortWithDefault(address, defaultPort string) (string, string) {
 
 // connectWithConfig connects and transitions to the main workspace
 func (a *App) connectWithConfig(cfg *config.ConnectionConfig, storeIndex int) {
-	a.showLoadingModal(fmt.Sprintf("%s Connecting to %s...", iconConnect, cfg.Name))
+	loadingToken := a.showLoadingModal(fmt.Sprintf("%s Connecting to %s...", iconConnect, cfg.Name))
 
 	selectedTable := a.selectedTable
 	currentTableIndex := a.tables.GetCurrentItem()
@@ -846,7 +848,12 @@ func (a *App) connectWithConfig(cfg *config.ConnectionConfig, storeIndex int) {
 		}
 
 		a.app.QueueUpdateDraw(func() {
-			a.pages.RemovePage("loading")
+			if !a.finishLoadingModal(loadingToken) {
+				if db != nil {
+					_ = db.Close()
+				}
+				return
+			}
 
 			if err != nil {
 				a.ShowAlert(fmt.Sprintf("%s Connection failed\n\n%s\n\n%s", iconFail,

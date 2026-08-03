@@ -229,16 +229,22 @@ func (a *App) runSQLImport(cfg *config.ConnectionConfig, sqlPath string, stopOnE
 				return
 			}
 
-			refreshedWorkspace := false
 			if a.shouldRefreshAfterImport(targetCfg) {
-				if refreshErr := a.refreshData(); refreshErr != nil {
-					a.ShowAlert(fmt.Sprintf("%s SQL import completed, but refresh failed:\n\n%v", iconWarn, refreshErr), returnPage)
-					return
-				}
-				refreshedWorkspace = true
+				a.refreshDataAsyncWithCallbacks(refreshDataCallbacks{
+					onSuccess: func() {
+						a.ShowAlert(buildImportSuccessMessage(targetCfg, sqlPath, returnPage, true), returnPage)
+					},
+					onCancel: func() {
+						a.ShowAlert(fmt.Sprintf("%s SQL import completed. Workspace refresh was canceled.\n\nThe data was imported successfully; press Ctrl+F5 when you are ready to refresh.", iconInfo), returnPage)
+					},
+					onError: func(refreshErr error) {
+						a.ShowAlert(fmt.Sprintf("%s SQL import completed, but refresh failed:\n\n%v", iconWarn, refreshErr), returnPage)
+					},
+				})
+				return
 			}
 
-			a.ShowAlert(buildImportSuccessMessage(targetCfg, sqlPath, returnPage, refreshedWorkspace), returnPage)
+			a.ShowAlert(buildImportSuccessMessage(targetCfg, sqlPath, returnPage, false), returnPage)
 		})
 	}()
 }

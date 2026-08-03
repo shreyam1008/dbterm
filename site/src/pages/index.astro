@@ -87,24 +87,27 @@ const dbTargets = [
 ];
 
 const shortcuts = [
+  { key: "Ctrl + P", action: "Fuzzy-search commands, database objects, and recent SQL (default binding)" },
   { key: "Enter", action: "Execute SQL query" },
   { key: "Shift + Enter", action: "New line in query editor" },
   { key: "Alt + Q / T / R", action: "Focus Query, Tables, or Results" },
   { key: "Alt + Y", action: "Open per-connection query history" },
   { key: "Alt + A / Alt + C", action: "Select all result rows / clear row selection" },
   { key: "Space (Results)", action: "Toggle current result row selection" },
-  { key: "Alt + E", action: "Export selected rows to CSV (or all displayed if none selected)" },
+  { key: "C, V, / (Results)", action: "Copy a full cell / filter by clipboard / build typed AND filters" },
+  { key: "F / Backspace (Results)", action: "Follow a declared foreign key / return to the previous table" },
+  { key: "Alt + E", action: "Export selected rows, current page, or all matching table rows" },
   { key: "Alt + I", action: "Import SQL dump for active PostgreSQL/MySQL connection" },
   { key: "I (Dashboard)", action: "Import SQL dump into selected saved PostgreSQL/MySQL connection" },
   { key: "G (Dashboard) / Alt + ,", action: "Open keymap Settings page" },
   { key: "F5 / Ctrl + F5", action: "Refresh current table or full table list" },
-  { key: "Alt + = / - / 0", action: "Adjust preview row limit (including all rows)" },
+  { key: "Alt + = / - / 0", action: "Adjust preview row limit (up to the adaptive safe maximum)" },
   { key: "Ctrl + = / -", action: "Zoom table columns wider / narrower" },
   { key: "+ / -", action: "Widen / narrow selected column" },
   { key: "Ctrl + 0", action: "Reset table zoom" },
   { key: "Alt + F / Alt + B", action: "Fullscreen results / backup modal" },
   { key: "Alt + H", action: "Open in-app help and SQL cheatsheets" },
-  { key: "Ctrl + C", action: "Quit safely" }
+  { key: "Ctrl + C", action: "Cancel an active query/import/export; otherwise quit safely" }
 ];
 
 const faqItems = [

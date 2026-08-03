@@ -52,10 +52,10 @@ func main() {
 	fmt.Println("  \033[38;2;203;166;247m║\033[0m  \033[38;2;166;173;200mMulti-database terminal client\033[0m  \033[38;2;203;166;247m║\033[0m")
 	fmt.Println("  \033[38;2;203;166;247m╚══════════════════════════════════╝\033[0m")
 	fmt.Println()
-	fmt.Printf("  \033[38;2;137;180;250m⬢\033[0m PostgreSQL   \033[38;2;249;226;175m⬡\033[0m MySQL   \033[38;2;166;227;161m◆\033[0m SQLite\n")
+	fmt.Printf("  \033[38;2;137;180;250m⬢\033[0m PostgreSQL   \033[38;2;249;226;175m⬡\033[0m MySQL   \033[38;2;166;227;161m◆\033[0m SQLite   \033[38;2;148;226;213m◇\033[0m Turso / D1\n")
 	fmt.Printf("  \033[38;2;108;112;134mConfig: %s\033[0m\n", configPath())
 	fmt.Println()
-	fmt.Println("  \033[38;2;166;227;161mStarting...\033[0m Press \033[33mAlt+H\033[0m for help inside the app.")
+	fmt.Println("  \033[38;2;166;227;161mStarting...\033[0m Press \033[33mCtrl+P\033[0m for the palette or \033[33mAlt+H\033[0m for help.")
 	fmt.Println()
 
 	app := ui.NewApp()
@@ -85,7 +85,7 @@ func printHelp() {
     dbterm --uninstall --purge Uninstall binary + saved connections
 
   ` + "\033[33m" + `DATABASES` + "\033[0m" + `
-    ⬢ PostgreSQL    ⬡ MySQL    ◆ SQLite
+    ⬢ PostgreSQL    ⬡ MySQL    ◆ SQLite    ◇ Turso    ◇ Cloudflare D1
 
   ` + "\033[33m" + `QUICK START` + "\033[0m" + `
     1. Run ` + "\033[32m" + `dbterm` + "\033[0m" + `
@@ -94,13 +94,15 @@ func printHelp() {
     4. Press ` + "\033[33m" + `Alt+H` + "\033[0m" + ` for SQL cheatsheets per DB
 
   ` + "\033[33m" + `KEY BINDINGS` + "\033[0m" + `
+    Ctrl+P     Search commands, objects, and recent SQL
     Alt+Q/T/R  Focus Query/Tables/Results
-    Enter      Execute query          F5  Refresh table
-    Ctrl+F5    Full refresh           Alt+F/Alt+B Fullscreen/Backup
-    Alt+I      Import dump            Alt+M  Inspect selected table schema
-    >/< / 0    All columns/reset      +/- Selected column width
-    Alt+H      Help panel             Alt+D  Dashboard
-    Ctrl+C     Quit
+    Enter      Execute query          F5 / Ctrl+F5  Refresh table / database
+    C, V, /    Copy cell / clipboard filter / filter builder (Results)
+    F / Bksp   Follow foreign key / return    Alt+E  Scoped CSV export
+    PgUp/PgDn  Previous/next page      Home/End  First/last page
+    +/-        Selected column         Ctrl+/-  All-column zoom
+    Alt+/-/0   Preview rows            Alt+H  Help     Alt+D  Dashboard
+    Ctrl+C     Cancel active work or quit
 
   ` + "\033[38;2;108;112;134m" + `Docs: https://shreyam1008.github.io/dbterm/
   Open source: https://shreyam1008.github.io/dbterm/open-source/

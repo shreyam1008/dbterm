@@ -144,7 +144,7 @@ func (a *App) runDatabaseBackup(cfg *config.ConnectionConfig, outputPath, return
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 	var canceled atomic.Bool
-	a.showLoadingModal(fmt.Sprintf("%s Creating %s...", iconBackup, plan.formatLabel),
+	loadingToken := a.showLoadingModal(fmt.Sprintf("%s Creating %s...", iconBackup, plan.formatLabel),
 		withLoadingCancel("Press Esc to cancel backup.", func() {
 			canceled.Store(true)
 			cancel()
@@ -165,7 +165,9 @@ func (a *App) runDatabaseBackup(cfg *config.ConnectionConfig, outputPath, return
 		}
 
 		a.app.QueueUpdateDraw(func() {
-			a.pages.RemovePage("loading")
+			if !a.finishLoadingModal(loadingToken) {
+				return
+			}
 
 			if canceled.Load() {
 				a.ShowAlert(fmt.Sprintf("%s Backup canceled.", iconWarn), returnPage)

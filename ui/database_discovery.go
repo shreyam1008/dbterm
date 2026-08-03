@@ -181,7 +181,7 @@ func (a *App) discoverConnectionDatabases(form *tview.Form) {
 	applyDiscoveryConnectionFields(form, cfg)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 18*time.Second)
-	a.showLoadingModal(
+	loadingToken := a.showLoadingModal(
 		fmt.Sprintf("Finding databases on %s:%s...", cfg.Host, cfg.Port),
 		withLoadingCancel("Press Esc to cancel database discovery.", cancel),
 	)
@@ -191,7 +191,9 @@ func (a *App) discoverConnectionDatabases(form *tview.Form) {
 		names, discoveryErr := discoverDatabaseNames(ctx, cfg)
 
 		a.app.QueueUpdateDraw(func() {
-			a.pages.RemovePage("loading")
+			if !a.finishLoadingModal(loadingToken) {
+				return
+			}
 			if errors.Is(discoveryErr, context.Canceled) {
 				return
 			}

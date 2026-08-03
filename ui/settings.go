@@ -30,8 +30,10 @@ var keymapFieldSpecs = []keymapFieldSpec{
 	{Action: config.ActionHistory, Label: "Query History"},
 	{Action: config.ActionSettings, Label: "Open Settings"},
 	{Action: config.ActionImportDump, Label: "Import Dump"},
+	{Action: config.ActionInspectSchema, Label: "Inspect Schema"},
 	{Action: config.ActionSelectAll, Label: "Select All Rows"},
 	{Action: config.ActionClearSelection, Label: "Clear Selection"},
+	{Action: config.ActionCommandPalette, Label: "Command Palette"},
 }
 
 func settingsFooterText(width int) string {

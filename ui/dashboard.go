@@ -90,11 +90,12 @@ func (a *App) showDashboardWithHealthChecks(forceHealthChecks bool) {
 	// ── Layout ──
 	screenW, screenH := a.getScreenSize()
 	hasWorkspace := a.db != nil
+	paletteShortcut := tview.Escape(a.commandPaletteShortcutHint())
 
 	if connCount > 0 {
-		actions.SetText(dashboardFooterText(true, hasWorkspace, screenW))
+		actions.SetText(dashboardFooterText(true, hasWorkspace, screenW, paletteShortcut))
 	} else {
-		actions.SetText(dashboardFooterText(false, hasWorkspace, screenW))
+		actions.SetText(dashboardFooterText(false, hasWorkspace, screenW, paletteShortcut))
 	}
 
 	headerHeight := 8
@@ -140,65 +141,73 @@ func (a *App) showDashboardWithHealthChecks(forceHealthChecks bool) {
 		}
 
 		action, hasAction := a.resolveAction(event)
-		if hasAction && action == actionImportDump {
-			importSelectedConnection()
-			return nil
+		if hasAction {
+			switch action {
+			case actionImportDump:
+				importSelectedConnection()
+				return nil
+			case actionSettings:
+				a.showSettings()
+				return nil
+			}
 		}
 
-		switch event.Rune() {
-		case 'n', 'N':
-			a.showConnectionForm(nil, -1)
-			return nil
-		case 'e', 'E':
-			if connCount > 0 {
-				idx := connList.GetCurrentItem()
-				if idx >= 0 && idx < connCount {
-					conn := a.store.Connections[idx]
-					a.showConnectionForm(&conn, idx)
+		if event.Modifiers()&(tcell.ModCtrl|tcell.ModAlt|tcell.ModMeta) == 0 {
+			switch event.Rune() {
+			case 'n', 'N':
+				a.showConnectionForm(nil, -1)
+				return nil
+			case 'e', 'E':
+				if connCount > 0 {
+					idx := connList.GetCurrentItem()
+					if idx >= 0 && idx < connCount {
+						conn := a.store.Connections[idx]
+						a.showConnectionForm(&conn, idx)
+					}
+				} else {
+					a.ShowAlert(fmt.Sprintf("%s No connections to edit.\n\nPress N to create one.", iconInfo), "dashboard")
 				}
-			} else {
-				a.ShowAlert(fmt.Sprintf("%s No connections to edit.\n\nPress N to create one.", iconInfo), "dashboard")
-			}
-			return nil
-		case 'd', 'D':
-			if connCount > 0 {
-				idx := connList.GetCurrentItem()
-				if idx >= 0 && idx < connCount {
-					a.confirmDelete(idx)
+				return nil
+			case 'd', 'D':
+				if connCount > 0 {
+					idx := connList.GetCurrentItem()
+					if idx >= 0 && idx < connCount {
+						a.confirmDelete(idx)
+					}
 				}
+				return nil
+			case 'q', 'Q':
+				a.cleanup()
+				a.app.Stop()
+				return nil
+			case 'h', 'H':
+				a.showHelp()
+				return nil
+			case 's', 'S':
+				a.showServiceDashboard()
+				return nil
+			case 'w', 'W':
+				if !backToWorkspace() {
+					a.ShowAlert(fmt.Sprintf("%s No workspace open yet.\n\nConnect to a database first.", iconInfo), "dashboard")
+				}
+				return nil
+			case 'b', 'B':
+				if !backToWorkspace() {
+					a.ShowAlert(fmt.Sprintf("%s No workspace open yet.\n\nConnect to a database first.", iconInfo), "dashboard")
+				}
+				return nil
+			case 'r', 'R':
+				// Reopen dashboard to refresh live availability checks, bypassing manual mode and cache.
+				a.pages.RemovePage("dashboard")
+				a.showDashboardWithHealthChecks(true)
+				return nil
+			case 'g', 'G':
+				a.showSettings()
+				return nil
+			case 'i', 'I':
+				importSelectedConnection()
+				return nil
 			}
-			return nil
-		case 'q', 'Q':
-			a.cleanup()
-			a.app.Stop()
-			return nil
-		case 'h', 'H':
-			a.showHelp()
-			return nil
-		case 's', 'S':
-			a.showServiceDashboard()
-			return nil
-		case 'w', 'W':
-			if !backToWorkspace() {
-				a.ShowAlert(fmt.Sprintf("%s No workspace open yet.\n\nConnect to a database first.", iconInfo), "dashboard")
-			}
-			return nil
-		case 'b', 'B':
-			if !backToWorkspace() {
-				a.ShowAlert(fmt.Sprintf("%s No workspace open yet.\n\nConnect to a database first.", iconInfo), "dashboard")
-			}
-			return nil
-		case 'r', 'R':
-			// Reopen dashboard to refresh live availability checks, bypassing manual mode and cache.
-			a.pages.RemovePage("dashboard")
-			a.showDashboardWithHealthChecks(true)
-			return nil
-		case 'g', 'G':
-			a.showSettings()
-			return nil
-		case 'i', 'I':
-			importSelectedConnection()
-			return nil
 		}
 
 		if event.Key() == tcell.KeyEnter && connCount > 0 {
@@ -461,42 +470,44 @@ func dashboardConnectionReachable(conn config.ConnectionConfig, timeout time.Dur
 	}
 }
 
-func dashboardFooterText(hasConnections, hasWorkspace bool, width int) string {
+func dashboardFooterText(hasConnections, hasWorkspace bool, width int, paletteShortcut string) string {
+	if paletteShortcut == "" {
+		paletteShortcut = "Ctrl+P"
+	}
+	minimal := "  [yellow]N[-] New  │  [yellow]G[-] Settings  │  [#cba6f7]Q[-] Quit"
 	if hasConnections {
-		switch {
-		case width < 74:
-			return "  [yellow]N[-] New  │  [yellow]G[-] Settings  │  [#cba6f7]Q[-] Quit"
-		case width < 100:
-			if hasWorkspace {
-				return fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [yellow]G[-] Settings  │  [yellow]B/Esc[-] Back %s", iconConnect, iconBack)
-			}
-			return fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [yellow]N[-] New  │  [yellow]G[-] Settings  │  [#cba6f7]Q[-] Quit", iconConnect)
-		case width < 128:
-			if hasWorkspace {
-				return fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [yellow]I[-] Import  │  [yellow]G[-] Settings  │  [yellow]B/Esc[-] Back %s", iconConnect, iconBack)
-			}
-			return fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [yellow]I[-] Import  │  [yellow]G[-] Settings  │  [teal]H[-] Help %s", iconConnect, iconHelp)
-		default:
-			if hasWorkspace {
-				return fmt.Sprintf("  [green]Enter[-] Connect %s  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [yellow]I[-] Import  │  [#94e2d5]S[-] Services %s  │  [yellow]R[-] Recheck %s  │  [yellow]G[-] Settings  │  [yellow]B/Esc[-] Back %s  │  [#cba6f7]Q[-] Quit",
-					iconConnect, iconServices, iconRefresh, iconBack)
-			}
-			return fmt.Sprintf("  [green]Enter[-] Connect %s  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [yellow]I[-] Import  │  [#94e2d5]S[-] Services %s  │  [yellow]R[-] Recheck %s  │  [yellow]G[-] Settings  │  [teal]H[-] Help %s  │  [#cba6f7]Q[-] Quit",
-				iconConnect, iconServices, iconRefresh, iconHelp)
+		short := fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [yellow]N[-] New  │  [yellow]G[-] Settings  │  [#cba6f7]Q[-] Quit", iconConnect)
+		if hasWorkspace {
+			short = fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [yellow]G[-] Settings  │  [yellow]B/Esc[-] Back %s", iconConnect, iconBack)
+			medium := fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [yellow]I[-] Import  │  [yellow]G[-] Settings  │  [yellow]B/Esc[-] Back %s", iconConnect, iconBack)
+			full := fmt.Sprintf("  [green]Enter[-] Connect %s  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [yellow]I[-] Import  │  [#94e2d5]S[-] Services %s  │  [yellow]R[-] Recheck %s  │  [yellow]%s[-] Palette  │  [yellow]G[-] Settings  │  [yellow]B/Esc[-] Back %s  │  [#cba6f7]Q[-] Quit",
+				iconConnect, iconServices, iconRefresh, paletteShortcut, iconBack)
+			return firstDashboardFooterThatFits(width, full, medium, short, minimal)
 		}
+		medium := fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [yellow]I[-] Import  │  [yellow]G[-] Settings  │  [teal]H[-] Help %s", iconConnect, iconHelp)
+		full := fmt.Sprintf("  [green]Enter[-] Connect %s  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [yellow]I[-] Import  │  [#94e2d5]S[-] Services %s  │  [yellow]R[-] Recheck %s  │  [yellow]%s[-] Palette  │  [yellow]G[-] Settings  │  [teal]H[-] Help %s  │  [#cba6f7]Q[-] Quit",
+			iconConnect, iconServices, iconRefresh, paletteShortcut, iconHelp)
+		return firstDashboardFooterThatFits(width, full, medium, short, minimal)
 	}
 
-	if width < 74 {
-		return "  [yellow]N[-] New  │  [yellow]G[-] Settings  │  [#cba6f7]Q[-] Quit"
-	}
-	if width < 104 {
-		if hasWorkspace {
-			return fmt.Sprintf("  [yellow]N[-] New  │  [yellow]G[-] Settings  │  [yellow]B/Esc[-] Back %s  │  [#cba6f7]Q[-] Quit", iconBack)
-		}
-		return fmt.Sprintf("  [yellow]N[-] New  │  [yellow]G[-] Settings  │  [teal]H[-] Help %s  │  [#cba6f7]Q[-] Quit", iconHelp)
-	}
 	if hasWorkspace {
-		return fmt.Sprintf("  [yellow]N[-] New Connection  │  [#94e2d5]S[-] Services %s  │  [yellow]G[-] Settings  │  [yellow]B/Esc[-] Back %s  │  [#cba6f7]Q[-] Quit", iconServices, iconBack)
+		short := fmt.Sprintf("  [yellow]N[-] New  │  [yellow]G[-] Settings  │  [yellow]B/Esc[-] Back %s  │  [#cba6f7]Q[-] Quit", iconBack)
+		full := fmt.Sprintf("  [yellow]N[-] New Connection  │  [#94e2d5]S[-] Services %s  │  [yellow]%s[-] Palette  │  [yellow]G[-] Settings  │  [yellow]B/Esc[-] Back %s  │  [#cba6f7]Q[-] Quit", iconServices, paletteShortcut, iconBack)
+		return firstDashboardFooterThatFits(width, full, short, minimal)
 	}
-	return fmt.Sprintf("  [yellow]N[-] New Connection  │  [#94e2d5]S[-] Services %s  │  [yellow]G[-] Settings  │  [teal]H[-] Help %s  │  [#cba6f7]Q[-] Quit", iconServices, iconHelp)
+	short := fmt.Sprintf("  [yellow]N[-] New  │  [yellow]G[-] Settings  │  [teal]H[-] Help %s  │  [#cba6f7]Q[-] Quit", iconHelp)
+	full := fmt.Sprintf("  [yellow]N[-] New Connection  │  [#94e2d5]S[-] Services %s  │  [yellow]%s[-] Palette  │  [yellow]G[-] Settings  │  [teal]H[-] Help %s  │  [#cba6f7]Q[-] Quit", iconServices, paletteShortcut, iconHelp)
+	return firstDashboardFooterThatFits(width, full, short, minimal)
+}
+
+func firstDashboardFooterThatFits(width int, candidates ...string) string {
+	for _, candidate := range candidates {
+		if width <= 0 || tview.TaggedStringWidth(candidate) <= width {
+			return candidate
+		}
+	}
+	if len(candidates) == 0 {
+		return ""
+	}
+	return candidates[len(candidates)-1]
 }

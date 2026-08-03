@@ -108,6 +108,7 @@ func (a *App) copyValue(value string) error {
 		a.copiedCellValue = value
 		a.hasCopiedCellValue = true
 		a.copiedCellSystem = err == nil
+		a.copiedCellIsNull = false
 	}
 	return err
 }
@@ -124,6 +125,7 @@ func (a *App) copyValueAsync(value string, completed func(error)) {
 	a.copiedCellValue = value
 	a.hasCopiedCellValue = true
 	a.copiedCellSystem = false
+	a.copiedCellIsNull = false
 
 	go func() {
 		err := copyToClipboard(value)
@@ -166,4 +168,8 @@ func (a *App) cachedCopiedCellValue() (string, bool) {
 		return "", false
 	}
 	return a.copiedCellValue, true
+}
+
+func (a *App) cachedCopiedCellIsNull() bool {
+	return a != nil && a.hasCopiedCellValue && a.copiedCellIsNull
 }

@@ -83,6 +83,8 @@ func printInfo() {
 	fmt.Println("  PostgreSQL    lib/pq")
 	fmt.Println("  MySQL         go-sql-driver/mysql")
 	fmt.Println("  SQLite        modernc.org/sqlite")
+	fmt.Println("  Turso         libsql-client-go")
+	fmt.Println("  Cloudflare D1 cfd1")
 	fmt.Println()
 	fmt.Println("  \033[33mCLIENT TOOLS\033[0m  Required for SQL dump import/backup")
 	fmt.Printf("  psql          %s\n", cliToolStatus("psql"))

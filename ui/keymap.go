@@ -29,6 +29,7 @@ const (
 	actionInspectSchema  keymapAction = config.ActionInspectSchema
 	actionSelectAll      keymapAction = config.ActionSelectAll
 	actionClearSelection keymapAction = config.ActionClearSelection
+	actionCommandPalette keymapAction = config.ActionCommandPalette
 )
 
 var knownKeymapActions = map[keymapAction]struct{}{
@@ -47,6 +48,7 @@ var knownKeymapActions = map[keymapAction]struct{}{
 	actionInspectSchema:  {},
 	actionSelectAll:      {},
 	actionClearSelection: {},
+	actionCommandPalette: {},
 }
 
 type actionKeymap struct {
@@ -91,6 +93,9 @@ func newActionKeymap(settings *config.Settings) (*actionKeymap, error) {
 			if err != nil {
 				return nil, fmt.Errorf("invalid key binding %q for action %q: %w", rawBinding, action, err)
 			}
+			if err := validateGlobalActionBinding(normalized); err != nil {
+				return nil, fmt.Errorf("invalid key binding %q for action %q: %w", rawBinding, action, err)
+			}
 			if _, ok := seen[normalized]; ok {
 				continue
 			}
@@ -105,6 +110,69 @@ func newActionKeymap(settings *config.Settings) (*actionKeymap, error) {
 	}
 
 	return resolver, nil
+}
+
+func validateGlobalActionBinding(binding string) error {
+	parts := strings.Split(binding, "+")
+	if len(parts) == 0 {
+		return fmt.Errorf("binding is empty")
+	}
+	key := parts[len(parts)-1]
+	hasCtrl := false
+	hasAlt := false
+	hasShift := false
+	for _, part := range parts[:len(parts)-1] {
+		switch part {
+		case "ctrl":
+			hasCtrl = true
+		case "alt":
+			hasAlt = true
+		case "shift":
+			hasShift = true
+		}
+	}
+	if !hasCtrl && !hasAlt && !isFunctionKeyToken(key) {
+		return fmt.Errorf("global actions require Ctrl, Alt, or a function key so normal typing remains available")
+	}
+	if hasShift && (len([]rune(key)) == 1 || key == "space") {
+		return fmt.Errorf("Shift+rune bindings are terminal-ambiguous; use the shifted character without Shift or choose another binding")
+	}
+
+	if key == "f5" {
+		return fmt.Errorf("F5 is reserved for table/database refresh")
+	}
+	if key == "esc" || key == "backspace" || key == "tab" {
+		return fmt.Errorf("%s is reserved for contextual navigation", key)
+	}
+	if hasCtrl && key == "c" {
+		return fmt.Errorf("Ctrl+C is reserved for cancellation and quit")
+	}
+	if hasCtrl && key == "s" {
+		return fmt.Errorf("Ctrl+S is reserved for saving Settings")
+	}
+	if hasCtrl != hasAlt && (key == "+" || key == "=" || key == "-" || key == "_" || key == "0") {
+		return fmt.Errorf("Ctrl/Alt sizing aliases are reserved for result columns and preview rows")
+	}
+	reserved := map[string]string{
+		"ctrl++": "result-column zoom",
+		"ctrl+-": "result-column zoom",
+		"ctrl+0": "result-column zoom reset",
+		"alt++":  "preview row sizing",
+		"alt+-":  "preview row sizing",
+		"alt+0":  "preview row sizing reset",
+	}
+	if purpose, reservedBinding := reserved[binding]; reservedBinding {
+		return fmt.Errorf("%s is reserved for %s", binding, purpose)
+	}
+	return nil
+}
+
+func isFunctionKeyToken(key string) bool {
+	if !strings.HasPrefix(key, "f") || len(key) < 2 {
+		return false
+	}
+	number, err := strconv.Atoi(key[1:])
+	return err == nil && number >= 1 && number <= 24
 }
 
 func defaultActionBindings() (map[keymapAction][]string, error) {

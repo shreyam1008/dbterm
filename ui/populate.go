@@ -83,7 +83,6 @@ func populateTableWithLimit(results *tview.Table, rows *sql.Rows, maxRows int) (
 
 		for c, val := range values {
 			cellValue, cellColor := formatCellValue(val)
-			fullValue := fullCellValue(val)
 			expansion := 0
 			if !hasMultipleColumns || c > 0 {
 				expansion = 1
@@ -91,7 +90,7 @@ func populateTableWithLimit(results *tview.Table, rows *sql.Rows, maxRows int) (
 
 			cell := tview.NewTableCell(cellValue).
 				SetTextColor(cellColor).
-				SetReference(resultCellReference{value: fullValue}).
+				SetReference(newResultCellReference(val, cellValue)).
 				SetExpansion(expansion)
 			if compactFirstCol && c == 0 {
 				cell.SetMaxWidth(18)
@@ -116,6 +115,40 @@ func populateTableWithLimit(results *tview.Table, rows *sql.Rows, maxRows int) (
 	}
 
 	return rowIndex, truncated, nil
+}
+
+// newResultCellReference keeps rendering concerns out of the underlying cell
+// value. In particular, SQL NULL is distinct from the string "NULL", and
+// binary values are copied because some database drivers reuse scan buffers.
+func newResultCellReference(rawValue any, displayValue string) resultCellReference {
+	cloned := cloneResultRawValue(rawValue)
+	return resultCellReference{
+		value:        fullCellValue(cloned),
+		rawValue:     cloned,
+		isNull:       rawValue == nil,
+		displayValue: displayValue,
+		truncated:    resultCellDisplayIsTruncated(rawValue),
+	}
+}
+
+func cloneResultRawValue(value any) any {
+	if bytes, ok := value.([]byte); ok {
+		cloned := make([]byte, len(bytes))
+		copy(cloned, bytes)
+		return cloned
+	}
+	return value
+}
+
+func resultCellDisplayIsTruncated(value any) bool {
+	switch typed := value.(type) {
+	case []byte:
+		return len(typed) > maxBinaryPreviewLen
+	case string:
+		return utf8.RuneCountInString(typed) > maxCellPreviewRunes
+	default:
+		return false
+	}
 }
 
 func fullCellValue(val any) string {

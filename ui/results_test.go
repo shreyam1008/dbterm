@@ -157,6 +157,38 @@ func TestPrepareTableResultRequestRequiresResultsView(t *testing.T) {
 	}
 }
 
+func TestManualQueryResultOwnershipRejectsNewerTableIntent(t *testing.T) {
+	db := &sql.DB{}
+	app := &App{db: db}
+	queryGeneration := app.advanceResultGeneration()
+	if !app.manualQueryResultIsCurrent(db, queryGeneration) {
+		t.Fatal("manual query should initially own the result view")
+	}
+	app.advanceResultGeneration()
+	if app.manualQueryResultIsCurrent(db, queryGeneration) {
+		t.Fatal("manual query remained current after a newer result intent")
+	}
+	app.db = &sql.DB{}
+	if app.manualQueryResultIsCurrent(db, app.currentResultGeneration()) {
+		t.Fatal("manual query remained current after the connection changed")
+	}
+}
+
+func TestResultHeadersMatchPreservesWidthsOnlyForSameShape(t *testing.T) {
+	table := newResultTable()
+	table.SetCell(0, 0, tview.NewTableCell("ID ▲").SetReference("id"))
+	table.SetCell(0, 1, tview.NewTableCell("NAME").SetReference("name"))
+	if !resultHeadersMatch(table, []string{"id", "name"}) {
+		t.Fatal("same referenced headers should match despite a sort indicator")
+	}
+	if resultHeadersMatch(table, []string{"id", "email"}) {
+		t.Fatal("different headers unexpectedly matched")
+	}
+	if resultHeadersMatch(table, []string{"id"}) {
+		t.Fatal("different column count unexpectedly matched")
+	}
+}
+
 func TestFetchTableResultSnapshotAppliesExactFilterOffscreen(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
@@ -198,6 +230,56 @@ func TestFetchTableResultSnapshotAppliesExactFilterOffscreen(t *testing.T) {
 	}
 }
 
+func TestFetchTableResultSnapshotAppliesComposableFiltersAndNull(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	defer db.Close()
+	db.SetMaxOpenConns(1)
+
+	if _, err := db.Exec(`CREATE TABLE events (id INTEGER, name TEXT, score INTEGER, deleted_at TEXT);
+		INSERT INTO events VALUES
+			(1, 'alpha_100%', 12, NULL),
+			(2, 'alphaX100Y', 12, NULL),
+			(3, 'alpha_100%', 8, NULL),
+			(4, 'alpha_100%', 15, '2026-01-01');`); err != nil {
+		t.Fatalf("seed sqlite: %v", err)
+	}
+
+	app := &App{
+		db:            db,
+		dbType:        config.SQLite,
+		selectedTable: "events",
+		resultFilter: newResultValueFilter("events", []resultFilterPredicate{
+			{column: "name", operator: resultFilterContains, value: "_100%"},
+			{column: "score", operator: resultFilterGreaterEqual, value: 10},
+			{column: "deleted_at", operator: resultFilterIsNull},
+		}),
+		results:     newResultTable(),
+		resultLimit: 100,
+		sortColumn:  -1,
+	}
+	request, err := app.prepareTableResultRequest()
+	if err != nil {
+		t.Fatalf("prepare filtered request: %v", err)
+	}
+	snapshot, err := fetchTableResultSnapshot(context.Background(), request)
+	if err != nil {
+		t.Fatalf("fetch filtered snapshot: %v", err)
+	}
+	if snapshot.rowCount != 1 {
+		t.Fatalf("composite filtered row count = %d, want 1", snapshot.rowCount)
+	}
+	if got := snapshot.results.GetCell(1, 0).Text; got != "1" {
+		t.Fatalf("composite filtered id = %q, want 1", got)
+	}
+	deletedReference, ok := snapshot.results.GetCell(1, 3).GetReference().(resultCellReference)
+	if !ok || !deletedReference.isNull {
+		t.Fatalf("filtered NULL cell reference = %#v", snapshot.results.GetCell(1, 3).GetReference())
+	}
+}
+
 func TestQuoteIdentifierQualifiedNames(t *testing.T) {
 	if got := quoteIdentifier(config.PostgreSQL, "public.users"); got != `"public"."users"` {
 		t.Fatalf("postgres qualified quote = %q", got)
@@ -207,7 +289,6 @@ func TestQuoteIdentifierQualifiedNames(t *testing.T) {
 		t.Fatalf("mysql qualified quote = %q", got)
 	}
 }
-
 func TestResultRowSelectionPreservesCellValueReference(t *testing.T) {
 	app := &App{results: newResultTable()}
 	app.results.SetCell(0, 0, tview.NewTableCell("ID").SetReference("id"))

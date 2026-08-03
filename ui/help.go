@@ -12,7 +12,8 @@ func keyboardHelpText() string {
 [#f9e2af]START HERE — COMMON WORKFLOWS[-]
   [#89b4fa]Find a table[-]       [yellow]Alt+T[-] → type its name → [yellow]Enter[-]
   [#89b4fa]Cross-table lookup[-] Select a cell → [yellow]C[-] → open another table/column → [yellow]V[-]
-  [#89b4fa]Filter a column[-]    Select the column → [yellow]/[-] → type an exact value → [yellow]Enter[-]
+  [#89b4fa]Filter a column[-]    Select column → [yellow]/[-] → choose operator/value → [yellow]Enter[-]; Add AND composes
+  [#89b4fa]Follow a relation[-]  Select a declared FK cell → [yellow]F[-]; [yellow]Backspace[-] returns
   [#89b4fa]Clear a filter[-]     Press [yellow]Esc[-] once; press it again to return to the Dashboard
   [#89b4fa]Resize results[-]     [yellow]+ / -[-] selected column  │  [yellow]Ctrl++ / Ctrl+-[-] all columns  │  [yellow]Alt++ / Alt+-[-] rows
 
@@ -25,13 +26,15 @@ func keyboardHelpText() string {
 
 [#a6e3a1]RESULTS — CELLS & FILTERS[-]
   [yellow]C[-]                Copy only the selected cell (full value, even if preview is shortened)
-  [yellow]V[-]                Exact-filter selected column using the clipboard value
-  [yellow]/[-]                Open exact filter; Enter searches and Tab / Shift+Tab moves between controls
-  [yellow]Esc[-]              Clear an active filter first; press again to return to the Dashboard
+  [yellow]V[-]                Apply/update equality from the clipboard (real NULL uses IS NULL)
+  [yellow]/[-]                Open filters; Enter applies, Add AND composes, Tab / Shift+Tab moves
+  [yellow]F[-]                Follow the selected column's declared foreign key
+  [yellow]Backspace[-]        Return after following a foreign key
+  [yellow]Esc[-]              Clear all filters first; press again to return to the Dashboard
   [yellow]Enter[-]            Open row details; C copies the selected detail cell
   [yellow]Space[-]            Toggle current row selection
   [yellow]Alt+A / Alt+C[-]    Select all / clear selected rows
-  [yellow]Alt+E[-]            Export selected rows, or all displayed rows, to CSV
+  [yellow]Alt+E[-]            Export selected, current-page, or all matching rows to CSV
 
 [#a6e3a1]RESULTS — SIZE, SORT & PAGES[-]
   [yellow]+ / -[-]            Widen / narrow only the selected column
@@ -53,11 +56,12 @@ func keyboardHelpText() string {
   [yellow]Alt+I[-]            Import SQL dump          [yellow]Esc[-] Cancel a running import
 
 [#a6e3a1]NAVIGATION & APP[-]
+  [yellow]Ctrl+P (default)[-] Search documented actions, database objects, and recent queries
   [yellow]Alt+T / Q / R[-]    Focus Tables / Query / Results
   [yellow]Tab[-]              Cycle Tables → Query → Results
   [yellow]Alt+D[-]            Dashboard                [yellow]Alt+S[-] Services
   [yellow]Alt+, / Alt+G[-]    Settings                 [yellow]Alt+H[-] This help
-  [yellow]Esc / Backspace[-]  Go back                  [yellow]Ctrl+C[-] Quit
+  [yellow]Esc / Backspace[-]  Go back                  [yellow]Ctrl+C[-] Cancel active work / quit
 
 [#a6e3a1]DASHBOARD ` + iconDashboard + `[-]
   [yellow]Enter[-] Connect   [yellow]N[-] New   [yellow]E[-] Edit   [yellow]D[-] Delete   [yellow]R[-] Health check

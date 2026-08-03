@@ -75,6 +75,7 @@ For MySQL or PostgreSQL, a new connection does not require you to remember the d
 
 | Shortcut | Action |
 | --- | --- |
+| `Ctrl + P` (default) | Search commands, database objects, and recent queries in the command palette |
 | `Alt + Q / T / R` | Focus Query / Tables / Results |
 | Type while Tables is focused | Jump to and highlight the first matching table; Enter opens it and clears the search |
 | `Enter` | Execute query (in Query panel) |
@@ -89,16 +90,17 @@ For MySQL or PostgreSQL, a new connection does not require you to remember the d
 | `Alt + S` | Open services dashboard |
 | `Alt + F / Alt + B / Alt + I` | Toggle fullscreen results / open backup modal / open import modal (active connection) |
 | `I` (Dashboard) | Import SQL dump into selected saved PostgreSQL/MySQL connection |
-| `Alt + E` | Export current results table to CSV |
+| `Alt + E` | Export selected rows, current page, or all matching table rows to CSV |
 | `C` (Results) | Copy only the selected cell |
-| `/` / `V` (Results) | Exact-filter the selected column by a typed value / clipboard value (`Enter` searches, `Tab` changes controls) |
+| `/` / `V` (Results) | Build typed filters with optional `AND` conditions / apply clipboard equality (`Enter` applies, `Tab` changes controls) |
+| `F` / `Backspace` (Results) | Follow a declared foreign key / return to the previous table |
 | `Esc` (filtered Results) | Clear the active filter; press again to return to Dashboard |
 | `Alt++ / Alt+- / Alt+0` | Increase / decrease / toggle preview rows per page (`100` ↔ safe max) |
 | `+` / `-` (Results) | Widen / narrow the selected column |
 | `Ctrl++ / Ctrl+- / Ctrl+0` (Results) | Zoom all columns in / out / reset widths (`Ctrl+=` also zooms in) |
 | `>` / `<` / `0` (Results) | Terminal-safe all-column zoom / reset fallback |
 | `F5 / Ctrl + F5` | Refresh table / full refresh |
-| `Ctrl + C` | Quit |
+| `Ctrl + C` | Cancel an active query/import/export; otherwise quit |
 
 ## Dump import (PostgreSQL/MySQL)
 
@@ -131,8 +133,17 @@ For MySQL or PostgreSQL, a new connection does not require you to remember the d
 
 ## Build locally
 
+Run the current checkout directly:
+
+```bash
+go run .
+```
+
+Or build the same optimized local binary used by the release setup, then launch it:
+
 ```bash
 make build
+./dbterm
 ```
 
 Run tests:
