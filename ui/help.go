@@ -6,88 +6,76 @@ import (
 	"github.com/shreyam1008/dbterm/config"
 )
 
-func (a *App) showHelp() {
-	helpText := `[::b][#cba6f7]━━━ ` + iconHelp + ` dbterm Help ━━━[-][-]
+func keyboardHelpText() string {
+	return `[::b][#cba6f7]━━━ ` + iconHelp + ` dbterm Help ━━━[-][-]
 
-[#f9e2af]KEYBOARD SHORTCUTS[-]
+[#f9e2af]START HERE — COMMON WORKFLOWS[-]
+  [#89b4fa]Find a table[-]       [yellow]Alt+T[-] → type its name → [yellow]Enter[-]
+  [#89b4fa]Cross-table lookup[-] Select a cell → [yellow]C[-] → open another table/column → [yellow]V[-]
+  [#89b4fa]Filter a column[-]    Select the column → [yellow]/[-] → type an exact value → [yellow]Enter[-]
+  [#89b4fa]Resize results[-]     [yellow]+ / -[-] one column  │  [yellow]> / <[-] all columns  │  [yellow]0[-] reset
 
-[#a6e3a1]Navigation ` + iconDashboard + `[-]
-  Alt + T ........... Focus Tables list
-  Alt + Q ........... Focus Query editor
-  Alt + R ........... Focus Results view
-  Alt + D ........... Back to Dashboard (workspace/help)
-  Alt + H ........... Toggle this Help
-  Alt + S ........... Database Services
-  Tab ............... Cycle: Tables → Query → Results
-  Type in Tables .... Jump to first matching table; Backspace edits
-  Enter in Tables ... Open match and clear the type-ahead search
-  Esc ............... Close / Go back
-  Backspace ......... Back to Dashboard (outside Query editor)
-  Ctrl+C ............ Quit
+[#a6e3a1]TABLES[-]
+  [yellow]Type[-]             Jump to the first matching table and highlight the match
+  [yellow]Backspace[-]        Edit the table search
+  [yellow]Enter[-]            Open the match and clear the search
+  [yellow]Esc[-]              Clear an active search; press again for Dashboard
+  [yellow]Alt+M[-]            Inspect the selected table schema
 
-[#a6e3a1]Query & Results ` + iconQuery + ` ` + iconResults + `[-]
-  Enter ............. Execute query (in Query editor)
-  Shift + Enter ..... New line in query (multiline SQL)
-  Alt + Y ........... Open query history (newest first)
-  Alt + , / Alt + G ... Open Settings page
-  Alt + M ........... Inspect selected table schema
-  Alt + A ........... Select all displayed result rows
-  Alt + C ........... Clear selected result rows
-  Alt + E ........... Export CSV (selected rows if any, else all displayed)
-  F5 ................ Refresh current table (keep sort/selection) ` + iconRefresh + `
-  Ctrl + F5 ......... Refresh table list + current table ` + iconRefresh + `
-  Alt + F ........... Toggle fullscreen results
-  Alt + B ........... Backup current DB (engine-aware format)
-  Alt + I ........... Import dump for active connection (MySQL .sql, PostgreSQL .sql/.dump)
-  Esc (import run) .. Cancel running SQL import
-  S ................. Sort by current column (in Results)
-  Enter ............. Open row details (in Results)
-  Space ............. Toggle current row selection (in Results)
-  PgDn / ] .......... Next page of results
-  PgUp / [ .......... Previous page of results
-  Home .............. First page of results
-  End ............... Last page of results
-  Alt + = / - ....... Increase / decrease preview row limit
-  Alt + 0 ........... Toggle preview limit (100 ↔ safe max)
-  Ctrl + = / - ...... Zoom all result columns wider / narrower
-  Ctrl + 0 .......... Reset zoom to default
-  + / - ............. Widen / narrow selected column (in Results)
-  Preview limit ..... Applies to table loads and read-query results
-  Safe max .......... Auto-caps rows by table width to keep memory low
-  Status bar ........ Shows active sort + preview limit
+[#a6e3a1]RESULTS — CELLS & FILTERS[-]
+  [yellow]C[-]                Copy only the selected cell (full value, even if preview is shortened)
+  [yellow]V[-]                Exact-filter selected column using the clipboard value
+  [yellow]/[-]                Exact-filter selected column using typed text or Clipboard button
+  [yellow]Enter[-]            Open row details; C copies the selected detail cell
+  [yellow]Space[-]            Toggle current row selection
+  [yellow]Alt+A / Alt+C[-]    Select all / clear selected rows
+  [yellow]Alt+E[-]            Export selected rows, or all displayed rows, to CSV
 
-[#a6e3a1]Dashboard ` + iconDashboard + `[-]
-  Enter ............. Connect to selected ` + iconConnect + `
-  N ................. New connection
-  E ................. Edit connection
-  D ................. Delete connection
-  I / Alt + I ....... Import SQL dump into selected PG/MySQL connection
-  G ................. Open Settings
-  R ................. Re-check saved connection reachability ` + iconRefresh + `
-  W / B / Esc ....... Back to workspace (when connected) ` + iconBack + `
-  H ................. Open Help ` + iconHelp + `
-  Q ................. Quit
-  1-9 / 0 ........... Quick-select first 10 connections
+[#a6e3a1]RESULTS — SIZE, SORT & PAGES[-]
+  [yellow]+ / -[-]            Widen / narrow only the selected column
+  [yellow]> / <[-]            Widen / narrow all columns (terminal-safe)
+  [yellow]0[-]                Reset all column widths
+  [#6c7086]Ctrl+= / - / 0[-] Legacy all-column aliases; some terminals cannot report these reliably
+  [yellow]S[-]                Sort by the selected column
+  [yellow]PgDn / ][-]         Next page        [yellow]PgUp / Left bracket[-] Previous page
+  [yellow]Home / End[-]       First / last page
+  [yellow]Alt+= / Alt+-[-]    Increase / decrease preview row limit
+  [yellow]Alt+0[-]            Toggle preview limit between 100 and safe maximum
+  [yellow]F5 / Ctrl+F5[-]     Refresh current table / refresh tables and current data
+  [yellow]Alt+F[-]            Toggle fullscreen results
 
-[#a6e3a1]Services (Alt+S) ` + iconServices + `[-]
-  1 ................. Toggle MySQL start/stop
-  2 ................. Toggle PostgreSQL start/stop
-  C / Enter ......... Open connect modal ` + iconConnect + `
-  R ................. Refresh service info ` + iconRefresh + `
-  Esc ............... Go back ` + iconBack + `
+[#a6e3a1]QUERY[-]
+  [yellow]Enter[-]            Execute SQL             [yellow]Shift+Enter[-] Insert newline
+  [yellow]Alt+Y[-]            Query history            [yellow]Alt+B[-] Backup current database
+  [yellow]Alt+I[-]            Import SQL dump          [yellow]Esc[-] Cancel a running import
 
-[#a6e3a1]CLI Commands (run in terminal)[-]
-  dbterm --help ..... Show command help
-  dbterm --version .. Show app version + build
-  dbterm --info ..... Show install/config/system info
-  dbterm --update ... Update to latest release
-  dbterm --update X.Y.Z  Update to a specific version
-  dbterm --uninstall Remove binary (asks confirmation)
-  dbterm --uninstall --yes  Remove binary without prompt
-  dbterm --uninstall --purge  Remove binary + saved connections
+[#a6e3a1]NAVIGATION & APP[-]
+  [yellow]Alt+T / Q / R[-]    Focus Tables / Query / Results
+  [yellow]Tab[-]              Cycle Tables → Query → Results
+  [yellow]Alt+D[-]            Dashboard                [yellow]Alt+S[-] Services
+  [yellow]Alt+, / Alt+G[-]    Settings                 [yellow]Alt+H[-] This help
+  [yellow]Esc / Backspace[-]  Go back                  [yellow]Ctrl+C[-] Quit
+
+[#a6e3a1]DASHBOARD ` + iconDashboard + `[-]
+  [yellow]Enter[-] Connect   [yellow]N[-] New   [yellow]E[-] Edit   [yellow]D[-] Delete   [yellow]R[-] Health check
+  [yellow]I[-] Import       [yellow]G[-] Settings   [yellow]H[-] Help   [yellow]W / B / Esc[-] Workspace   [yellow]Q[-] Quit
+  [yellow]1–9 / 0[-] Quick-select the first ten connections
+
+[#a6e3a1]SERVICES (Alt+S) ` + iconServices + `[-]
+  [yellow]1 / 2[-] Toggle MySQL / PostgreSQL    [yellow]C / Enter[-] Connect
+  [yellow]R[-] Refresh service info             [yellow]Esc[-] Go back
+
+[#a6e3a1]CLI (run in your terminal)[-]
+  dbterm --help        Command help       dbterm --version     Version/build
+  dbterm --info        Runtime info       dbterm --update      Install an update
+  dbterm --uninstall   Remove dbterm      add --purge to remove saved connections
 
 
 `
+}
+
+func (a *App) showHelp() {
+	helpText := keyboardHelpText()
 
 	cheatPG := `[::b][#89b4fa]━━━ PostgreSQL Cheatsheet ━━━[-][-]
 
@@ -241,7 +229,7 @@ func (a *App) showHelp() {
 		SetText(content).
 		SetScrollable(true)
 	helpView.SetBorder(true).
-		SetTitle(" " + iconHelp + " Help & Cheatsheets [yellow](Esc / Alt+H to close)[-] ").
+		SetTitle(" " + iconHelp + " Help & Cheatsheets [yellow](↑/↓ scroll • Esc/Alt+H close)[-] ").
 		SetBorderColor(surface1).
 		SetTitleColor(mauve)
 

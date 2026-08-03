@@ -90,9 +90,11 @@ For MySQL or PostgreSQL, a new connection does not require you to remember the d
 | `Alt + F / Alt + B / Alt + I` | Toggle fullscreen results / open backup modal / open import modal (active connection) |
 | `I` (Dashboard) | Import SQL dump into selected saved PostgreSQL/MySQL connection |
 | `Alt + E` | Export current results table to CSV |
+| `C` (Results) | Copy only the selected cell |
+| `/` / `V` (Results) | Exact-filter the selected column by a typed value / clipboard value |
 | `Alt + = / - / 0` | Increase / decrease / toggle preview row limit (`100` ↔ safe max) |
-| `Ctrl + = / - / 0` | Zoom all result columns / reset zoom |
-| `+ / -` | Widen / narrow selected result column |
+| `+` / `-` (Results) | Widen / narrow the selected column |
+| `>` / `<` / `0` (Results) | Widen / narrow all columns / reset widths (`Ctrl+=/-/0` remain aliases) |
 | `F5 / Ctrl + F5` | Refresh table / full refresh |
 | `Ctrl + C` | Quit |
 

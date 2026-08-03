@@ -3,6 +3,7 @@ package ui
 import (
 	"database/sql"
 	"fmt"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -82,6 +83,7 @@ func populateTableWithLimit(results *tview.Table, rows *sql.Rows, maxRows int) (
 
 		for c, val := range values {
 			cellValue, cellColor := formatCellValue(val)
+			fullValue := fullCellValue(val)
 			expansion := 0
 			if !hasMultipleColumns || c > 0 {
 				expansion = 1
@@ -89,6 +91,7 @@ func populateTableWithLimit(results *tview.Table, rows *sql.Rows, maxRows int) (
 
 			cell := tview.NewTableCell(cellValue).
 				SetTextColor(cellColor).
+				SetReference(resultCellReference{value: fullValue}).
 				SetExpansion(expansion)
 			if compactFirstCol && c == 0 {
 				cell.SetMaxWidth(18)
@@ -113,6 +116,26 @@ func populateTableWithLimit(results *tview.Table, rows *sql.Rows, maxRows int) (
 	}
 
 	return rowIndex, truncated, nil
+}
+
+func fullCellValue(val any) string {
+	if val == nil {
+		return "NULL"
+	}
+	switch value := val.(type) {
+	case []byte:
+		return string(value)
+	case string:
+		return value
+	case bool:
+		return strconv.FormatBool(value)
+	case int64:
+		return strconv.FormatInt(value, 10)
+	case float64:
+		return strconv.FormatFloat(value, 'g', -1, 64)
+	default:
+		return fmt.Sprintf("%v", value)
+	}
 }
 
 // formatCellValue converts a database value to a display string and color

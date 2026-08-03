@@ -28,9 +28,10 @@ const (
 
 var tablePreviewSteps = []int{50, 100, 250, 500, 1000}
 
-type resultRowSelectionRef string
-
-const resultRowRefSelected resultRowSelectionRef = "selected"
+type resultCellReference struct {
+	value       string
+	rowSelected bool
+}
 
 type resultSelectionState struct {
 	row             int
@@ -69,6 +70,14 @@ func (a *App) LoadResults() error {
 		queryLimit = maxResultRows
 	}
 	query := fmt.Sprintf("SELECT * FROM %s", quotedTable)
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s", quotedTable)
+	queryArgs := []any(nil)
+	if filter := a.activeResultFilter(selectedTable); filter != nil {
+		clause := resultFilterClause(dbType, filter.column)
+		query += clause
+		countQuery += clause
+		queryArgs = append(queryArgs, filter.value)
+	}
 	if sortColumn := a.serverSortColumnName(); sortColumn != "" {
 		direction := "ASC"
 		if !a.sortAsc {
@@ -87,7 +96,7 @@ func (a *App) LoadResults() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	rows, err := db.QueryContext(ctx, query)
+	rows, err := db.QueryContext(ctx, query, queryArgs...)
 	if err != nil {
 		a.results.SetTitle(fmt.Sprintf(" %s Results — [red]%s error[-] ", iconResults, iconFail))
 		return err
@@ -120,7 +129,8 @@ func (a *App) LoadResults() error {
 	a.restoreResultSelection(selection, rowCount)
 
 	// Fetch total row count asynchronously for pagination display
-	go a.fetchTotalRowCount(db, selectedTable, quotedTable, dbType, pageLimit, a.pageOffset, generation)
+	countArgs := append([]any(nil), queryArgs...)
+	go a.fetchTotalRowCount(db, selectedTable, quotedTable, dbType, pageLimit, a.pageOffset, generation, countQuery, countArgs)
 
 	elapsed := time.Since(a.queryStart)
 	a.results.SetTitle(a.paginatedResultTitle(rowCount, elapsed))
@@ -131,7 +141,7 @@ func (a *App) LoadResults() error {
 
 // fetchTotalRowCount queries COUNT(*) for the captured table and updates the title
 // only if the result still belongs to the active table/connection generation.
-func (a *App) fetchTotalRowCount(db *sql.DB, selectedTable, quotedTable string, dbType config.DBType, pageLimit, pageOffset int, generation uint64) {
+func (a *App) fetchTotalRowCount(db *sql.DB, selectedTable, quotedTable string, dbType config.DBType, pageLimit, pageOffset int, generation uint64, countQuery string, countArgs []any) {
 	if db == nil || selectedTable == "" || pageLimit <= 0 {
 		return
 	}
@@ -140,7 +150,7 @@ func (a *App) fetchTotalRowCount(db *sql.DB, selectedTable, quotedTable string, 
 	defer cancel()
 
 	var total int
-	err := db.QueryRowContext(ctx, fmt.Sprintf("SELECT COUNT(*) FROM %s", quotedTable)).Scan(&total)
+	err := db.QueryRowContext(ctx, countQuery, countArgs...).Scan(&total)
 	if err != nil {
 		return
 	}
@@ -160,8 +170,8 @@ func (a *App) fetchTotalRowCount(db *sql.DB, selectedTable, quotedTable string, 
 // paginatedResultTitle builds the results panel title with page info.
 func (a *App) paginatedResultTitle(rowCount int, elapsed time.Duration) string {
 	limit := a.currentPageLimit()
-	base := fmt.Sprintf(" %s [yellow]%s[-] — [green]%d rows[-] in [teal]%s[-]",
-		iconResults, a.selectedTable, rowCount, formatDuration(elapsed))
+	base := fmt.Sprintf(" %s [yellow]%s[-]%s — [green]%d rows[-] in [teal]%s[-]",
+		iconResults, a.selectedTable, a.resultFilterBadge(), rowCount, formatDuration(elapsed))
 
 	if limit > 0 && a.totalRowCount >= 0 {
 		page := (a.pageOffset / limit) + 1
@@ -412,8 +422,8 @@ func (a *App) resultRowIsSelected(row int) bool {
 		return false
 	}
 
-	ref, ok := cell.GetReference().(resultRowSelectionRef)
-	return ok && ref == resultRowRefSelected
+	ref, ok := cell.GetReference().(resultCellReference)
+	return ok && ref.rowSelected
 }
 
 func (a *App) setResultRowSelected(row int, selected bool) bool {
@@ -446,11 +456,12 @@ func (a *App) setResultRowSelected(row int, selected bool) bool {
 	}
 
 	if anchor != nil {
-		if selected {
-			anchor.SetReference(resultRowRefSelected)
-		} else {
-			anchor.SetReference(nil)
+		ref, ok := anchor.GetReference().(resultCellReference)
+		if !ok {
+			ref.value = anchor.Text
 		}
+		ref.rowSelected = selected
+		anchor.SetReference(ref)
 	}
 
 	return true

@@ -57,6 +57,10 @@ type App struct {
 	databaseObjectCount int
 	selectedTable       string
 	tableResultsActive  bool
+	resultFilter        *resultValueFilter
+	copiedCellValue     string
+	hasCopiedCellValue  bool
+	copiedCellSystem    bool
 	results             *tview.Table
 	queryInput          *tview.TextArea
 	statusBar           *tview.TextView
@@ -210,6 +214,15 @@ func (a *App) setupUI() {
 	// ── Results table input: sort on 's', key navigation, column width ──
 	a.results.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Rune() {
+		case 'c', 'C':
+			a.copyCurrentResultCell()
+			return nil
+		case '/':
+			a.showResultFilterModal()
+			return nil
+		case 'v', 'V':
+			a.filterSelectedResultColumnByClipboard()
+			return nil
 		case 's', 'S':
 			// Sort by current column
 			row, col := a.results.GetSelection()
@@ -227,6 +240,17 @@ func (a *App) setupUI() {
 			return nil
 		case '[':
 			a.prevPage()
+			return nil
+		}
+
+		// Terminal-safe all-column sizing. Some terminals cannot distinguish
+		// Ctrl+= or Ctrl+0 from their unmodified keys.
+		if delta, reset, ok := resultAllColumnWidthAction(event); ok {
+			if reset {
+				a.resetTableZoom()
+			} else {
+				a.zoomTable(delta)
+			}
 			return nil
 		}
 
@@ -1044,6 +1068,22 @@ func isZeroKey(event *tcell.EventKey) bool {
 	return event.Rune() == '0'
 }
 
+func resultAllColumnWidthAction(event *tcell.EventKey) (delta int, reset, ok bool) {
+	if event == nil || event.Key() != tcell.KeyRune || event.Modifiers()&(tcell.ModCtrl|tcell.ModAlt|tcell.ModMeta) != 0 {
+		return 0, false, false
+	}
+	switch event.Rune() {
+	case '>':
+		return 1, false, true
+	case '<':
+		return -1, false, true
+	case '0':
+		return 0, true, true
+	default:
+		return 0, false, false
+	}
+}
+
 // ── Column width / zoom helpers ──
 
 const (
@@ -1140,6 +1180,7 @@ func (a *App) clearColumnOverrides() {
 // cleanup gracefully closes the database connection
 func (a *App) cleanup() {
 	a.advanceResultGeneration()
+	a.resultFilter = nil
 	if a.db != nil {
 		a.db.Close()
 		a.db = nil
@@ -1232,15 +1273,22 @@ func (a *App) applyResponsiveLayout(width, height int) {
 
 func (a *App) statusActionText(width int) string {
 	inQuery := a.focusedPanel == a.queryInput
+	inResults := a.focusedPanel == a.results
 	switch {
 	case width < 72:
 		if inQuery {
 			return "[yellow]Enter[-] Run ▶  │  [yellow]Esc[-] Back"
 		}
+		if inResults {
+			return "[yellow]C[-] Copy  │  [yellow]/[-] Find  │  [yellow]V[-] Clip"
+		}
 		return "[yellow]Space[-] Select  │  [yellow]Alt+E[-] CSV  │  [yellow]Esc[-] Back"
 	case width < 90:
 		if inQuery {
 			return fmt.Sprintf("[yellow]Enter[-] Run ▶  │  [yellow]Shift+Enter[-] Newline  │  [yellow]Esc[-] Back  │  [yellow]Alt+H[-] Help %s", iconHelp)
+		}
+		if inResults {
+			return "[yellow]C[-] Copy cell  │  [yellow]/[-] Filter  │  [yellow]V[-] Filter by clipboard"
 		}
 		return fmt.Sprintf("[yellow]Space[-] Select  │  [yellow]Alt+A/C[-] All/Clear  │  [yellow]Alt+E[-] CSV  │  [yellow]Alt+H[-] %s", iconHelp)
 	case width < 120:
@@ -1248,12 +1296,19 @@ func (a *App) statusActionText(width int) string {
 			return fmt.Sprintf("[yellow]Enter[-] Run ▶  │  [yellow]Shift+Enter[-] Newline  │  [yellow]F5[-] %s  │  [yellow]Alt+D/Esc[-] Dash %s",
 				iconRefresh, iconDashboard)
 		}
+		if inResults {
+			return fmt.Sprintf("[yellow]C[-] Copy cell  │  [yellow]/[-] Filter value  │  [yellow]V[-] Clipboard filter  │  [yellow]Enter[-] Detail  │  [yellow]F5[-] %s", iconRefresh)
+		}
 		return fmt.Sprintf("[yellow]F5[-] %s  │  [yellow]Space[-] Toggle Sel  │  [yellow]Alt+A/C/E[-] All/Clear/CSV  │  [yellow]Enter[-] Detail  │  [yellow]Alt+D/Esc[-] Dash %s",
 			iconRefresh, iconDashboard)
 	default:
 		if inQuery {
 			return fmt.Sprintf("[yellow]Enter[-] Run ▶  │  [yellow]Shift+Enter[-] Newline  │  [yellow]F5[-] %s  │  [yellow]Alt+H[-] Help %s  │  [yellow]Esc/Bksp[-] Dashboard %s",
 				iconRefresh, iconHelp, iconDashboard)
+		}
+		if inResults {
+			return fmt.Sprintf("[yellow]C[-] Copy cell  │  [yellow]/[-] Filter value  │  [yellow]V[-] Clipboard filter  │  [yellow]Space[-] Select row  │  [yellow]Enter[-] Detail  │  [yellow]F5[-] %s  │  [yellow]Alt+H[-] %s",
+				iconRefresh, iconHelp)
 		}
 		return fmt.Sprintf("[yellow]F5[-] %s  │  [yellow]Space[-] Toggle Sel  │  [yellow]Alt+A[-] All  │  [yellow]Alt+C[-] Clear  │  [yellow]Alt+E[-] CSV  │  [yellow]Enter[-] Detail  │  [yellow]Alt+H[-] Help %s  │  [yellow]Esc/Bksp[-] Dashboard %s",
 			iconRefresh, iconHelp, iconDashboard)

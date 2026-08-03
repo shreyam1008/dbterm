@@ -98,7 +98,7 @@ func printHelp() {
     Enter      Execute query          F5  Refresh table
     Ctrl+F5    Full refresh           Alt+F/Alt+B Fullscreen/Backup
     Alt+I      Import dump            Alt+M  Inspect selected table schema
-    Ctrl+/-/0  Zoom all columns       +/- Selected column width
+    >/< / 0    All columns/reset      +/- Selected column width
     Alt+H      Help panel             Alt+D  Dashboard
     Ctrl+C     Quit
 

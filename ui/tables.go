@@ -151,6 +151,7 @@ func (a *App) applyTableListSnapshot(snapshot *tableListSnapshot) {
 			return
 		}
 		a.selectedTable = selectedTable
+		a.resultFilter = nil
 		a.resetSort()
 		a.resetPagination()
 		if err := a.LoadResults(); err != nil {
