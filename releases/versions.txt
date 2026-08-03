@@ -10,6 +10,7 @@
 # 5) If that tag already exists, the workflow fails (prevents duplicate releases).
 #
 # Newest entry first:
+0.5.0|Brahmaputra|A fuzzy command palette, composable typed filters, foreign-key navigation, scoped full-value CSV export, and cancellable race-safe data workflows.
 0.4.5|Yamuna|Faster table navigation, selected-cell copy, clipboard-powered exact column filters, clearer help, and reliable result resizing.
 0.4.4|Godavari|Discover accessible MySQL and PostgreSQL databases from new-connection credentials and select one without typing its name.
 0.4.3|Narmada|Database-scoped browsing and reliable MySQL view, trigger, function, and procedure selection.
