@@ -432,6 +432,7 @@ class DbtermDemo {
     this.resultBody.addEventListener("keydown", (event) => this.handleCellArrows(event));
 
     this.root.addEventListener("keydown", (event) => this.handleRootShortcuts(event));
+    window.addEventListener("keydown", (event) => this.handlePageShortcuts(event));
     this.root.addEventListener("focusin", (event) => {
       const panel = (event.target as Element | null)?.closest<HTMLElement>("[data-demo-panel]");
       const name = panel?.dataset.demoPanel;
@@ -528,7 +529,10 @@ class DbtermDemo {
       });
       dialog.addEventListener("close", () => {
         const target = this.focusReturn.get(dialog);
-        if (target?.isConnected) target.focus();
+        const active = document.activeElement;
+        const focusStillBelongsToDialog =
+          active === document.body || active === dialog || Boolean(active && dialog.contains(active));
+        if (focusStillBelongsToDialog && target?.isConnected) target.focus();
       });
     });
   }
@@ -1231,6 +1235,42 @@ class DbtermDemo {
       `[data-demo-cell][data-row="${this.selectedRow}"][data-column="${this.selectedColumn}"]`
     );
     if (next) this.selectCell(next, true);
+  }
+
+  private handlePageShortcuts(event: KeyboardEvent): void {
+    if (event.defaultPrevented) return;
+
+    const key = event.key.toLocaleLowerCase();
+    const opensPalette = (event.ctrlKey || event.metaKey) && !event.altKey && key === "p";
+    const focusesPanel = event.altKey && (key === "t" || key === "q" || key === "r");
+    const opensHelp = event.altKey && key === "h";
+    const exportsResult = event.altKey && key === "e";
+    const togglesFullscreen = event.altKey && key === "f";
+    if (!opensPalette && !focusesPanel && !opensHelp && !exportsResult && !togglesFullscreen) return;
+
+    event.preventDefault();
+    if (this.filterDialog.open || this.helpDialog.open || this.detailDialog.open || this.isLoading) return;
+    this.revealDemo();
+
+    if (opensPalette) {
+      this.openPalette(this.root);
+    } else if (focusesPanel) {
+      this.setPanelFocus(key === "t" ? "tables" : key === "q" ? "query" : "results");
+    } else if (opensHelp) {
+      this.openHelp(this.root);
+    } else if (exportsResult) {
+      this.exportCsv();
+    } else {
+      this.toggleFullscreen();
+    }
+  }
+
+  private revealDemo(): void {
+    const page = document.documentElement;
+    const previousBehavior = page.style.scrollBehavior;
+    page.style.scrollBehavior = "auto";
+    this.root.scrollIntoView({ behavior: "auto", block: "center" });
+    page.style.scrollBehavior = previousBehavior;
   }
 
   private handleRootShortcuts(event: KeyboardEvent): void {
