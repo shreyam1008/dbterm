@@ -15,21 +15,24 @@ const {
   description,
   keywords =
     "dbterm, database terminal client, postgresql tui, mysql tui, sqlite tui, turso cli, cloudflare d1 client, open source",
-  ogImage = "main_ui.png",
+  ogImage = "assets/command-palette.png",
   jsonLd
 } = Astro.props;
 
 const canonical = new URL(Astro.url.pathname, Astro.site).toString();
 const socialImage = new URL(ogImage, Astro.site).toString();
-const faviconHref = new URL("favicon.svg", Astro.site).pathname;
-const manifestHref = new URL("manifest.webmanifest", Astro.site).pathname;
-
 const baseUrl = import.meta.env.BASE_URL;
 const withBase = (path: string) => {
   const trimmedBase = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
   const trimmedPath = path.startsWith("/") ? path.slice(1) : path;
   return `${trimmedBase}/${trimmedPath}`.replace(/\/{2,}/g, "/");
 };
+
+const faviconSvgHref = withBase("favicon.svg");
+const faviconPngHref = withBase("favicon-48.png");
+const faviconIcoHref = withBase("favicon.ico");
+const appleTouchIconHref = withBase("apple-touch-icon.png");
+const manifestHref = withBase("manifest.webmanifest");
 
 const navItems = [
   { label: "Home", href: withBase("/") },
@@ -54,7 +57,7 @@ const jsonLdBlocks = Array.isArray(jsonLd) ? jsonLd : jsonLd ? [jsonLd] : [];
     <meta name="keywords" content={keywords} />
     <meta name="author" content="dbterm contributors" />
     <meta name="application-name" content="dbterm" />
-    <meta name="theme-color" content="#0b5d52" />
+    <meta name="theme-color" content="#090c12" />
     <meta name="format-detection" content="telephone=no" />
     <meta name="google-site-verification" content="nsLMV5dqPB3vxpuq7DPX9iBtRAikKDpxEUJNvMnriTk" />
     <meta name="robots" content="index,follow,max-image-preview:large" />
@@ -74,7 +77,10 @@ const jsonLdBlocks = Array.isArray(jsonLd) ? jsonLd : jsonLd ? [jsonLd] : [];
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={socialImage} />
 
-    <link rel="icon" type="image/svg+xml" href={faviconHref} />
+    <link rel="icon" href={faviconIcoHref} sizes="any" />
+    <link rel="icon" type="image/png" href={faviconPngHref} sizes="48x48" />
+    <link rel="icon" type="image/svg+xml" href={faviconSvgHref} sizes="any" />
+    <link rel="apple-touch-icon" href={appleTouchIconHref} sizes="180x180" />
 
     {jsonLdBlocks.map((entry) => (
       <script
@@ -90,10 +96,10 @@ const jsonLdBlocks = Array.isArray(jsonLd) ? jsonLd : jsonLd ? [jsonLd] : [];
     <header class="site-header">
       <div class="container nav-shell">
         <a class="brand" href={withBase("/")} aria-label="dbterm home">
-          <span class="brand-mark" aria-hidden="true">db</span>
+          <span class="brand-mark" aria-hidden="true"><b>&gt;</b><i>_</i></span>
           <span class="brand-copy">
             <strong>dbterm</strong>
-            <small>Open-source terminal DB client</small>
+            <small>database, meet terminal</small>
           </span>
         </a>
 
@@ -113,8 +119,8 @@ const jsonLdBlocks = Array.isArray(jsonLd) ? jsonLd : jsonLd ? [jsonLd] : [];
           </ul>
         </nav>
 
-        <a class="button outline small repo-button" href="https://github.com/shreyam1008/dbterm">
-          GitHub
+        <a class="button primary small repo-button" href={withBase("/#install")}>
+          Get dbterm
         </a>
       </div>
     </header>
@@ -125,9 +131,9 @@ const jsonLdBlocks = Array.isArray(jsonLd) ? jsonLd : jsonLd ? [jsonLd] : [];
 
     <footer class="site-footer">
       <div class="container footer-shell">
-        <p>MIT License. Built with Go + Astro + Oat UI.</p>
+        <p><strong>dbterm</strong> — database work at terminal speed.</p>
         <p>
-          <a href="https://shreyam1008.github.io/dbterm/">Docs</a>
+          <a href="https://shreyam1008.github.io/dbterm/">Home</a>
           <span aria-hidden="true">•</span>
           <a href="https://pkg.go.dev/github.com/shreyam1008/dbterm">pkg.go.dev</a>
           <span aria-hidden="true">•</span>
