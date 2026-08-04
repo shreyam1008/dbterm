@@ -6,26 +6,26 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+
+	"github.com/shreyam1008/dbterm/internal/appdirs"
 )
 
 const (
-	appConfigDirName = "dbterm"
-	defaultFileMode  = 0o600
-	defaultDirMode   = 0o700
+	defaultFileMode = 0o600
+	defaultDirMode  = 0o700
 )
 
-// DefaultConfigFile returns ~/.config/dbterm/<name>.
+// DefaultConfigFile returns <the OS-native dbterm config directory>/<name>.
 func DefaultConfigFile(name string) (string, error) {
-	if name == "" {
+	if strings.TrimSpace(name) == "" {
 		return "", fmt.Errorf("file name is required")
 	}
-
-	home, err := os.UserHomeDir()
+	dir, err := appdirs.ConfigDir()
 	if err != nil {
-		return "", fmt.Errorf("resolve home directory: %w", err)
+		return "", err
 	}
-
-	return filepath.Join(home, ".config", appConfigDirName, name), nil
+	return filepath.Join(dir, name), nil
 }
 
 // LoadJSON loads JSON from path into target.
@@ -52,9 +52,8 @@ func LoadJSON(path string, target any) error {
 
 // SaveJSON stores value as indented JSON.
 func SaveJSON(path string, value any) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, defaultDirMode); err != nil {
-		return fmt.Errorf("create directory %s: %w", dir, err)
+	if strings.TrimSpace(path) == "" {
+		return fmt.Errorf("json file path is required")
 	}
 
 	data, err := json.MarshalIndent(value, "", "  ")
@@ -62,6 +61,11 @@ func SaveJSON(path string, value any) error {
 		return fmt.Errorf("marshal json: %w", err)
 	}
 	data = append(data, '\n')
+
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, defaultDirMode); err != nil {
+		return fmt.Errorf("create directory %s: %w", dir, err)
+	}
 
 	tempFile, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-*")
 	if err != nil {
@@ -85,19 +89,16 @@ func SaveJSON(path string, value any) error {
 		_ = tempFile.Close()
 		return fmt.Errorf("chmod temp file %s: %w", tempPath, err)
 	}
+	if err := tempFile.Sync(); err != nil {
+		_ = tempFile.Close()
+		return fmt.Errorf("sync temp file %s: %w", tempPath, err)
+	}
 
 	if err := tempFile.Close(); err != nil {
 		return fmt.Errorf("close temp file %s: %w", tempPath, err)
 	}
 
-	if err := os.Rename(tempPath, path); err != nil {
-		// Some platforms cannot rename over an existing file.
-		if removeErr := os.Remove(path); removeErr == nil || os.IsNotExist(removeErr) {
-			if retryErr := os.Rename(tempPath, path); retryErr == nil {
-				cleanupTemp = false
-				return nil
-			}
-		}
+	if err := replaceFile(tempPath, path); err != nil {
 		return fmt.Errorf("replace %s: %w", path, err)
 	}
 

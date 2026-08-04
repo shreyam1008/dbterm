@@ -1,28 +1,47 @@
 name: Website
 
 on:
-  push:
-    branches:
-      - "main"
-    paths:
-      - "site/**"
-      - ".github/workflows/pages.yml"
+  # Release owns the first gh-pages write (APT metadata and, for a new
+  # version, the GitHub release itself). Publish the matching site only after
+  # that workflow succeeds, so download links can never lead the binaries.
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+    branches: ["main"]
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: website-${{ github.ref }}
-  cancel-in-progress: true
+  group: dbterm-publish-main
+  cancel-in-progress: false
 
 jobs:
   deploy-site:
     name: Build and Publish Site
     runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Verify advertised release exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          LINE="$(grep -Ev '^[[:space:]]*#|^[[:space:]]*$' releases/versions.txt | head -n1 || true)"
+          VERSION="$(printf '%s' "$LINE" | cut -d'|' -f1 | xargs)"
+          if [[ -z "$VERSION" ]]; then
+            echo "Could not resolve the advertised version from releases/versions.txt" >&2
+            exit 1
+          fi
+          if ! git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}" >/dev/null; then
+            echo "Refusing to publish a website that advertises missing release v${VERSION}. Run the Release workflow first." >&2
+            exit 1
+          fi
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
@@ -46,7 +65,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
         run: |
           set -euo pipefail
 

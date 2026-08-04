@@ -14,6 +14,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	"github.com/shreyam1008/dbterm/config"
+	backupcore "github.com/shreyam1008/dbterm/internal/backup"
 	"github.com/shreyam1008/dbterm/internal/history"
 )
 
@@ -38,16 +39,25 @@ var (
 
 // App holds all TUI state for the dbterm application
 type App struct {
-	app        *tview.Application
-	db         *sql.DB
-	pages      *tview.Pages
-	store      *config.Store
-	settings   *config.Settings
-	keymap     *actionKeymap
-	historyMgr *history.Manager
-	dbType     config.DBType
-	dbName     string // name of current connection (from config)
-	activeConn *config.ConnectionConfig
+	app         *tview.Application
+	db          *sql.DB
+	pages       *tview.Pages
+	store       *config.Store
+	settings    *config.Settings
+	keymap      *actionKeymap
+	historyMgr  *history.Manager
+	backupStore *backupcore.Store
+
+	// Backup Center keeps its original caller across internal refreshes and
+	// nested forms so Esc returns to the exact panel that opened it.
+	backupCenterReturnPage  string
+	backupCenterReturnFocus tview.Primitive
+	backupCenterSelectedJob string
+	helpReturnPage          string
+	helpReturnFocus         tview.Primitive
+	dbType                  config.DBType
+	dbName                  string // name of current connection (from config)
+	activeConn              *config.ConnectionConfig
 
 	// Main UI components
 	tables              *tview.List
@@ -859,6 +869,12 @@ func (a *App) setupKeyBindings() {
 				return nil
 			}
 
+			// Cancellable loading overlays handle Ctrl+C exactly like Esc and
+			// remain visible until their worker reports the final safe outcome.
+			if page == "loading" {
+				return event
+			}
+
 			// Check if row_details is the front page.
 			// However, pages.GetFrontPage() returns the name of the *visible* page.
 			// Since we add row_details as a layer on top, we need to see if it's there.
@@ -939,7 +955,7 @@ func (a *App) setupKeyBindings() {
 		// Loading overlays own the keyboard until they finish or Esc cancels.
 		// This prevents a background completion from stealing focus from a
 		// page opened on top of the operation.
-		if page == "loading" || page == pageImportProgressModal || page == pageResultExport || page == pageResultExportProgress {
+		if page == "loading" || page == instantBackupPage || page == pageBackupForm || page == pageBackupConnectionPicker || page == pageImportProgressModal || page == pageResultExport || page == pageResultExportProgress {
 			return event
 		}
 
@@ -964,12 +980,7 @@ func (a *App) setupKeyBindings() {
 				return nil
 			case actionHelp:
 				if page == "help" {
-					a.pages.RemovePage("help")
-					if a.db != nil {
-						a.pages.ShowPage("main")
-					} else {
-						a.showDashboard()
-					}
+					a.closeHelp()
 				} else {
 					a.showHelp()
 				}
@@ -983,6 +994,9 @@ func (a *App) setupKeyBindings() {
 			case actionServices:
 				// Show service dashboard from anywhere.
 				a.showServiceDashboard()
+				return nil
+			case actionBackupCenter:
+				a.showBackupCenter()
 				return nil
 			}
 		}
@@ -1050,9 +1064,6 @@ func (a *App) setupKeyBindings() {
 				a.toggleExpandResults()
 				return nil
 			case actionBackup:
-				if a.app.GetFocus() == a.queryInput {
-					return event
-				}
 				a.showBackupModal()
 				return nil
 			case actionImportDump:
@@ -1315,6 +1326,13 @@ func (a *App) currentResultGeneration() uint64 {
 
 // Run starts the application
 func (a *App) Run() error {
+	// The backup catalog is intentionally opened on first use. Keep this as a
+	// closure so a store opened after Run starts is still closed on exit.
+	defer func() {
+		if a.backupStore != nil {
+			_ = a.backupStore.Close()
+		}
+	}()
 	a.setupUI()
 	a.setupKeyBindings()
 	a.showDashboard()

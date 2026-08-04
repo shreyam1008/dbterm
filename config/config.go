@@ -1,16 +1,19 @@
 package config
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"net"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	mysql "github.com/go-sql-driver/mysql"
+	"github.com/shreyam1008/dbterm/internal/appdirs"
+	"github.com/shreyam1008/dbterm/internal/d1sql"
+	"github.com/shreyam1008/dbterm/internal/persist"
 )
 
 // DBType represents the supported database types
@@ -26,6 +29,7 @@ const (
 
 // ConnectionConfig holds all info for a saved database connection
 type ConnectionConfig struct {
+	ID         string `json:"id"`
 	Name       string `json:"name"`
 	Type       DBType `json:"type"`
 	Host       string `json:"host,omitempty"`
@@ -51,20 +55,12 @@ type Store struct {
 
 // configDir returns the path to the dbterm config directory
 func configDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("could not find home directory: %w", err)
-	}
-	return filepath.Join(home, ".config", "dbterm"), nil
+	return appdirs.ConfigDir()
 }
 
 // configFilePath returns the full path to the connections JSON file
 func configFilePath() (string, error) {
-	dir, err := configDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "connections.json"), nil
+	return persist.DefaultConfigFile("connections.json")
 }
 
 // LoadStore reads saved connections from disk, or returns an empty store
@@ -88,61 +84,203 @@ func LoadStore() (*Store, error) {
 		return nil, fmt.Errorf("could not parse config: %w", err)
 	}
 
+	changed, err := s.ensureConnectionIDs()
+	if err != nil {
+		return s, fmt.Errorf("validate saved connection identities: %w", err)
+	}
+	if changed {
+		if err := s.Save(); err != nil {
+			return s, fmt.Errorf("persist generated connection identities: %w", err)
+		}
+	}
+
 	return s, nil
 }
 
 // Save writes the current store to disk
 func (s *Store) Save() error {
-	dir := filepath.Dir(s.configPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("could not create config directory: %w", err)
+	if s == nil {
+		return fmt.Errorf("connection store is required")
 	}
-
-	data, err := json.MarshalIndent(s.Connections, "", "  ")
-	if err != nil {
-		return fmt.Errorf("could not marshal config: %w", err)
+	if strings.TrimSpace(s.configPath) == "" {
+		path, err := configFilePath()
+		if err != nil {
+			return err
+		}
+		s.configPath = path
 	}
-
-	return os.WriteFile(s.configPath, data, 0600)
+	if _, err := s.ensureConnectionIDs(); err != nil {
+		return fmt.Errorf("validate connection identities: %w", err)
+	}
+	if err := persist.SaveJSON(s.configPath, s.Connections); err != nil {
+		return fmt.Errorf("save connections: %w", err)
+	}
+	return nil
 }
 
 // Add appends a new connection and saves
 func (s *Store) Add(c ConnectionConfig) error {
+	if s == nil {
+		return fmt.Errorf("connection store is required")
+	}
+	original := append([]ConnectionConfig(nil), s.Connections...)
+	if strings.TrimSpace(c.ID) == "" {
+		id, err := s.nextConnectionID()
+		if err != nil {
+			return err
+		}
+		c.ID = id
+	} else if s.hasConnectionID(c.ID, -1) {
+		return fmt.Errorf("connection ID %q already exists", c.ID)
+	}
 	c.LastUsed = time.Now().Format(time.RFC3339)
 	s.Connections = append(s.Connections, c)
-	return s.Save()
+	if err := s.Save(); err != nil {
+		s.Connections = original
+		return err
+	}
+	return nil
 }
 
 // Update replaces a connection at the given index and saves
 func (s *Store) Update(index int, c ConnectionConfig) error {
+	if s == nil {
+		return fmt.Errorf("connection store is required")
+	}
 	if index < 0 || index >= len(s.Connections) {
 		return fmt.Errorf("index out of range")
 	}
+	original := append([]ConnectionConfig(nil), s.Connections...)
+	storedID := original[index].ID
+	if strings.TrimSpace(storedID) == "" {
+		id, err := s.nextConnectionID()
+		if err != nil {
+			return err
+		}
+		storedID = id
+	}
+	// Identity belongs to the stored record, not to editable form data.
+	c.ID = storedID
 	s.Connections[index] = c
-	return s.Save()
+	if err := s.Save(); err != nil {
+		s.Connections = original
+		return err
+	}
+	return nil
 }
 
 // Delete removes a connection at the given index and saves
 func (s *Store) Delete(index int) error {
+	if s == nil {
+		return fmt.Errorf("connection store is required")
+	}
 	if index < 0 || index >= len(s.Connections) {
 		return fmt.Errorf("index out of range")
 	}
+	original := append([]ConnectionConfig(nil), s.Connections...)
 	s.Connections = append(s.Connections[:index], s.Connections[index+1:]...)
-	return s.Save()
+	if err := s.Save(); err != nil {
+		s.Connections = original
+		return err
+	}
+	return nil
 }
 
 // MarkUsed updates the LastUsed timestamp and Active flag for a connection
 func (s *Store) MarkUsed(index int) error {
+	if s == nil {
+		return fmt.Errorf("connection store is required")
+	}
 	if index < 0 || index >= len(s.Connections) {
 		return fmt.Errorf("index out of range")
 	}
+	original := append([]ConnectionConfig(nil), s.Connections...)
 	// Deactivate all
 	for i := range s.Connections {
 		s.Connections[i].Active = false
 	}
 	s.Connections[index].Active = true
 	s.Connections[index].LastUsed = time.Now().Format(time.RFC3339)
-	return s.Save()
+	if err := s.Save(); err != nil {
+		s.Connections = original
+		return err
+	}
+	return nil
+}
+
+func (s *Store) ensureConnectionIDs() (bool, error) {
+	if s == nil {
+		return false, fmt.Errorf("connection store is required")
+	}
+
+	seen := make(map[string]struct{}, len(s.Connections))
+	for _, connection := range s.Connections {
+		id := connection.ID
+		if strings.TrimSpace(id) == "" {
+			continue
+		}
+		if _, duplicate := seen[id]; duplicate {
+			return false, fmt.Errorf("duplicate connection ID %q", id)
+		}
+		seen[id] = struct{}{}
+	}
+
+	changed := false
+	for i := range s.Connections {
+		if strings.TrimSpace(s.Connections[i].ID) != "" {
+			continue
+		}
+		generated, err := nextUniqueConnectionID(seen)
+		if err != nil {
+			return changed, err
+		}
+		s.Connections[i].ID = generated
+		seen[generated] = struct{}{}
+		changed = true
+	}
+	return changed, nil
+}
+
+func (s *Store) nextConnectionID() (string, error) {
+	seen := make(map[string]struct{}, len(s.Connections))
+	for _, connection := range s.Connections {
+		if connection.ID != "" {
+			seen[connection.ID] = struct{}{}
+		}
+	}
+	return nextUniqueConnectionID(seen)
+}
+
+func (s *Store) hasConnectionID(id string, exceptIndex int) bool {
+	for i := range s.Connections {
+		if i != exceptIndex && s.Connections[i].ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func nextUniqueConnectionID(existing map[string]struct{}) (string, error) {
+	for attempt := 0; attempt < 8; attempt++ {
+		id, err := newConnectionID()
+		if err != nil {
+			return "", err
+		}
+		if _, collision := existing[id]; !collision {
+			return id, nil
+		}
+	}
+	return "", fmt.Errorf("could not generate a unique connection ID")
+}
+
+func newConnectionID() (string, error) {
+	var value [16]byte
+	if _, err := rand.Read(value[:]); err != nil {
+		return "", fmt.Errorf("generate connection ID: %w", err)
+	}
+	value[6] = (value[6] & 0x0f) | 0x40
+	value[8] = (value[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%x-%x-%x-%x-%x", value[0:4], value[4:6], value[6:8], value[8:10], value[10:16]), nil
 }
 
 // BuildConnString creates a driver-appropriate connection string
@@ -173,13 +311,14 @@ func (c *ConnectionConfig) BuildConnString() string {
 		return host
 
 	case CloudflareD1:
-		// cfd1 driver expects DSN in format: "https://api.cloudflare.com/client/v4/accounts/<account_id>/d1/database/<database_id>/query?token=<api_token>"
-		// Or using the helper: cfd1.FormatDSN(accountID, databaseID, token)
-		// But here we are in config package, we don't want to depend on cfd1 necessarily to avoid cyclical deps if possible,
-		// or just construct the string manually.
-		// Manual construction:
-		return fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/d1/database/%s/query?token=%s",
-			c.AccountID, c.DatabaseID, c.AuthToken)
+		// cfd1 parses account/token from URL user info and the database UUID
+		// from the host. Building this through net/url also safely escapes tokens
+		// containing URL-significant characters.
+		return (&url.URL{
+			Scheme: "d1",
+			User:   url.UserPassword(c.AccountID, c.AuthToken),
+			Host:   c.DatabaseID,
+		}).String()
 
 	case PostgreSQL:
 		sslMode := c.SSLMode
@@ -235,7 +374,7 @@ func (c *ConnectionConfig) DriverName() string {
 	case Turso:
 		return "libsql"
 	case CloudflareD1:
-		return "cfd1"
+		return d1sql.DriverName
 	default:
 		return ""
 	}

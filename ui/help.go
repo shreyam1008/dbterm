@@ -52,21 +52,37 @@ func keyboardHelpText() string {
 
 [#a6e3a1]QUERY[-]
   [yellow]Enter[-]            Execute SQL             [yellow]Shift+Enter[-] Insert newline
-  [yellow]Alt+Y[-]            Query history            [yellow]Alt+B[-] Backup current database
+  [yellow]Alt+Y[-]            Query history
   [yellow]Alt+I[-]            Import SQL dump          [yellow]Esc[-] Cancel a running import
 
 [#a6e3a1]NAVIGATION & APP[-]
   [yellow]Ctrl+P (default)[-] Search documented actions, database objects, and recent queries
   [yellow]Alt+T / Q / R[-]    Focus Tables / Query / Results
   [yellow]Tab[-]              Cycle Tables → Query → Results
-  [yellow]Alt+D[-]            Dashboard                [yellow]Alt+S[-] Services
+  [yellow]Alt+B[-]            Instant backup from any workspace panel
+  [yellow]Alt+D[-]            Dashboard                [yellow]Alt+K[-] Backup Center
+  [yellow]Alt+S[-]            Database services
   [yellow]Alt+, / Alt+G[-]    Settings                 [yellow]Alt+H[-] This help
   [yellow]Esc / Backspace[-]  Go back                  [yellow]Ctrl+C[-] Cancel active work / quit
 
 [#a6e3a1]DASHBOARD ` + iconDashboard + `[-]
   [yellow]Enter[-] Connect   [yellow]N[-] New   [yellow]E[-] Edit   [yellow]D[-] Delete   [yellow]R[-] Health check
-  [yellow]I[-] Import       [yellow]G[-] Settings   [yellow]H[-] Help   [yellow]W / B / Esc[-] Workspace   [yellow]Q[-] Quit
+  [yellow]Ctrl+B[-] New backup job for highlighted connection   [yellow]B[-] Backup Center   [yellow]I[-] Import
+  [yellow]G[-] Settings   [yellow]H[-] Help   [yellow]W / Esc[-] Workspace   [yellow]Q[-] Quit
   [yellow]1–9 / 0[-] Quick-select the first ten connections
+
+[#a6e3a1]BACKUP CENTER (Alt+K) ` + iconBackup + `[-]
+  [yellow]N[-]               Choose saved/new database for a new plan
+  [yellow]Enter[-]           Edit the highlighted plan
+  [yellow]R / Space[-]       Run now / toggle a timed schedule (manual stays on demand)
+  [yellow]P[-]               Apply retention now; newest verified artifact is always kept
+  [yellow]H / I[-]           Run history / inspect and restore a backup by content
+  [yellow]A[-]               Desktop/user or Server/system agent: status, startup, PID/RAM/uptime, controls, and logs
+  [yellow]G[-]               Generate an age identity and copy its public recipient
+  [yellow]D[-]               Delete the job only; history and backup files stay untouched
+  [yellow]F2 / F3[-]         Choose folder / refresh destination + staging capacity
+  [yellow]Ctrl+N[-]          Add a database from inside the plan form
+  [#6c7086]Filename tokens[-] {job} {connection} {database} {engine} {date} {time} {timestamp} {run}
 
 [#a6e3a1]SERVICES (Alt+S) ` + iconServices + `[-]
   [yellow]1 / 2[-] Toggle MySQL / PostgreSQL    [yellow]C / Enter[-] Connect
@@ -75,13 +91,16 @@ func keyboardHelpText() string {
 [#a6e3a1]CLI (run in your terminal)[-]
   dbterm --help        Command help       dbterm --version     Version/build
   dbterm --info        Runtime info       dbterm --update      Install an update
-  dbterm --uninstall   Remove dbterm      add --purge to remove saved connections
+  dbterm --uninstall   Remove dbterm      add --purge to remove dbterm-owned data
+  dbterm backup --help Jobs, instant backup, agent, inspection, restore, keys, and paths
 
 
 `
 }
 
 func (a *App) showHelp() {
+	a.helpReturnPage, _ = a.pages.GetFrontPage()
+	a.helpReturnFocus = a.app.GetFocus()
 	helpText := keyboardHelpText()
 
 	cheatPG := `[::b][#89b4fa]━━━ PostgreSQL Cheatsheet ━━━[-][-]
@@ -242,15 +261,7 @@ func (a *App) showHelp() {
 
 	helpView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEscape {
-			a.pages.RemovePage("help")
-			front, _ := a.pages.GetFrontPage()
-			if front == "" {
-				if a.db != nil {
-					a.pages.ShowPage("main")
-				} else {
-					a.showDashboard()
-				}
-			}
+			a.closeHelp()
 			return nil
 		}
 		return event
@@ -258,4 +269,22 @@ func (a *App) showHelp() {
 
 	a.pages.AddAndSwitchToPage("help", helpView, true)
 	a.app.SetFocus(helpView)
+}
+
+func (a *App) closeHelp() {
+	returnState := loadingReturnState{page: a.helpReturnPage, focus: a.helpReturnFocus}
+	a.helpReturnPage = ""
+	a.helpReturnFocus = nil
+	a.pages.RemovePage("help")
+	if returnState.page != "" && a.pages.HasPage(returnState.page) {
+		a.pages.ShowPage(returnState.page)
+		a.restoreLoadingReturnState(returnState)
+		return
+	}
+	if a.db != nil && a.pages.HasPage("main") {
+		a.pages.ShowPage("main")
+		a.restoreLoadingReturnState(loadingReturnState{page: "main", focus: a.focusedPanel})
+		return
+	}
+	a.showDashboard()
 }

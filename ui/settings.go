@@ -2,12 +2,14 @@ package ui
 
 import (
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	"github.com/shreyam1008/dbterm/config"
+	"github.com/shreyam1008/dbterm/internal/appdirs"
 )
 
 const pageSettings = "settings"
@@ -26,6 +28,7 @@ var keymapFieldSpecs = []keymapFieldSpec{
 	{Action: config.ActionServices, Label: "Open Services"},
 	{Action: config.ActionFullscreen, Label: "Toggle Fullscreen"},
 	{Action: config.ActionBackup, Label: "Open Backup"},
+	{Action: config.ActionBackupCenter, Label: "Backup Center"},
 	{Action: config.ActionExportCSV, Label: "Export CSV"},
 	{Action: config.ActionHistory, Label: "Query History"},
 	{Action: config.ActionSettings, Label: "Open Settings"},
@@ -121,7 +124,11 @@ func (a *App) showSettings() {
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignCenter)
 	summary.SetBackgroundColor(bg)
-	summary.SetText("[#6c7086]Use | to separate bindings. Dashboard health checks: auto or manual. Saved at ~/.config/dbterm/settings.json[-]")
+	settingsPath := "the OS-native dbterm config directory"
+	if configDir, err := appdirs.ConfigDir(); err == nil {
+		settingsPath = filepath.Join(configDir, "settings.json")
+	}
+	summary.SetText(fmt.Sprintf("[#6c7086]Use | to separate bindings. Dashboard health checks: auto or manual. Saved at %s[-]", tview.Escape(settingsPath)))
 
 	form := tview.NewForm()
 	form.SetBorder(true).
@@ -194,7 +201,7 @@ func (a *App) showSettings() {
 		settings = updated
 		a.settings = cloneSettings(updated)
 		a.keymap = resolver
-		a.ShowAlert(fmt.Sprintf("%s Settings saved.\n\nKeymap updated in ~/.config/dbterm/settings.json.", iconSuccess), pageSettings)
+		a.ShowAlert(fmt.Sprintf("%s Settings saved.\n\nKeymap updated in %s.", iconSuccess, settingsPath), pageSettings)
 	}
 
 	resetFunc := func() {

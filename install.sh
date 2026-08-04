@@ -328,7 +328,8 @@ print_quick_guide() {
 	echo "  ${command_hint} --version      Show installed version"
 	echo "  ${command_hint} --update       Update to latest release"
 	echo "  ${command_hint} --uninstall    Uninstall binary"
-	echo "  ${command_hint} --uninstall --purge --yes   Remove binary + saved connections"
+	echo "  ${command_hint} --uninstall --purge --yes   Remove binary + dbterm-owned config/state/logs"
+	echo "                                              (chosen backup artifacts stay)"
 }
 
 main() {

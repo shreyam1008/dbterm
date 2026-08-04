@@ -35,7 +35,8 @@ type Manager struct {
 	state                   fileState
 }
 
-// NewManager creates a manager backed by ~/.config/dbterm/history.json.
+// NewManager creates a manager backed by history.json in dbterm's OS-native
+// per-user configuration directory.
 func NewManager(maxEntriesPerConnection int) (*Manager, error) {
 	path, err := persist.DefaultConfigFile(DefaultFileName)
 	if err != nil {

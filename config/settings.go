@@ -5,8 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
+
+	"github.com/shreyam1008/dbterm/internal/persist"
 )
 
 const (
@@ -20,6 +21,7 @@ const (
 	ActionServices       = "services"
 	ActionFullscreen     = "fullscreen"
 	ActionBackup         = "backup"
+	ActionBackupCenter   = "backup_center"
 	ActionExportCSV      = "export_csv"
 	ActionHistory        = "history"
 	ActionSettings       = "settings"
@@ -39,6 +41,7 @@ var defaultKeymapBindings = map[string][]string{
 	ActionServices:       {"alt+s"},
 	ActionFullscreen:     {"alt+f"},
 	ActionBackup:         {"alt+b"},
+	ActionBackupCenter:   {"alt+k"},
 	ActionExportCSV:      {"alt+e"},
 	ActionHistory:        {"alt+y"},
 	ActionSettings:       {"alt+,", "alt+g"},
@@ -68,7 +71,7 @@ func DefaultKeymapBindings() map[string][]string {
 	return cloneKeymapBindings(defaultKeymapBindings)
 }
 
-// LoadSettings loads settings from ~/.config/dbterm/settings.json.
+// LoadSettings loads settings from the OS-native dbterm config directory.
 // Missing or empty files are replaced with defaults on disk.
 func LoadSettings() (*Settings, error) {
 	defaults := DefaultSettings()
@@ -104,7 +107,7 @@ func LoadSettings() (*Settings, error) {
 	return mergeSettings(defaults, &loaded), nil
 }
 
-// SaveSettings saves settings to ~/.config/dbterm/settings.json.
+// SaveSettings saves settings to the OS-native dbterm config directory.
 func SaveSettings(settings *Settings) error {
 	if settings == nil {
 		return fmt.Errorf("settings are required")
@@ -120,11 +123,7 @@ func SaveSettings(settings *Settings) error {
 }
 
 func settingsFilePath() (string, error) {
-	dir, err := configDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, settingsFileName), nil
+	return persist.DefaultConfigFile(settingsFileName)
 }
 
 func writeSettings(path string, settings *Settings) error {
@@ -137,17 +136,7 @@ func writeSettings(path string, settings *Settings) error {
 	}
 
 	normalized := mergeSettings(DefaultSettings(), settings)
-	data, err := json.MarshalIndent(normalized, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal settings: %w", err)
-	}
-	data = append(data, '\n')
-
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("create settings directory: %w", err)
-	}
-
-	if err := os.WriteFile(path, data, 0o600); err != nil {
+	if err := persist.SaveJSON(path, normalized); err != nil {
 		return fmt.Errorf("write settings file: %w", err)
 	}
 

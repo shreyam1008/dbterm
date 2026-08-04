@@ -9,6 +9,9 @@ import (
 	"runtime"
 	"runtime/debug"
 	"strings"
+	"time"
+
+	"github.com/shreyam1008/dbterm/internal/appdirs"
 )
 
 var (
@@ -40,10 +43,11 @@ func printVersion() {
 func printInfo() {
 	cfgDir := configDir()
 	cfgFile := filepath.Join(cfgDir, "connections.json")
-
-	cfgSize := "not created yet"
-	if info, err := os.Stat(cfgFile); err == nil {
-		cfgSize = fmtBytes(info.Size())
+	stateDir, stateDirErr := appdirs.StateDir()
+	logDir, logDirErr := appdirs.LogDir()
+	catalogPath := "unavailable"
+	if stateDirErr == nil {
+		catalogPath = filepath.Join(stateDir, "backup", "backups.db")
 	}
 
 	binSize := "unknown"
@@ -71,27 +75,58 @@ func printInfo() {
 	fmt.Printf("  \033[33mOS / Arch\033[0m     %s / %s\n\n", runtime.GOOS, runtime.GOARCH)
 	fmt.Println("  \033[33mPATHS\033[0m")
 	fmt.Printf("  Binary        %s (%s)\n", binPath, binSize)
-	fmt.Printf("  Config        %s (%s)\n\n", cfgFile, cfgSize)
+	fmt.Printf("  Config dir    %s (%s)\n", cfgDir, pathStatus(cfgDir, false))
+	fmt.Printf("  Connections   %s (%s)\n", cfgFile, pathStatus(cfgFile, true))
+	if stateDirErr != nil {
+		fmt.Printf("  State dir     unavailable (%v)\n", stateDirErr)
+	} else {
+		fmt.Printf("  State dir     %s (%s)\n", stateDir, pathStatus(stateDir, false))
+	}
+	if logDirErr != nil {
+		fmt.Printf("  Logs          unavailable (%v)\n", logDirErr)
+	} else {
+		fmt.Printf("  Logs          %s (%s)\n", logDir, pathStatus(logDir, false))
+	}
+	if catalogPath == "unavailable" {
+		fmt.Println("  Backup catalog unavailable")
+	} else {
+		fmt.Printf("  Backup catalog %s (%s)\n", catalogPath, pathStatus(catalogPath, true))
+	}
+	fmt.Println()
+	fmt.Println("  \033[33mBACKUP AGENT\033[0m")
+	agent, agentErr := inspectBackupAgentLifecycle(5 * time.Second)
+	if agentErr != nil {
+		fmt.Printf("  Status        unavailable (%v)\n", agentErr)
+	} else {
+		fmt.Printf("  Manager       %s\n", agent.status.Manager)
+		fmt.Printf("  Installed     %t\n", agent.status.Installed)
+		fmt.Printf("  Running       %t\n", agent.status.Running)
+		if strings.TrimSpace(agent.status.Detail) != "" {
+			fmt.Printf("  Detail        %s\n", agent.status.Detail)
+		}
+	}
+	fmt.Println()
 	fmt.Println("  \033[33mRESOURCES\033[0m")
-	fmt.Println("  RAM (idle)    ~8–12 MB")
-	fmt.Println("  RAM (active)  ~10–15 MB with guarded paging/preview limits")
-	fmt.Println("  CPU           Near-zero (event-driven TUI)")
-	fmt.Println("  Disk          Binary only + tiny JSON config")
-	fmt.Println("  Network       Only when connected to remote DB")
+	fmt.Println("  TUI           Event-driven with guarded paging/preview limits")
+	fmt.Println("  Agent         Sleeps between polls; runs one backup job at a time")
+	fmt.Println("  Disk          Binary + JSON config + SQLite catalog + logs + one private raw-backup stage")
+	fmt.Println("  Artifacts     Completed artifacts are stored only in destinations chosen per backup job")
+	fmt.Println("  Network       Database connections, scheduled backups, and updates")
 	fmt.Println()
 	fmt.Println("  \033[33mDRIVERS\033[0m       All pure Go — no CGO, no C deps")
 	fmt.Println("  PostgreSQL    lib/pq")
 	fmt.Println("  MySQL         go-sql-driver/mysql")
 	fmt.Println("  SQLite        modernc.org/sqlite")
 	fmt.Println("  Turso         libsql-client-go")
-	fmt.Println("  Cloudflare D1 cfd1")
+	fmt.Println("  Cloudflare D1 dbterm ordered-raw adapter (cfd1 API client)")
 	fmt.Println()
-	fmt.Println("  \033[33mCLIENT TOOLS\033[0m  Required for SQL dump import/backup")
+	fmt.Println("  \033[33mCLIENT TOOLS\033[0m  PostgreSQL/MySQL backup/restore; SQLite SQL restore")
 	fmt.Printf("  psql          %s\n", cliToolStatus("psql"))
 	fmt.Printf("  pg_restore    %s\n", cliToolStatus("pg_restore"))
 	fmt.Printf("  mysql         %s\n", cliToolStatus("mysql"))
 	fmt.Printf("  pg_dump       %s\n", cliToolStatus("pg_dump"))
 	fmt.Printf("  mysqldump     %s\n", cliToolStatus("mysqldump"))
+	fmt.Printf("  sqlite3       %s\n", cliToolStatus("sqlite3"))
 	fmt.Println()
 	fmt.Println("  \033[33mINSTALL\033[0m       No Go required")
 	fmt.Println("  macOS/Linux   curl -fsSL https://raw.githubusercontent.com/shreyam1008/dbterm/main/install.sh | bash")
@@ -211,6 +246,12 @@ func normalizeVersion(value string) string {
 // ── Config + formatting utilities ──
 
 func configDir() string {
+	if dir, err := appdirs.ConfigDir(); err == nil {
+		return dir
+	}
+
+	// Keep diagnostic/uninstall output usable if platform path discovery fails.
+	// Destructive purge validation rejects the unresolved tilde fallback.
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "~/.config/dbterm"
@@ -231,6 +272,23 @@ func fmtBytes(b int64) string {
 	default:
 		return fmt.Sprintf("%d B", b)
 	}
+}
+
+func pathStatus(path string, includeSize bool) string {
+	info, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "not created yet"
+		}
+		return "unavailable: " + err.Error()
+	}
+	if includeSize && !info.IsDir() {
+		return fmtBytes(info.Size())
+	}
+	if info.IsDir() {
+		return "ready"
+	}
+	return "exists"
 }
 
 func cliToolStatus(name string) string {

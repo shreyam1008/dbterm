@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -12,6 +13,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/shreyam1008/dbterm/internal/osservice"
 )
 
 const defaultRepo = "shreyam1008/dbterm"
@@ -119,10 +122,124 @@ func runUpdate(requestedVersion string) error {
 		return fmt.Errorf("could not locate current binary: %w", err)
 	}
 
-	if runtime.GOOS == "windows" {
-		return replaceWindowsBinary(exePath, downloadPath, oldVersion, resolvedVersion)
+	agent, err := prepareBackupAgentForUpdate()
+	if err != nil {
+		return err
 	}
-	return replaceUnixBinary(exePath, downloadPath, oldVersion, resolvedVersion)
+
+	if runtime.GOOS == "windows" {
+		if err := replaceWindowsBinary(exePath, downloadPath, oldVersion, resolvedVersion, agent.stopped); err != nil {
+			return restoreBackupAgentAfterUpdateFailure(agent, err)
+		}
+		if agent.stopped {
+			fmt.Println("  \033[33mBackup agent\033[0m Will restart after the delayed Windows replacement.")
+		}
+		return nil
+	}
+	if err := replaceUnixBinary(exePath, downloadPath, oldVersion, resolvedVersion); err != nil {
+		return restoreBackupAgentAfterUpdateFailure(agent, err)
+	}
+	if agent.stopped {
+		if err := refreshAndStartBackupAgent(agent.manager); err != nil {
+			return fmt.Errorf("dbterm was updated, but the backup agent registration could not be refreshed/restarted: %w (run `dbterm backup service install`)", err)
+		}
+		fmt.Println("  \033[38;2;166;227;161m✓\033[0m Backup agent registration refreshed and restarted")
+	}
+	return nil
+}
+
+func restoreBackupAgentAfterUpdateFailure(agent backupAgentLifecycle, updateErr error) error {
+	if !agent.stopped {
+		return updateErr
+	}
+	if err := startBackupAgent(agent.manager); err != nil {
+		return fmt.Errorf("%w; additionally could not restart the previously-running backup agent: %v (run `dbterm backup service start`)", updateErr, err)
+	}
+	return updateErr
+}
+
+type backupAgentLifecycle struct {
+	manager osservice.Manager
+	status  osservice.Status
+	stopped bool
+}
+
+func prepareBackupAgentForUpdate() (backupAgentLifecycle, error) {
+	state, err := inspectBackupAgentLifecycle(15 * time.Second)
+	if err != nil {
+		// An atomic Unix rename remains safe when systemd is unavailable; the
+		// old agent process will keep running until its next normal restart.
+		// Windows cannot replace an executable held by an unobserved process,
+		// and launchd is always present on supported macOS releases, so fail
+		// closed on those platforms.
+		if runtime.GOOS == "linux" && !state.status.Installed {
+			if processErr := ensureBackupAgentProcessStopped("update dbterm"); processErr != nil {
+				return state, processErr
+			}
+			fmt.Printf("  \033[33mWarning:\033[0m could not inspect the systemd backup agent: %v\n", err)
+			return state, nil
+		}
+		return state, fmt.Errorf("could not inspect the backup agent before update: %w", err)
+	}
+	if !state.status.Running {
+		if err := ensureBackupAgentProcessStopped("update dbterm"); err != nil {
+			return state, err
+		}
+		return state, nil
+	}
+	if err := stopBackupAgent(state.manager); err != nil {
+		return state, fmt.Errorf("could not stop the running backup agent before update: %w", err)
+	}
+	state.stopped = true
+	if err := waitForBackupAgentProcessExit(backupAgentExitTimeout); err != nil {
+		if restartErr := startBackupAgent(state.manager); restartErr != nil {
+			return state, fmt.Errorf("could not drain the backup agent before update: %w; additionally could not restart its native service: %v", err, restartErr)
+		}
+		return state, fmt.Errorf("could not drain the backup agent before update: %w; its native service was restarted", err)
+	}
+	fmt.Printf("  \033[38;2;166;227;161m✓\033[0m Backup agent stopped (%s)\n", state.status.Manager)
+	return state, nil
+}
+
+func inspectBackupAgentLifecycle(timeout time.Duration) (backupAgentLifecycle, error) {
+	state := backupAgentLifecycle{}
+	manager, err := newBackupServiceManager()
+	if err != nil {
+		return state, err
+	}
+	state.manager = manager
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	status, err := manager.Status(ctx)
+	state.status = status
+	return state, err
+}
+
+func stopBackupAgent(manager osservice.Manager) error {
+	if manager == nil {
+		return fmt.Errorf("backup agent manager is unavailable")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return manager.Stop(ctx)
+}
+
+func startBackupAgent(manager osservice.Manager) error {
+	if manager == nil {
+		return fmt.Errorf("backup agent manager is unavailable")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return manager.Start(ctx)
+}
+
+func refreshAndStartBackupAgent(manager osservice.Manager) error {
+	if manager == nil {
+		return fmt.Errorf("backup agent manager is unavailable")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return manager.Install(ctx)
 }
 
 // ── Platform helpers ──
@@ -257,7 +374,7 @@ func replaceUnixBinary(exePath, downloadedPath, oldVersion, resolvedVersion stri
 
 	if err := copyFile(downloadedPath, stagedPath, 0o755); err != nil {
 		if isPermissionErr(err) {
-			return fmt.Errorf("permission denied writing %s. Re-run with sudo: sudo dbterm --update", targetDir)
+			return fmt.Errorf("permission denied writing %s. Update dbterm through the installer or package manager that owns %s, or install it in a user-writable directory; keep backup-service commands in your normal user account and do not rerun the whole update with sudo", targetDir, exePath)
 		}
 		return fmt.Errorf("failed to stage update in %s: %w", targetDir, err)
 	}
@@ -265,7 +382,7 @@ func replaceUnixBinary(exePath, downloadedPath, oldVersion, resolvedVersion stri
 	if err := os.Rename(stagedPath, exePath); err != nil {
 		_ = os.Remove(stagedPath)
 		if isPermissionErr(err) {
-			return fmt.Errorf("permission denied replacing %s. Re-run with sudo: sudo dbterm --update", exePath)
+			return fmt.Errorf("permission denied replacing %s. Update that binary through its installer/package manager, or install dbterm in a user-writable directory; keep backup-service commands in your normal user account and do not rerun the whole update with sudo", exePath)
 		}
 		return fmt.Errorf("failed to replace binary: %w", err)
 	}
@@ -275,26 +392,66 @@ func replaceUnixBinary(exePath, downloadedPath, oldVersion, resolvedVersion stri
 	return nil
 }
 
-func replaceWindowsBinary(exePath, downloadedPath, oldVersion, resolvedVersion string) error {
+func replaceWindowsBinary(exePath, downloadedPath, oldVersion, resolvedVersion string, restartBackupAgent bool) error {
 	stagedPath := exePath + ".new"
 	if err := copyFile(downloadedPath, stagedPath, 0o755); err != nil {
 		if isPermissionErr(err) {
-			return fmt.Errorf("permission denied writing %s. Re-run terminal as Administrator and try dbterm --update again", exePath)
+			return fmt.Errorf("permission denied writing %s. Update that binary through its installer/package manager or move dbterm to a user-writable directory; keep backup-service commands in your normal user account rather than rerunning the whole update from an elevated terminal", exePath)
 		}
 		return fmt.Errorf("failed to stage update: %w", err)
 	}
 
-	cmdLine := fmt.Sprintf(`ping 127.0.0.1 -n 3 > nul & move /Y "%s" "%s" > nul`, stagedPath, exePath)
-	if err := exec.Command("cmd", "/C", cmdLine).Start(); err != nil {
+	cmdLine := windowsUpdateCommand(exePath, stagedPath, restartBackupAgent)
+	if err := startDetachedProcess("cmd.exe", "/D", "/S", "/C", cmdLine); err != nil {
+		_ = os.Remove(stagedPath)
 		return fmt.Errorf("could not schedule binary replacement: %w", err)
 	}
 
-	fmt.Printf("  \033[38;2;166;227;161m✓\033[0m Downloaded update for %s\n", exePath)
-	// On Windows the new binary isn't in place yet (delayed move), so use the tag version
-	printUpdateSummary("", oldVersion, resolvedVersion)
-	fmt.Println("  \033[33mAction:\033[0m Close this terminal, then run dbterm again.")
+	fmt.Printf("  \033[38;2;166;227;161m✓\033[0m Staged update for %s\n", exePath)
+	printPendingWindowsUpdateSummary(oldVersion, resolvedVersion)
+	fmt.Println("  \033[33mVerify:\033[0m After this command exits, run `dbterm --version` in a new terminal.")
 	fmt.Println()
 	return nil
+}
+
+func windowsUpdateCommand(exePath, stagedPath string, restartBackupAgent bool) string {
+	parts := []string{
+		"ping 127.0.0.1 -n 3 > nul",
+		fmt.Sprintf(`move /Y "%s" "%s" > nul`, stagedPath, exePath),
+	}
+	if restartBackupAgent {
+		// Conditional chaining is intentional: never restart the old binary when
+		// replacement failed and left the staged .new file behind.
+		parts = append(parts, fmt.Sprintf(`"%s" backup service install > nul 2>&1`, exePath))
+	}
+	return strings.Join(parts, " && ")
+}
+
+func printPendingWindowsUpdateSummary(oldVersion, resolvedVersion string) {
+	newVersion := strings.TrimPrefix(strings.TrimSpace(resolvedVersion), "v")
+	newName := ""
+	for _, release := range manifestReleases() {
+		if normalizeVersion(release.version) == normalizeVersion(newVersion) {
+			newName = release.name
+			break
+		}
+	}
+
+	fmt.Println()
+	fmt.Println("  ╭─────────────────────────────────────────────╮")
+	if newVersion == "" {
+		fmt.Println("  │  \033[33mPending\033[0m    Windows replacement scheduled")
+	} else if newName != "" {
+		fmt.Printf("  │  \033[33mPending\033[0m    v%s \"\033[38;2;249;226;175m%s\033[0m\"\n", newVersion, newName)
+	} else {
+		fmt.Printf("  │  \033[33mPending\033[0m    v%s\n", newVersion)
+	}
+	if oldVersion != "" && newVersion != "" && normalizeVersion(oldVersion) != normalizeVersion(newVersion) {
+		fmt.Printf("  │  \033[38;2;108;112;134mCurrent    v%s\033[0m\n", oldVersion)
+	}
+	fmt.Println("  ╰─────────────────────────────────────────────╯")
+	fmt.Println()
+	fmt.Println("  \033[33mUpdate scheduled.\033[0m Installation is not verified yet.")
 }
 
 // printUpdateSummary shows old→new version info and release notes after a successful update.

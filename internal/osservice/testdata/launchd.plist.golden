@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>io.github.shreyam1008.dbterm.backup</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Applications/DBTerm &amp; Tools/dbterm</string>
+    <string>backup</string>
+    <string>agent</string>
+    <string>--service-mode</string>
+    <string>--config-dir</string>
+    <string>/Users/test/Library/Application Support/dbterm</string>
+    <string>--state-dir</string>
+    <string>/Users/test/Library/Application Support/dbterm/state</string>
+    <string>--log-dir</string>
+    <string>/Users/test/Library/Logs/DBTerm &amp; Logs</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>Umask</key>
+  <integer>63</integer>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+  <key>StandardOutPath</key>
+  <string>/Users/test/Library/Logs/DBTerm &amp; Logs/dbterm-backup.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/test/Library/Logs/DBTerm &amp; Logs/dbterm-backup-error.log</string>
+</dict>
+</plist>

@@ -43,6 +43,7 @@ const (
 	commandPaletteProcedure commandPaletteItemKind = "procedure"
 	commandPaletteTrigger   commandPaletteItemKind = "trigger"
 	commandPaletteQuery     commandPaletteItemKind = "recent query"
+	commandPaletteBackupJob commandPaletteItemKind = "backup job"
 )
 
 type commandPaletteItem struct {
@@ -81,11 +82,12 @@ var commandPaletteActionSpecs = []commandPaletteActionSpec{
 	{actionDashboard, "Open Dashboard", "Open saved connections, connection health, and connection management.", "connections home back manage", ""},
 	{actionHelp, "Open Help & SQL Cheatsheets", "Show dbterm keyboard workflows and database-specific SQL reference sheets.", "shortcuts keys documentation postgres mysql sqlite", ""},
 	{actionServices, "Open Database Services", "Inspect and manage supported local MySQL and PostgreSQL services.", "system local mysql postgresql start stop status", ""},
+	{actionBackupCenter, "Open Backup Center", "Create schedules, run or prune backups, restore artifacts, and manage the agent. N chooses a saved database or adds one; Ctrl+N adds a database from the plan form. Dashboard Ctrl+B starts preselected.", "new saved database connection scheduled automatic restore agent history retention encryption zstd zip ctrl n", ""},
 	{actionFullscreen, "Toggle Fullscreen Results", "Expand the result grid to the full workspace or restore the normal layout.", "maximize expand data grid", ""},
 	{actionInspectSchema, "Inspect Selected Table Schema", "Show columns, keys, foreign keys, and indexes for the selected table.", "metadata structure columns constraints indexes foreign keys", ""},
 	{actionHistory, "Open Query History", "Browse successful queries saved for the active connection and load one into the editor.", "recent sql previous statements", ""},
 	{actionExportCSV, "Export Results to CSV", "Choose selected rows, the current page, or all table rows matching the active filters and stream them safely to CSV.", "download save spreadsheet comma separated all filtered matching stream", ""},
-	{actionBackup, "Back Up Current Database", "Create a database backup using the active connection and its supported backup format.", "dump snapshot save restore", ""},
+	{actionBackup, "Back Up Current Database", "From any workspace panel, create an engine-appropriate backup of the active database. F2 chooses a folder and F3 refreshes destination and staging capacity.", "dump snapshot save restore folder chooser destination staging capacity disk f2 f3", ""},
 	{actionImportDump, "Import SQL Dump", "Import a supported PostgreSQL or MySQL dump into the active connection.", "restore upload sql file", ""},
 	{actionSelectAll, "Select All Displayed Rows", "Select every currently displayed data row for a bulk result action.", "mark rows bulk csv", ""},
 	{actionClearSelection, "Clear Result Row Selection", "Remove the selection marker from all currently displayed result rows.", "unselect deselect rows bulk", ""},
@@ -311,7 +313,11 @@ func (a *App) dismissCommandPalette(restoreFocus bool) {
 }
 
 func (a *App) buildCommandPaletteItems() []commandPaletteItem {
-	items := make([]commandPaletteItem, 0, len(commandPaletteActionSpecs)+len(a.tableIdentifiers)+len(a.databaseObjects)+commandPaletteQueryLimit)
+	connectionCount := 0
+	if a.store != nil {
+		connectionCount = len(a.store.Connections)
+	}
+	items := make([]commandPaletteItem, 0, len(commandPaletteActionSpecs)+connectionCount+len(a.tableIdentifiers)+len(a.databaseObjects)+commandPaletteQueryLimit)
 	for index, spec := range commandPaletteActionSpecs {
 		shortcut := spec.shortcut
 		if shortcut == "" {
@@ -327,6 +333,24 @@ func (a *App) buildCommandPaletteItems() []commandPaletteItem {
 			action:      spec.action,
 			sortOrder:   index,
 		})
+	}
+	if a.store != nil {
+		for index, connection := range a.store.Connections {
+			if strings.TrimSpace(connection.ID) == "" {
+				continue
+			}
+			name := nonEmptyOr(strings.TrimSpace(connection.Name), string(connection.Type))
+			items = append(items, commandPaletteItem{
+				id:          "backup-connection:" + connection.ID,
+				kind:        commandPaletteBackupJob,
+				title:       "Schedule backup · " + name,
+				description: fmt.Sprintf("Create a backup job with saved %s connection %s already selected. Safe defaults are ready to save or refine.", connection.TypeLabel(), name),
+				keywords:    "saved connection schedule automatic backup destination retention",
+				shortcut:    "Dashboard Ctrl+B",
+				objectName:  connection.ID,
+				sortOrder:   70 + index,
+			})
+		}
 	}
 
 	tableNames := make([]string, 0, len(a.tableIdentifiers))
@@ -699,6 +723,8 @@ func commandPaletteCategoryTag(kind commandPaletteItemKind) string {
 		return "[#ffb496]TRIGGER[-]"
 	case commandPaletteQuery:
 		return "[#a6adc8]RECENT SQL[-]"
+	case commandPaletteBackupJob:
+		return "[#a6e3a1]BACKUP[-]"
 	default:
 		return "[#a6adc8]ITEM[-]"
 	}
@@ -714,6 +740,11 @@ func (a *App) executeCommandPaletteItem(item commandPaletteItem) {
 		a.openCommandPaletteDatabaseObject(item.objectType, item.objectName)
 	case commandPaletteQuery:
 		a.loadCommandPaletteQuery(item.query)
+	case commandPaletteBackupJob:
+		a.showBackupCenter()
+		if a.pages.HasPage(pageBackupCenter) {
+			a.showBackupJobFormForConnection(nil, item.objectName)
+		}
 	}
 }
 
@@ -737,6 +768,8 @@ func (a *App) executeCommandPaletteAction(action keymapAction, title string) {
 		a.showHelp()
 	case actionServices:
 		a.showServiceDashboard()
+	case actionBackupCenter:
+		a.showBackupCenter()
 	case actionFullscreen:
 		a.pages.SwitchToPage("main")
 		a.toggleExpandResults()

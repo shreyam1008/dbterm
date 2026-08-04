@@ -36,8 +36,8 @@ const quickStartSteps = [
 const workspacePanels = [
   {
     panel: "Dashboard",
-    behavior: "Manage saved connections, add/edit/remove entries, and reconnect quickly.",
-    keys: "N, E, D, Enter, R"
+    behavior: "Manage saved connections, enter Backup Center, and reconnect quickly.",
+    keys: "N, E, D, Enter, B, R"
   },
   {
     panel: "Query",
@@ -74,10 +74,14 @@ const shortcutRows = [
   { combo: "Alt + H", action: "Toggle help + SQL cheatsheets" },
   { combo: "Alt + D", action: "Back to dashboard" },
   { combo: "Alt + S", action: "Open services dashboard" },
+  { combo: "Alt + K / B (Dashboard)", action: "Open Backup Center for schedules, history, inspection, restore, and agent status" },
+  { combo: "Ctrl + B (Dashboard)", action: "Create a backup policy from the highlighted saved connection" },
   { combo: "F5 / Ctrl + F5", action: "Refresh current table / refresh list + table" },
   { combo: "PgUp / PgDn, Home / End", action: "Navigate previous/next and first/last result pages" },
   { combo: "Alt + F", action: "Toggle fullscreen results" },
-  { combo: "Alt + B", action: "Open backup modal (PostgreSQL/MySQL)" },
+  { combo: "Alt + B", action: "Instant backup from any workspace panel; F2 chooses a folder and F3 refreshes disk capacity" },
+  { combo: "N (Backup Center)", action: "Choose an existing saved database or add one for a new plan" },
+  { combo: "Ctrl + N (plan form)", action: "Add another saved database without leaving the backup workflow" },
   { combo: "Alt + = / - / 0", action: "Adjust preview row limit" },
   { combo: "Ctrl + = / -", action: "Zoom table columns wider / narrower" },
   { combo: "Ctrl + 0", action: "Reset zoom to default" },
@@ -99,12 +103,28 @@ const serviceOps = [
     detail: "Use C or Enter to open connect modal with prefilled defaults."
   },
   {
-    title: "Backup active database",
-    detail: "Press Alt+B from the workspace to open the engine-aware backup/export flow for the active database."
+    title: "Keep instant backup",
+    detail: "Press Alt+B from Tables, Query, or Results for a one-off engine-appropriate backup. Type a destination or press F2; F3 refreshes destination and staging capacity."
   },
   {
-    title: "Import SQL dumps safely",
-    detail: "Press Alt+I in workspace or I on Dashboard, provide a .sql path, and dbterm streams psql/mysql output. Use Esc/Ctrl+C during run to request cancel."
+    title: "Schedule the durable path",
+    detail: "Highlight a saved connection and press Ctrl+B, or open Backup Center and press N to choose a saved database or add one. Essentials stay first; advanced controls expand only when needed."
+  },
+  {
+    title: "Choose desktop or server mode",
+    detail: "Desktop mode needs no administrator access. Server mode registers at machine boot, uses explicit data paths, and clearly shows the elevated command required."
+  },
+  {
+    title: "Watch storage and progress",
+    detail: "See the destination volume and free space before saving, then follow phase, bytes, elapsed time, rate, and ETA without a fabricated database-row percentage."
+  },
+  {
+    title: "Bound and report every job",
+    detail: "Combine count, age, and total-size retention; prune oldest eligible artifacts now; and notify by Gmail defaults or custom SMTP on failure, success, both, or never."
+  },
+  {
+    title: "Inspect before restore",
+    detail: "Press I. dbterm unwraps gzip, zstd, ZIP, or age and detects the database format from content before a destination can be selected."
   }
 ];
 
@@ -116,15 +136,31 @@ const cliRows = [
   ["dbterm --update", "Update to latest release"],
   ["dbterm --update X.Y.Z", "Update to a specific release"],
   ["dbterm --uninstall", "Uninstall binary with confirmation"],
-  ["dbterm --uninstall --purge", "Uninstall binary + saved connections"],
+  ["dbterm --uninstall --purge", "Remove binary + dbterm-owned config/state/logs; chosen backup artifacts stay"],
   ["dbterm --uninstall --yes", "Uninstall without prompt"]
+  , ["dbterm backup --help", "Show backup and agent commands"]
+  , ["dbterm backup list", "List durable jobs and next runs"]
+  , ["dbterm backup run <job>", "Run a job immediately"]
+  , ["dbterm backup inspect <file>", "Detect wrappers, engine, checksum, and warnings"]
+  , ["dbterm backup restore --connection <target> --yes <file>", "Run the guarded, content-inspected restore flow"]
+  , ["dbterm backup service install", "Install and start the native current-user agent"]
+  , ["dbterm backup service status --all", "Inspect desktop and server registrations, startup, runtime, and heartbeat"]
+  , ["dbterm backup service enable", "Enable automatic startup independently of starting the agent now"]
+  , ["dbterm backup prune --yes <job>", "Apply the job's retention ceilings immediately"]
+  , ["dbterm backup notify-test <job>", "Send a test message using the job's SMTP settings"]
+  , ["dbterm backup logs --lines 200", "Read the bounded agent log tail locally or over SSH"]
+  , ["dbterm backup keygen", "Generate an age X25519 identity and public recipient"]
+  , ["dbterm backup paths", "Print OS-native config, state, log, and catalog paths"]
 ];
 
 const troubleshooting = [
   "Connection issues: run `dbterm --info`, verify host/port/credentials, then reconnect from dashboard.",
   "Query errors: open in-app cheatsheets with Alt+H to validate SQL syntax and DB-specific clauses.",
-  "Permission errors on update/uninstall: rerun command with elevated terminal permissions.",
+  "Permission errors removing a package-managed binary: use the owning installer/package manager or ask an administrator to remove only that binary; keep backup-agent and data operations in your normal user account.",
   "Large result sets: keep a safe on-screen preview and choose All matching in Alt+E; dbterm streams the full filtered export with progress and cancellation."
+  , "Scheduled job did not run: open Backup Center → A or run `dbterm backup service status`; then verify the database client tool is available in the agent PATH."
+  , "Server agent cannot install: use the exact elevated command shown by Backup Center and supply existing absolute config, state, and log directories accessible to the selected runtime user."
+  , "Encrypted backup is locked: provide the matching age identity during inspection; jobs intentionally store only the public recipient."
 ];
 
 const installUnix =
@@ -264,9 +300,9 @@ const howToJsonLd = {
     </p>
   </section>
 
-  <section class="panel" id="ops">
-    <h2>4. Services and backup workflow</h2>
-    <p class="lead">Useful when dbterm is part of local infra maintenance or incident response.</p>
+  <section class="panel" id="backup-center">
+    <h2>4. Instant backup, scheduled agent, guarded restore</h2>
+    <p class="lead">One backup engine serves the TUI, CLI, and background agent. See the focused <a href={withBase("/backup/")}>Backup Center guide</a> for the complete operator model.</p>
 
     <div class="guide-flow">
       {serviceOps.map((item) => (
@@ -276,6 +312,35 @@ const howToJsonLd = {
         </article>
       ))}
     </div>
+
+    <div class="copy-stack">
+      <article class="copy-shell">
+        <header><h3>Headless setup</h3></header>
+        <pre><code>dbterm backup keygen
+dbterm backup service install
+dbterm backup service status --all
+dbterm backup logs --lines 200
+dbterm backup inspect --identity ./age-identity.txt ./prod.dump.zst.age
+dbterm backup restore --connection production --identity ./age-identity.txt --yes ./prod.dump.zst.age</code></pre>
+      </article>
+    </div>
+
+    <p class="notice">
+      Scheduled destinations are local folders or mounted volumes. PostgreSQL/MySQL require their official clients; SQLite SQL restore requires <code>sqlite3</code>. Restore supports PostgreSQL, MySQL/MariaDB, and local SQLite. Merge is the restore default; clean restore is explicit and destructive.
+    </p>
+    <p class="notice">Retention can combine newest-count, maximum-age, and total-size ceilings. Backup Center previews capacity and can apply the policy immediately; cleanup is restricted to verified artifacts recorded for that exact job, and always preserves its newest successful backup.</p>
+    <p class="notice">Per-job email can report failures, successes, both, or neither. Gmail defaults to STARTTLS on port 587; custom SMTP and implicit TLS are available. Test delivery before relying on it, and protect the locally stored app password.</p>
+    <p class="notice">Desktop scope is the no-admin default. Server scope runs at machine boot without an interactive login and requires elevation plus explicit existing config, state, and log paths. Runtime start/stop and startup enable/disable are deliberately separate controls.</p>
+
+    <div class="guide-flow" aria-label="Backup control data locations">
+      <article class="guide-box"><h3>Linux</h3><p><code>XDG_CONFIG_HOME/dbterm</code><br /><code>XDG_STATE_HOME/dbterm</code></p></article>
+      <article class="guide-box"><h3>macOS</h3><p><code>~/Library/Application Support/dbterm</code><br /><code>~/Library/Logs/dbterm</code></p></article>
+      <article class="guide-box"><h3>Windows</h3><p><code>%AppData%\dbterm</code><br /><code>%LocalAppData%\dbterm</code></p></article>
+    </div>
+    <p class="notice">Run <code>dbterm backup paths</code> for exact resolved paths. Raw dumps are wrapped in private state staging before the finished artifact is published to your destination, so private state needs room for one uncompressed dump. The live view shows real phase, byte growth, elapsed time, rate, and ETA where a meaningful total exists. Uninstalling only the agent never removes completed artifacts.</p>
+    <p class="notice">Restore only trusted files: dbterm rechecks content, checksum, engine, and client-side commands, but valid SQL can still perform any server-side action allowed to the selected database account. Turso exports use one source transaction and reject virtual/FTS schemas; D1 uses Cloudflare's native export API, which can briefly make that database unavailable.</p>
+    <p class="notice">Inspection unwraps at most three layers. Every decoded gzip, zstd, ZIP, or age layer has a 1 GiB default cap and uses private OS temporary storage; raise it with the TUI’s Max Decoded GiB field or <code>--max-decoded-gib N</code>, with enough temporary disk space available.</p>
+    <p class="notice"><code>backup keygen</code> defaults the private identity into dbterm config. For recovery safety, <code>--uninstall --purge</code> refuses to remove a private age identity or backup-like file it discovers there; move the key somewhere safe or delete it explicitly before retrying.</p>
   </section>
 
   <section class="panel" id="cli">

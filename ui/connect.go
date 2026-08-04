@@ -143,8 +143,32 @@ func connectFieldLabel(key connectFieldKey) string {
 	return connectFieldLabels[key]
 }
 
-// showConnectionForm displays a form for new or editing a connection
+type connectionSaveContinuation struct {
+	title       string
+	buttonLabel string
+	onSaved     func(config.ConnectionConfig)
+	returnFocus tview.Primitive
+}
+
+// showConnectionForm displays the standard form for creating or editing a
+// connection from Dashboard.
 func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex int) {
+	a.showConnectionFormWithContinuation(editConn, editIndex, nil)
+}
+
+// showNewConnectionForBackup keeps the user's backup intent while they add a
+// connection. Scheduled jobs must reference a saved connection so the
+// background agent can resolve it after the interactive TUI exits.
+func (a *App) showNewConnectionForBackup(onSaved func(config.ConnectionConfig)) *tview.Form {
+	return a.showConnectionFormWithContinuation(nil, -1, &connectionSaveContinuation{
+		title:       fmt.Sprintf(" %s Add Database for Backup ", iconConnect),
+		buttonLabel: "Save & Continue",
+		onSaved:     onSaved,
+		returnFocus: a.app.GetFocus(),
+	})
+}
+
+func (a *App) showConnectionFormWithContinuation(editConn *config.ConnectionConfig, editIndex int, continuation *connectionSaveContinuation) *tview.Form {
 	isEdit := editConn != nil
 
 	form := tview.NewForm()
@@ -290,47 +314,73 @@ func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex in
 		btnLabel = "Update & Connect"
 	}
 
-	form.AddButton(btnLabel, func() {
-		cfg := a.buildConfigFromForm(form)
-		if cfg == nil {
-			return
+	if continuation != nil {
+		if strings.TrimSpace(continuation.title) != "" {
+			title = continuation.title
 		}
-		if isEdit {
-			if err := a.store.Update(editIndex, *cfg); err != nil {
-				a.ShowAlert(fmt.Sprintf("%s Could not update connection:\n\n%v", iconWarn, err), "connectModal")
+		if strings.TrimSpace(continuation.buttonLabel) != "" {
+			btnLabel = continuation.buttonLabel
+		}
+		form.AddButton(btnLabel, func() {
+			cfg := a.buildConfigFromForm(form)
+			if cfg == nil {
 				return
 			}
-			a.connectWithConfig(cfg, editIndex)
-		} else {
 			if err := a.store.Add(*cfg); err != nil {
 				a.ShowAlert(fmt.Sprintf("%s Could not save connection:\n\n%v", iconWarn, err), "connectModal")
 				return
 			}
-			idx := len(a.store.Connections) - 1
-			a.connectWithConfig(cfg, idx)
-		}
-	})
+			saved := a.store.Connections[len(a.store.Connections)-1]
+			a.pages.RemovePage("connectModal")
+			if continuation.onSaved != nil {
+				continuation.onSaved(saved)
+			}
+		})
+	} else {
+		form.AddButton(btnLabel, func() {
+			cfg := a.buildConfigFromForm(form)
+			if cfg == nil {
+				return
+			}
+			if isEdit {
+				if err := a.store.Update(editIndex, *cfg); err != nil {
+					a.ShowAlert(fmt.Sprintf("%s Could not update connection:\n\n%v", iconWarn, err), "connectModal")
+					return
+				}
+				saved := a.store.Connections[editIndex]
+				a.connectWithConfig(&saved, editIndex)
+			} else {
+				if err := a.store.Add(*cfg); err != nil {
+					a.ShowAlert(fmt.Sprintf("%s Could not save connection:\n\n%v", iconWarn, err), "connectModal")
+					return
+				}
+				idx := len(a.store.Connections) - 1
+				saved := a.store.Connections[idx]
+				a.connectWithConfig(&saved, idx)
+			}
+		})
 
-	form.AddButton("Save Only", func() {
-		cfg := a.buildConfigFromForm(form)
-		if cfg == nil {
-			return
-		}
-		if isEdit {
-			if err := a.store.Update(editIndex, *cfg); err != nil {
-				a.ShowAlert(fmt.Sprintf("%s Could not update connection:\n\n%v", iconWarn, err), "connectModal")
+		form.AddButton("Save Only", func() {
+			cfg := a.buildConfigFromForm(form)
+			if cfg == nil {
 				return
 			}
-		} else {
-			if err := a.store.Add(*cfg); err != nil {
-				a.ShowAlert(fmt.Sprintf("%s Could not save connection:\n\n%v", iconWarn, err), "connectModal")
-				return
+			if isEdit {
+				if err := a.store.Update(editIndex, *cfg); err != nil {
+					a.ShowAlert(fmt.Sprintf("%s Could not update connection:\n\n%v", iconWarn, err), "connectModal")
+					return
+				}
+			} else {
+				if err := a.store.Add(*cfg); err != nil {
+					a.ShowAlert(fmt.Sprintf("%s Could not save connection:\n\n%v", iconWarn, err), "connectModal")
+					return
+				}
 			}
-		}
-		a.pages.RemovePage("connectModal")
-		a.pages.RemovePage("dashboard")
-		a.showDashboard()
-	})
+			a.pages.RemovePage("connectModal")
+			a.pages.RemovePage("dashboard")
+			a.showDashboard()
+		})
+	}
 
 	form.AddButton("Find DBs", func() {
 		a.discoverConnectionDatabases(form)
@@ -350,13 +400,18 @@ func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex in
 		}
 	})
 
-	form.AddButton("Cancel", func() {
+	closeForm := func() {
 		a.pages.RemovePage("connectModal")
+		if continuation != nil && continuation.returnFocus != nil {
+			a.app.SetFocus(continuation.returnFocus)
+			return
+		}
 		front, _ := a.pages.GetFrontPage()
 		if front == "" {
 			a.showDashboard()
 		}
-	})
+	}
+	form.AddButton("Cancel", closeForm)
 
 	form.SetBorder(true).SetTitle(title).SetTitleColor(mauve).SetBorderColor(surface1)
 	form.SetFieldBackgroundColor(mantle).
@@ -379,11 +434,7 @@ func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex in
 	// Esc to cancel
 	form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEscape {
-			a.pages.RemovePage("connectModal")
-			front, _ := a.pages.GetFrontPage()
-			if front == "" {
-				a.showDashboard()
-			}
+			closeForm()
 			return nil
 		}
 		return event
@@ -397,6 +448,7 @@ func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex in
 
 	a.pages.AddPage("connectModal", connectModal, true, true)
 	a.app.SetFocus(form)
+	return form
 }
 
 // testConnection tries to connect and shows a result toast

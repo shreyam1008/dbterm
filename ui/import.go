@@ -18,6 +18,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	"github.com/shreyam1008/dbterm/config"
+	backupcore "github.com/shreyam1008/dbterm/internal/backup"
 )
 
 const (
@@ -112,11 +113,6 @@ func (a *App) showImportModalForConnection(cfg *config.ConnectionConfig, returnP
 			return
 		}
 
-		if err := ensureImportClientAvailableForFile(targetCfg.Type, sqlPath); err != nil {
-			a.ShowAlert(fmt.Sprintf("%s %v", iconWarn, err), pageImportModal)
-			return
-		}
-
 		stopOnError := formCheckboxChecked(form, importLabelStopOnError)
 		a.pages.RemovePage(pageImportModal)
 		a.runSQLImport(targetCfg, sqlPath, stopOnError, returnPage)
@@ -168,11 +164,6 @@ func (a *App) showImportModalForConnection(cfg *config.ConnectionConfig, returnP
 func (a *App) runSQLImport(cfg *config.ConnectionConfig, sqlPath string, stopOnError bool, returnPage string) {
 	targetCfg, err := validateImportTarget(cfg)
 	if err != nil {
-		a.ShowAlert(fmt.Sprintf("%s %v", iconWarn, err), returnPage)
-		return
-	}
-
-	if err := ensureImportClientAvailableForFile(targetCfg.Type, sqlPath); err != nil {
 		a.ShowAlert(fmt.Sprintf("%s %v", iconWarn, err), returnPage)
 		return
 	}
@@ -357,7 +348,7 @@ func importStopOnErrorHint(dbType config.DBType) string {
 	if dbType == config.MySQL {
 		return "Disable stop-on-error to run with mysql --force."
 	}
-	return "PostgreSQL uses ON_ERROR_STOP for .sql and --exit-on-error for .dump."
+	return "PostgreSQL uses ON_ERROR_STOP for SQL and --exit-on-error for archives; archive import never cleans existing objects."
 }
 
 func importClientRequirementForType(dbType config.DBType) (importClientRequirement, error) {
@@ -395,16 +386,6 @@ func ensureImportClientAvailable(dbType config.DBType) error {
 	}
 
 	return nil
-}
-
-func ensureImportClientAvailableForFile(dbType config.DBType, path string) error {
-	if dbType == config.PostgreSQL && isPostgresArchiveDump(path) {
-		if _, err := exec.LookPath("pg_restore"); err != nil {
-			return fmt.Errorf("PostgreSQL restore tool not found in PATH (required binary: pg_restore).\n\n%s", importClientSetupHint("pg_restore"))
-		}
-		return nil
-	}
-	return ensureImportClientAvailable(dbType)
 }
 
 func importClientSetupHint(binary string) string {
@@ -604,7 +585,11 @@ func mapImportCommandError(ctx context.Context, clientName, tailOutput string, r
 }
 
 func runPostgresSQLImport(ctx context.Context, cfg *config.ConnectionConfig, sqlPath string, stopOnError bool, emit func(string)) error {
-	if isPostgresArchiveDump(sqlPath) {
+	isArchive, err := inspectPostgresImportFile(ctx, sqlPath)
+	if err != nil {
+		return err
+	}
+	if isArchive {
 		return runPostgresArchiveImport(ctx, cfg, sqlPath, stopOnError, emit)
 	}
 	if err := ensureImportClientAvailable(config.PostgreSQL); err != nil {
@@ -648,8 +633,8 @@ func runPostgresSQLImport(ctx context.Context, cfg *config.ConnectionConfig, sql
 }
 
 func runPostgresArchiveImport(ctx context.Context, cfg *config.ConnectionConfig, dumpPath string, stopOnError bool, emit func(string)) error {
-	if err := ensureImportClientAvailableForFile(config.PostgreSQL, dumpPath); err != nil {
-		return err
+	if _, err := exec.LookPath("pg_restore"); err != nil {
+		return fmt.Errorf("PostgreSQL restore tool not found in PATH (required binary: pg_restore).\n\n%s", importClientSetupHint("pg_restore"))
 	}
 
 	database := strings.TrimSpace(cfg.Database)
@@ -657,25 +642,7 @@ func runPostgresArchiveImport(ctx context.Context, cfg *config.ConnectionConfig,
 		return fmt.Errorf("active PostgreSQL connection is missing a database name")
 	}
 
-	args := []string{
-		"--host", nonEmptyOr(cfg.Host, "localhost"),
-		"--port", defaultPortFor(cfg),
-		"--dbname", database,
-		"--clean",
-		"--if-exists",
-		"--no-owner",
-		"--no-privileges",
-	}
-	if user := strings.TrimSpace(cfg.User); user != "" {
-		args = append(args, "--username", user)
-	}
-	if stopOnError {
-		args = append(args, "--exit-on-error")
-	}
-	if strings.TrimSpace(cfg.Password) == "" {
-		args = append(args, "--no-password")
-	}
-	args = append(args, dumpPath)
+	args := postgresArchiveImportArgs(cfg, dumpPath, stopOnError)
 
 	emitImportCommand(emit, "pg_restore", args, "")
 
@@ -690,6 +657,27 @@ func runPostgresArchiveImport(ctx context.Context, cfg *config.ConnectionConfig,
 
 	tail, err := runStreamingCommand(cmd, emit, importTailLineLimit)
 	return mapImportCommandError(ctx, "pg_restore", tail, err)
+}
+
+func postgresArchiveImportArgs(cfg *config.ConnectionConfig, dumpPath string, stopOnError bool) []string {
+	args := []string{
+		"--host", nonEmptyOr(cfg.Host, "localhost"),
+		"--port", defaultPortFor(cfg),
+		"--dbname", strings.TrimSpace(cfg.Database),
+		"--no-owner",
+		"--no-privileges",
+	}
+	if user := strings.TrimSpace(cfg.User); user != "" {
+		args = append(args, "--username", user)
+	}
+	if stopOnError {
+		args = append(args, "--exit-on-error")
+	}
+	if strings.TrimSpace(cfg.Password) == "" {
+		args = append(args, "--no-password")
+	}
+	args = append(args, dumpPath)
+	return args
 }
 
 func runMySQLSQLImport(ctx context.Context, cfg *config.ConnectionConfig, sqlPath string, stopOnError bool, emit func(string)) error {
@@ -769,13 +757,29 @@ func resolveImportSQLPath(rawPath string) (string, error) {
 	return cleaned, nil
 }
 
-func isPostgresArchiveDump(path string) bool {
-	switch strings.ToLower(filepath.Ext(strings.TrimSpace(path))) {
-	case ".dump", ".backup", ".pgdump":
-		return true
-	default:
-		return false
+func inspectPostgresImportFile(ctx context.Context, path string) (bool, error) {
+	inspection, err := backupcore.Inspect(ctx, path, backupcore.InspectOptions{})
+	if err != nil {
+		return false, fmt.Errorf("inspect import file content: %w", err)
 	}
+	if len(inspection.Wrappers) > 0 {
+		return false, fmt.Errorf("this backup is wrapped with %v; use Backup Center restore so dbterm can verify and unwrap it safely", inspection.Wrappers)
+	}
+	switch inspection.Format {
+	case backupcore.FormatPostgresCustom, backupcore.FormatPostgresTar:
+		return true, nil
+	case backupcore.FormatMySQLSQL, backupcore.FormatSQLiteDatabase, backupcore.FormatSQLiteSQL:
+		return false, fmt.Errorf("the selected file contains a %s backup, not a PostgreSQL backup", inspection.Engine)
+	default:
+		// Hand-written and dialect-ambiguous SQL remains valid here because the
+		// user explicitly selected a PostgreSQL target. The safe restore flow in
+		// Backup Center applies stricter dump-only classification.
+		return false, nil
+	}
+}
+
+func isPostgresArchiveDump(path string) (bool, error) {
+	return inspectPostgresImportFile(context.Background(), path)
 }
 
 func expandHomePath(path string) (string, error) {

@@ -37,7 +37,7 @@ func (a *App) showDashboardWithHealthChecks(forceHealthChecks bool) {
 ║           d b t e r m            ║
 ╚══════════════════════════════════╝[-][-]
 [#a6adc8]%s PostgreSQL  •  MySQL  •  SQLite[-]
-%s  %s   [#6c7086]Press S for %s[-]`, iconConnect, pgStatus, mysqlStatus, iconServices+" services")
+%s  %s   [#6c7086]B Backup Center  •  S %s[-]`, iconConnect, pgStatus, mysqlStatus, iconServices+" services")
 	header.SetText(headerText)
 
 	// ── Connection List ──
@@ -124,6 +124,23 @@ func (a *App) showDashboardWithHealthChecks(forceHealthChecks bool) {
 
 	// ── Key Handling ──
 	connList.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		scheduleSelectedConnection := func() {
+			if connCount == 0 {
+				a.ShowAlert(fmt.Sprintf("%s Save a connection first, then press Ctrl+B to schedule it.", iconInfo), "dashboard")
+				return
+			}
+			index := connList.GetCurrentItem()
+			if index < 0 || index >= connCount {
+				a.ShowAlert(fmt.Sprintf("%s Highlight a saved connection first.", iconInfo), "dashboard")
+				return
+			}
+			connection := a.store.Connections[index]
+			a.showBackupCenter()
+			if a.pages.HasPage(pageBackupCenter) {
+				a.showBackupJobFormForConnection(nil, connection.ID)
+			}
+		}
+
 		importSelectedConnection := func() {
 			if connCount == 0 {
 				a.ShowAlert(fmt.Sprintf("%s No saved connections to import into.\n\nPress N to create one.", iconInfo), "dashboard")
@@ -150,6 +167,13 @@ func (a *App) showDashboardWithHealthChecks(forceHealthChecks bool) {
 				a.showSettings()
 				return nil
 			}
+		}
+		if binding, ok := normalizeEvent(event); ok && binding == "ctrl+b" {
+			if _, remapped := a.resolveAction(event); remapped {
+				return event
+			}
+			scheduleSelectedConnection()
+			return nil
 		}
 
 		if event.Modifiers()&(tcell.ModCtrl|tcell.ModAlt|tcell.ModMeta) == 0 {
@@ -192,9 +216,7 @@ func (a *App) showDashboardWithHealthChecks(forceHealthChecks bool) {
 				}
 				return nil
 			case 'b', 'B':
-				if !backToWorkspace() {
-					a.ShowAlert(fmt.Sprintf("%s No workspace open yet.\n\nConnect to a database first.", iconInfo), "dashboard")
-				}
+				a.showBackupCenter()
 				return nil
 			case 'r', 'R':
 				// Reopen dashboard to refresh live availability checks, bypassing manual mode and cache.
@@ -233,8 +255,26 @@ func (a *App) showDashboardWithHealthChecks(forceHealthChecks bool) {
 // confirmDelete shows a confirmation modal before deleting
 func (a *App) confirmDelete(index int) {
 	conn := a.store.Connections[index]
+	backupWarning := ""
+	if conn.ID != "" {
+		if backupStore, err := a.ensureBackupStore(); err != nil {
+			backupWarning = fmt.Sprintf("\n\n[yellow]Backup references could not be checked:[-] %s", tview.Escape(err.Error()))
+		} else if jobs, err := backupStore.ListJobs(context.Background()); err != nil {
+			backupWarning = fmt.Sprintf("\n\n[yellow]Backup references could not be checked:[-] %s", tview.Escape(err.Error()))
+		} else {
+			count := 0
+			for _, job := range jobs {
+				if job.ConnectionID == conn.ID {
+					count++
+				}
+			}
+			if count > 0 {
+				backupWarning = fmt.Sprintf("\n\n[yellow]%d backup job(s) reference this connection.[-] They will remain in Backup Center but cannot run until edited or deleted.", count)
+			}
+		}
+	}
 	modal := tview.NewModal().
-		SetText(fmt.Sprintf("%s Delete [yellow]\"%s\"[-] (%s)?\n\nThis cannot be undone.", iconWarn, conn.Name, conn.TypeLabel())).
+		SetText(fmt.Sprintf("%s Delete [yellow]\"%s\"[-] (%s)?%s\n\nThis cannot be undone.", iconWarn, tview.Escape(conn.Name), conn.TypeLabel(), backupWarning)).
 		AddButtons([]string{"  Delete  ", "  Cancel  "}).
 		SetDoneFunc(func(buttonIndex int, buttonLabel string) {
 			if buttonIndex == 0 {
@@ -474,29 +514,29 @@ func dashboardFooterText(hasConnections, hasWorkspace bool, width int, paletteSh
 	if paletteShortcut == "" {
 		paletteShortcut = "Ctrl+P"
 	}
-	minimal := "  [yellow]N[-] New  │  [yellow]G[-] Settings  │  [#cba6f7]Q[-] Quit"
+	minimal := "  [yellow]N[-] New  │  [green]B[-] Backups  │  [#cba6f7]Q[-] Quit"
 	if hasConnections {
-		short := fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [yellow]N[-] New  │  [yellow]G[-] Settings  │  [#cba6f7]Q[-] Quit", iconConnect)
+		short := fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [green]Ctrl+B[-] Schedule  │  [green]B[-] Backups  │  [#cba6f7]Q[-] Quit", iconConnect)
 		if hasWorkspace {
-			short = fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [yellow]G[-] Settings  │  [yellow]B/Esc[-] Back %s", iconConnect, iconBack)
-			medium := fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [yellow]I[-] Import  │  [yellow]G[-] Settings  │  [yellow]B/Esc[-] Back %s", iconConnect, iconBack)
-			full := fmt.Sprintf("  [green]Enter[-] Connect %s  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [yellow]I[-] Import  │  [#94e2d5]S[-] Services %s  │  [yellow]R[-] Recheck %s  │  [yellow]%s[-] Palette  │  [yellow]G[-] Settings  │  [yellow]B/Esc[-] Back %s  │  [#cba6f7]Q[-] Quit",
+			short = fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [green]Ctrl+B[-] Schedule  │  [green]B[-] Center  │  [yellow]W/Esc[-] Back %s", iconConnect, iconBack)
+			medium := fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [yellow]N[-] New  │  [green]Ctrl+B[-] Schedule  │  [green]B[-] Center  │  [yellow]W/Esc[-] Back %s", iconConnect, iconBack)
+			full := fmt.Sprintf("  [green]Enter[-] Connect %s  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [yellow]I[-] Import  │  [green]Ctrl+B[-] Schedule selected  │  [green]B[-] Backup Center  │  [#94e2d5]S[-] Services %s  │  [yellow]R[-] Recheck %s  │  [yellow]%s[-] Palette  │  [yellow]G[-] Settings  │  [yellow]W/Esc[-] Back %s  │  [#cba6f7]Q[-] Quit",
 				iconConnect, iconServices, iconRefresh, paletteShortcut, iconBack)
 			return firstDashboardFooterThatFits(width, full, medium, short, minimal)
 		}
-		medium := fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [yellow]I[-] Import  │  [yellow]G[-] Settings  │  [teal]H[-] Help %s", iconConnect, iconHelp)
-		full := fmt.Sprintf("  [green]Enter[-] Connect %s  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [yellow]I[-] Import  │  [#94e2d5]S[-] Services %s  │  [yellow]R[-] Recheck %s  │  [yellow]%s[-] Palette  │  [yellow]G[-] Settings  │  [teal]H[-] Help %s  │  [#cba6f7]Q[-] Quit",
+		medium := fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [green]Ctrl+B[-] Schedule  │  [green]B[-] Center  │  [yellow]G[-] Settings  │  [teal]H[-] Help %s", iconConnect, iconHelp)
+		full := fmt.Sprintf("  [green]Enter[-] Connect %s  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [yellow]I[-] Import  │  [green]Ctrl+B[-] Schedule selected  │  [green]B[-] Backup Center  │  [#94e2d5]S[-] Services %s  │  [yellow]R[-] Recheck %s  │  [yellow]%s[-] Palette  │  [yellow]G[-] Settings  │  [teal]H[-] Help %s  │  [#cba6f7]Q[-] Quit",
 			iconConnect, iconServices, iconRefresh, paletteShortcut, iconHelp)
 		return firstDashboardFooterThatFits(width, full, medium, short, minimal)
 	}
 
 	if hasWorkspace {
-		short := fmt.Sprintf("  [yellow]N[-] New  │  [yellow]G[-] Settings  │  [yellow]B/Esc[-] Back %s  │  [#cba6f7]Q[-] Quit", iconBack)
-		full := fmt.Sprintf("  [yellow]N[-] New Connection  │  [#94e2d5]S[-] Services %s  │  [yellow]%s[-] Palette  │  [yellow]G[-] Settings  │  [yellow]B/Esc[-] Back %s  │  [#cba6f7]Q[-] Quit", iconServices, paletteShortcut, iconBack)
+		short := fmt.Sprintf("  [yellow]N[-] New  │  [green]B[-] Backups  │  [yellow]W/Esc[-] Back %s  │  [#cba6f7]Q[-] Quit", iconBack)
+		full := fmt.Sprintf("  [yellow]N[-] New Connection  │  [green]B[-] Backups  │  [#94e2d5]S[-] Services %s  │  [yellow]%s[-] Palette  │  [yellow]G[-] Settings  │  [yellow]W/Esc[-] Back %s  │  [#cba6f7]Q[-] Quit", iconServices, paletteShortcut, iconBack)
 		return firstDashboardFooterThatFits(width, full, short, minimal)
 	}
-	short := fmt.Sprintf("  [yellow]N[-] New  │  [yellow]G[-] Settings  │  [teal]H[-] Help %s  │  [#cba6f7]Q[-] Quit", iconHelp)
-	full := fmt.Sprintf("  [yellow]N[-] New Connection  │  [#94e2d5]S[-] Services %s  │  [yellow]%s[-] Palette  │  [yellow]G[-] Settings  │  [teal]H[-] Help %s  │  [#cba6f7]Q[-] Quit", iconServices, paletteShortcut, iconHelp)
+	short := fmt.Sprintf("  [yellow]N[-] New  │  [green]B[-] Backups  │  [teal]H[-] Help %s  │  [#cba6f7]Q[-] Quit", iconHelp)
+	full := fmt.Sprintf("  [yellow]N[-] New Connection  │  [green]B[-] Backups  │  [#94e2d5]S[-] Services %s  │  [yellow]%s[-] Palette  │  [yellow]G[-] Settings  │  [teal]H[-] Help %s  │  [#cba6f7]Q[-] Quit", iconServices, paletteShortcut, iconHelp)
 	return firstDashboardFooterThatFits(width, full, short, minimal)
 }
 

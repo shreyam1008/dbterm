@@ -15,10 +15,10 @@ jobs:
     name: Test, Vet & Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
@@ -35,3 +35,45 @@ jobs:
 
       - name: Build
         run: go build ./...
+
+  cross-build:
+    name: Compile ${{ matrix.goos }}/${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            output: dbterm-linux-amd64
+          - goos: linux
+            goarch: arm64
+            output: dbterm-linux-arm64
+          - goos: darwin
+            goarch: amd64
+            output: dbterm-darwin-amd64
+          - goos: darwin
+            goarch: arm64
+            output: dbterm-darwin-arm64
+          - goos: windows
+            goarch: amd64
+            output: dbterm-windows-amd64.exe
+          - goos: windows
+            goarch: arm64
+            output: dbterm-windows-arm64.exe
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Compile
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: go build -trimpath -o "$RUNNER_TEMP/${{ matrix.output }}" .

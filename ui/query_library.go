@@ -12,6 +12,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	"github.com/shreyam1008/dbterm/config"
+	"github.com/shreyam1008/dbterm/internal/appdirs"
 )
 
 const (
@@ -44,7 +45,11 @@ func (a *App) recordQueryHistoryForConnection(connectionKey, query string) {
 
 func (a *App) showHistoryModal() {
 	if a.historyMgr == nil {
-		a.ShowAlert(fmt.Sprintf("%s Query history is unavailable.\n\nCheck permissions for ~/.config/dbterm and restart dbterm.", iconWarn), "main")
+		configLocation := "the OS-native dbterm config directory"
+		if path, err := appdirs.ConfigDir(); err == nil {
+			configLocation = path
+		}
+		a.ShowAlert(fmt.Sprintf("%s Query history is unavailable.\n\nCheck permissions for %s and restart dbterm.", iconWarn, configLocation), "main")
 		return
 	}
 

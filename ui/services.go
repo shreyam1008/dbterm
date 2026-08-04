@@ -672,8 +672,9 @@ func (a *App) runServiceCmdWithSudo(action string, info *serviceInfo, password s
 }
 
 type loadingModalOptions struct {
-	cancelText string
-	onCancel   func()
+	cancelText  string
+	onCancel    func()
+	waitForDone bool
 }
 
 type loadingReturnState struct {
@@ -687,6 +688,17 @@ func withLoadingCancel(cancelText string, onCancel func()) loadingModalOption {
 	return func(opts *loadingModalOptions) {
 		opts.cancelText = cancelText
 		opts.onCancel = onCancel
+	}
+}
+
+// withLoadingCancelOutcome keeps the loader visible after a cancel request so
+// the worker can report whether it stopped before or after its durable commit.
+// Use it for operations such as backups where that distinction matters.
+func withLoadingCancelOutcome(cancelText string, onCancel func()) loadingModalOption {
+	return func(opts *loadingModalOptions) {
+		opts.cancelText = cancelText
+		opts.onCancel = onCancel
+		opts.waitForDone = true
 	}
 }
 
@@ -723,7 +735,7 @@ func (a *App) showLoadingModal(message string, options ...loadingModalOption) ui
 		option(&opts)
 	}
 
-	modalText := fmt.Sprintf("\n%s %s\n\n%s", iconRefresh, message, opts.cancelText)
+	modalText := fmt.Sprintf("\n%s %s\n\n%s", iconRefresh, tview.Escape(message), tview.Escape(opts.cancelText))
 	modal := tview.NewModal().
 		SetText(modalText).
 		SetBackgroundColor(bg).
@@ -731,11 +743,19 @@ func (a *App) showLoadingModal(message string, options ...loadingModalOption) ui
 
 	if opts.onCancel != nil {
 		cancel := opts.onCancel
+		cancelRequested := false
 		modal.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-			if event.Key() == tcell.KeyEscape {
-				if a.finishLoadingModal(token) {
-					a.updateStatusBar("[yellow]Operation canceled.[-]", 0)
-					cancel()
+			if event.Key() == tcell.KeyEscape || event.Key() == tcell.KeyCtrlC {
+				if !cancelRequested {
+					cancelRequested = true
+					if opts.waitForDone {
+						modal.SetText(fmt.Sprintf("\n%s Cancel requested\n\nWaiting for the current step to reach a safe stopping point.\n\nThe final outcome will appear here.", iconWarn))
+						a.updateStatusBar("[yellow]Cancel requested; waiting for a safe stopping point.[-]", 0)
+						cancel()
+					} else if a.finishLoadingModal(token) {
+						a.updateStatusBar("[yellow]Operation canceled.[-]", 0)
+						cancel()
+					}
 				}
 				return nil
 			}

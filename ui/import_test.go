@@ -117,20 +117,51 @@ func TestResolveImportSQLPath(t *testing.T) {
 	}
 }
 
-func TestIsPostgresArchiveDump(t *testing.T) {
-	tests := map[string]bool{
-		"/tmp/app.dump":    true,
-		"/tmp/app.backup":  true,
-		"/tmp/app.pgdump":  true,
-		"/tmp/app.sql":     false,
-		"/tmp/app.tar.gz":  false,
-		"  /tmp/app.dump ": true,
+func TestIsPostgresArchiveDumpUsesContent(t *testing.T) {
+	tmp := t.TempDir()
+	archiveWithSQLName := filepath.Join(tmp, "archive.sql")
+	if err := os.WriteFile(archiveWithSQLName, []byte("PGDMP\x01\x0f\x00"), 0o600); err != nil {
+		t.Fatalf("write PostgreSQL archive fixture: %v", err)
+	}
+	got, err := isPostgresArchiveDump(archiveWithSQLName)
+	if err != nil {
+		t.Fatalf("isPostgresArchiveDump(archive) error = %v", err)
+	}
+	if !got {
+		t.Fatal("PostgreSQL archive content should be detected regardless of .sql extension")
 	}
 
-	for path, want := range tests {
-		if got := isPostgresArchiveDump(path); got != want {
-			t.Fatalf("isPostgresArchiveDump(%q) = %v, want %v", path, got, want)
+	plainSQLWithDumpName := filepath.Join(tmp, "plain.dump")
+	plainSQL := "--\n-- PostgreSQL database dump\n--\nCREATE TABLE widgets (id integer);\n"
+	if err := os.WriteFile(plainSQLWithDumpName, []byte(plainSQL), 0o600); err != nil {
+		t.Fatalf("write PostgreSQL SQL fixture: %v", err)
+	}
+	got, err = isPostgresArchiveDump(plainSQLWithDumpName)
+	if err != nil {
+		t.Fatalf("isPostgresArchiveDump(SQL) error = %v", err)
+	}
+	if got {
+		t.Fatal("plain SQL must not be treated as an archive merely because it uses .dump")
+	}
+
+	if _, err := isPostgresArchiveDump(filepath.Join(tmp, "missing.dump")); err == nil {
+		t.Fatal("missing import file should return an inspection error")
+	}
+}
+
+func TestPostgresArchiveImportArgsNeverCleanImplicitly(t *testing.T) {
+	cfg := &config.ConnectionConfig{
+		Type: config.PostgreSQL, Host: "localhost", Port: "5432", User: "postgres", Database: "appdb",
+	}
+	args := postgresArchiveImportArgs(cfg, "/tmp/app.dump", true)
+	joined := " " + strings.Join(args, " ") + " "
+	for _, forbidden := range []string{" --clean ", " --if-exists "} {
+		if strings.Contains(joined, forbidden) {
+			t.Fatalf("archive import arguments contain destructive flag %q: %v", strings.TrimSpace(forbidden), args)
 		}
+	}
+	if !strings.Contains(joined, " --exit-on-error ") {
+		t.Fatalf("archive import arguments should retain stop-on-error: %v", args)
 	}
 }
 

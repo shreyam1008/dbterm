@@ -5,7 +5,7 @@ const title = "dbterm vs DBeaver & Terminal SQL Clients (2026)";
 const description =
   "Compare dbterm with Harlequin, rainfrog, LazySQL, sqlit, Gobang, and DBeaver using verified official documentation for databases, workflows, installs, and licensing.";
 const keywords =
-  "dbterm vs harlequin, dbterm vs rainfrog, dbterm vs lazysql, terminal SQL client comparison, database TUI comparison, sqlit, gobang, DBeaver alternative";
+  "dbterm vs harlequin, dbterm vs rainfrog, dbterm vs lazysql, terminal SQL client comparison, database backup scheduler, database TUI comparison, sqlit, gobang, DBeaver alternative";
 
 const baseUrl = import.meta.env.BASE_URL;
 const withBase = (path: string) => {
@@ -22,9 +22,9 @@ const products = [
     name: "dbterm",
     href: "https://github.com/shreyam1008/dbterm",
     surface: "Terminal TUI · Go",
-    coverage: "PostgreSQL, MySQL, SQLite, Turso (LibSQL), and Cloudflare D1.",
+    coverage: "Query and backup: PostgreSQL, MySQL, SQLite, Turso (LibSQL), and Cloudflare D1. Guarded restore: PostgreSQL, MySQL/MariaDB, and local SQLite.",
     strengths:
-      "Saved connections; fuzzy command, object, and recent-query palette; foreign-key navigation; typed result filters; scoped CSV export; PostgreSQL/MySQL service, backup, and import flows.",
+      "Saved connections; fuzzy command/object palette; foreign-key navigation; typed filters; scoped CSV export; instant and OS-managed scheduled backups with compression, age encryption, retention, inspection, and guarded restore.",
     delivery:
       "Single release binary. Linux, macOS, and Windows builds for AMD64 and ARM64, plus Debian packages.",
     maturity: null,
@@ -127,7 +127,7 @@ const bestFits = [
   {
     name: "dbterm",
     label: "Operations-first terminal workflow",
-    body: "A strong fit when you want one downloadable binary for five focused targets, fast object navigation, and built-in PostgreSQL/MySQL backup, import, and service workflows."
+    body: "A strong fit when you want one downloadable binary for five focused targets, fast object navigation, and a current-user backup agent for compressed, encrypted, retained database artifacts."
   },
   {
     name: "Harlequin",

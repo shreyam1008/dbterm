@@ -198,3 +198,19 @@ func TestCommandPaletteDefaultShortcutResolvesCtrlP(t *testing.T) {
 		t.Fatalf("Resolve(Ctrl+P) = (%q, %v), want (%q, true)", action, ok, actionCommandPalette)
 	}
 }
+
+func TestBuildCommandPaletteItemsIncludesSavedConnectionBackupShortcut(t *testing.T) {
+	app := &App{store: &config.Store{Connections: []config.ConnectionConfig{{
+		ID: "conn-1", Name: "production", Type: config.PostgreSQL,
+	}}}}
+	items := app.buildCommandPaletteItems()
+	for _, item := range items {
+		if item.kind == commandPaletteBackupJob && item.objectName == "conn-1" {
+			if item.shortcut != "Dashboard Ctrl+B" || !strings.Contains(item.title, "production") {
+				t.Fatalf("backup palette item = %#v", item)
+			}
+			return
+		}
+	}
+	t.Fatal("saved connection backup palette item was not added")
+}

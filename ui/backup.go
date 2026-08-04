@@ -1,12 +1,10 @@
 package ui
 
 import (
-	"bufio"
 	"context"
-	"database/sql"
+	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -15,10 +13,18 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	"github.com/shreyam1008/dbterm/config"
+	backupcore "github.com/shreyam1008/dbterm/internal/backup"
+	"github.com/shreyam1008/dbterm/internal/folderpicker"
 	"github.com/shreyam1008/dbterm/utils"
 )
 
 const backupTimestampLayout = "20060102_150405"
+
+const (
+	instantBackupPage             = "backupModal"
+	instantBackupDestinationLabel = "Destination Folder [F2 choose]"
+	instantBackupFilenameLabel    = "File Name"
+)
 
 type backupPlan struct {
 	formatLabel string
@@ -32,6 +38,7 @@ func (a *App) showBackupModal() {
 	if returnPage == "" {
 		returnPage = "main"
 	}
+	returnFocus := a.app.GetFocus()
 
 	if a.db == nil {
 		a.ShowAlert(fmt.Sprintf("%s No active database connection.\n\nConnect to a database first.", iconInfo), returnPage)
@@ -50,60 +57,151 @@ func (a *App) showBackupModal() {
 		return
 	}
 
-	defaultDir, err := os.Getwd()
-	if err != nil || strings.TrimSpace(defaultDir) == "" {
-		defaultDir = "."
+	defaultDir := ""
+	if home, homeErr := os.UserHomeDir(); homeErr == nil && strings.TrimSpace(home) != "" {
+		defaultDir = filepath.Join(home, "dbterm-backups")
+	}
+	if defaultDir == "" {
+		defaultDir, err = os.Getwd()
+		if err != nil || strings.TrimSpace(defaultDir) == "" {
+			defaultDir = "."
+		}
 	}
 
 	defaultFile := defaultBackupFilename(cfg)
+	var closed atomic.Bool
+	var pickerCancel context.CancelFunc
 
 	form := tview.NewForm()
 	form.SetBorder(true).
-		SetTitle(fmt.Sprintf(" %s Database Backup ", iconBackup)).
+		SetTitle(fmt.Sprintf(" %s Instant Backup ", iconBackup)).
 		SetTitleColor(mauve).
 		SetBorderColor(surface1)
 	form.SetBackgroundColor(bg)
 	form.SetFieldBackgroundColor(mantle).
+		SetFieldTextColor(text).
 		SetButtonBackgroundColor(surface1).
 		SetButtonTextColor(green).
 		SetLabelColor(text)
 
-	form.AddInputField("Output Directory", defaultDir, 72, nil, nil)
-	form.AddInputField("File Name", defaultFile, 56, nil, nil)
-	form.AddButton("Backup", func() {
-		outputDir := strings.TrimSpace(formInputValue(form, "Output Directory"))
-		if outputDir == "" {
-			a.ShowAlert(fmt.Sprintf("%s Output directory is required.", iconInfo), "backupModal")
+	addBackupFormSection(form, "SOURCE", "Current workspace; no connection details are changed")
+	form.AddTextView("Connection", tview.Escape(backupTargetLabel(cfg)), 0, 1, true, false)
+	form.AddTextView("Format", fmt.Sprintf("[green]%s[-]  [#a6adc8]%s[-]", tview.Escape(plan.formatLabel), tview.Escape(plan.toolLabel)), 0, 1, true, false)
+	addBackupFormSection(form, "DESTINATION", "Type a folder or use the native chooser")
+	form.AddInputField(instantBackupDestinationLabel, defaultDir, 72, nil, nil)
+	form.AddInputField(instantBackupFilenameLabel, defaultFile, 56, nil, nil)
+	form.AddTextView("Storage", backupDestinationStorageText(defaultDir), 0, 2, true, false)
+	form.AddTextView("Status", "[#a6adc8]Nothing is written until Create Backup is pressed.[-]", 0, 2, true, false)
+
+	destinationField, _ := form.GetFormItemByLabel(instantBackupDestinationLabel).(*tview.InputField)
+	filenameField, _ := form.GetFormItemByLabel(instantBackupFilenameLabel).(*tview.InputField)
+	storageView, _ := form.GetFormItemByLabel("Storage").(*tview.TextView)
+	statusView, _ := form.GetFormItemByLabel("Status").(*tview.TextView)
+	setStatus := func(color, message string) {
+		if statusView == nil {
 			return
 		}
-
-		fileName := strings.TrimSpace(formInputValue(form, "File Name"))
-		if fileName == "" {
-			fileName = defaultFile
-		}
-
-		if filepath.Ext(strings.ToLower(fileName)) == "" {
-			fileName += plan.extension
-		}
-
-		if err := os.MkdirAll(outputDir, 0o755); err != nil {
-			a.ShowAlert(fmt.Sprintf("%s Could not create output directory:\n\n%v", iconWarn, err), "backupModal")
+		statusView.SetText(fmt.Sprintf("[%s]%s[-]", color, tview.Escape(message)))
+	}
+	if destinationField != nil {
+		destinationField.SetChangedFunc(func(string) {
+			if storageView != nil {
+				storageView.SetText("[#a6adc8]Path changed; press F3 to inspect its destination volume.[-]")
+			}
+			setStatus("#a6adc8", "Destination edited. Nothing has been written.")
+		})
+	}
+	if filenameField != nil {
+		filenameField.SetChangedFunc(func(string) {
+			setStatus("#a6adc8", "Filename edited. Nothing has been written.")
+		})
+	}
+	restoreReturnFocus := func() {
+		frontPage, _ := a.pages.GetFrontPage()
+		if frontPage != returnPage {
 			return
 		}
+		a.restoreLoadingReturnState(loadingReturnState{page: returnPage, focus: returnFocus})
+	}
+	closeForm := func() {
+		if closed.Swap(true) {
+			return
+		}
+		if pickerCancel != nil {
+			pickerCancel()
+			pickerCancel = nil
+		}
+		a.pages.RemovePage(instantBackupPage)
+		restoreReturnFocus()
+	}
+	chooseFolder := func() {
+		if closed.Load() {
+			return
+		}
+		initial := strings.TrimSpace(formInputValueByLabel(form, instantBackupDestinationLabel))
+		ctx, cancel := context.WithCancel(context.Background())
+		pickerCancel = cancel
+		token := a.showLoadingModal("Opening the system folder chooser...", withLoadingCancelOutcome("Press Esc to keep the typed destination.", cancel))
+		go func() {
+			selected, chooseErr := folderpicker.Choose(ctx, initial)
+			cancel()
+			a.app.QueueUpdateDraw(func() {
+				pickerCancel = nil
+				if !a.finishLoadingModal(token) || closed.Load() {
+					return
+				}
+				if chooseErr != nil {
+					if errors.Is(chooseErr, folderpicker.ErrCancelled) || errors.Is(chooseErr, context.Canceled) {
+						setStatus("#a6adc8", "Folder selection canceled; the typed destination is unchanged.")
+						return
+					}
+					setStatus("#f9e2af", fmt.Sprintf("Native chooser unavailable: %v. Type or paste a folder path instead.", chooseErr))
+					return
+				}
+				if destinationField != nil {
+					destinationField.SetText(selected)
+				}
+				if storageView != nil {
+					storageView.SetText(backupDestinationStorageText(selected))
+				}
+				setStatus("#a6e3a1", "Destination selected. Review the filename, then create the backup.")
+			})
+		}()
+	}
 
-		outputPath := filepath.Join(outputDir, fileName)
-		a.pages.RemovePage("backupModal")
-		a.runDatabaseBackup(cfg, outputPath, returnPage)
+	form.AddButton("Choose Folder…", chooseFolder)
+	form.AddButton("Create Backup", func() {
+		output, prepareErr := prepareInstantBackupOutput(
+			formInputValueByLabel(form, instantBackupDestinationLabel),
+			formInputValueByLabel(form, instantBackupFilenameLabel),
+			defaultFile,
+			plan.extension,
+		)
+		if prepareErr != nil {
+			setStatus("#f38ba8", prepareErr.Error())
+			return
+		}
+		if closed.Swap(true) {
+			return
+		}
+		a.pages.RemovePage(instantBackupPage)
+		a.runDatabaseBackup(cfg, output.path, returnPage)
 	})
-	form.AddButton("Cancel", func() {
-		a.pages.RemovePage("backupModal")
-		a.pages.ShowPage(returnPage)
-	})
+	form.AddButton("Cancel", closeForm)
 
 	form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyF2 {
+			chooseFolder()
+			return nil
+		}
+		if event.Key() == tcell.KeyF3 {
+			if storageView != nil {
+				storageView.SetText(backupDestinationStorageText(formInputValueByLabel(form, instantBackupDestinationLabel)))
+			}
+			return nil
+		}
 		if event.Key() == tcell.KeyEscape {
-			a.pages.RemovePage("backupModal")
-			a.pages.ShowPage(returnPage)
+			closeForm()
 			return nil
 		}
 		return event
@@ -113,26 +211,73 @@ func (a *App) showBackupModal() {
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignCenter)
 	footer.SetBackgroundColor(crust)
-	footer.SetText(fmt.Sprintf(
-		" [#a6adc8]%s[-]  │  [green]%s[-]  │  [#a6adc8]%s[-]  │  [yellow]Esc[-] Cancel",
-		backupTargetLabel(cfg),
-		plan.formatLabel,
-		plan.toolLabel,
-	))
+	footer.SetText(" [yellow]Tab / Shift+Tab[-] Move  │  [yellow]F2[-] Choose folder  │  [yellow]F3[-] Refresh disk space  │  [yellow]Esc[-] Cancel\n [#a6adc8]Typed paths remain editable; canceling this form never creates a folder or backup.[-] ")
 
 	container := tview.NewFlex().
 		SetDirection(tview.FlexRow).
 		AddItem(form, 0, 1, true).
-		AddItem(footer, 1, 0, false)
+		AddItem(footer, 2, 0, false)
 
-	modalW, modalH := a.modalSize(62, 96, 11, 15)
+	modalW, modalH := a.modalSize(78, 116, 19, 24)
 	grid := tview.NewGrid().
 		SetColumns(0, modalW, 0).
 		SetRows(0, modalH, 0).
 		AddItem(container, 1, 1, 1, 1, 0, 0, true)
 
-	a.pages.AddPage("backupModal", grid, true, true)
+	a.pages.AddPage(instantBackupPage, grid, true, true)
 	a.app.SetFocus(form)
+}
+
+type instantBackupOutput struct {
+	directory string
+	filename  string
+	path      string
+}
+
+// prepareInstantBackupOutput performs read-only validation. In particular it
+// must not create the destination: closing the form before explicit
+// confirmation should never leave filesystem state behind.
+func prepareInstantBackupOutput(rawDirectory, rawFilename, defaultFilename, extension string) (instantBackupOutput, error) {
+	directory := strings.TrimSpace(rawDirectory)
+	if directory == "" {
+		return instantBackupOutput{}, fmt.Errorf("destination folder is required")
+	}
+	expanded, err := expandHomePath(directory)
+	if err != nil {
+		return instantBackupOutput{}, fmt.Errorf("invalid destination folder: %w", err)
+	}
+	directory, err = filepath.Abs(filepath.Clean(expanded))
+	if err != nil {
+		return instantBackupOutput{}, fmt.Errorf("resolve destination folder: %w", err)
+	}
+	if info, statErr := os.Stat(directory); statErr == nil {
+		if !info.IsDir() {
+			return instantBackupOutput{}, fmt.Errorf("destination is not a folder: %s", directory)
+		}
+	} else if !os.IsNotExist(statErr) {
+		return instantBackupOutput{}, fmt.Errorf("inspect destination folder: %w", statErr)
+	}
+
+	filename := strings.TrimSpace(rawFilename)
+	if filename == "" {
+		filename = strings.TrimSpace(defaultFilename)
+	}
+	if filename == "" {
+		return instantBackupOutput{}, fmt.Errorf("file name is required")
+	}
+	if filename == "." || filename == ".." || filepath.IsAbs(filename) || filepath.VolumeName(filename) != "" || strings.ContainsAny(filename, `/\\`) || filepath.Base(filename) != filename {
+		return instantBackupOutput{}, fmt.Errorf("file name must be a single name without folders")
+	}
+	if filepath.Ext(strings.ToLower(filename)) == "" {
+		filename += extension
+	}
+	outputPath := filepath.Join(directory, filename)
+	if _, statErr := os.Lstat(outputPath); statErr == nil {
+		return instantBackupOutput{}, fmt.Errorf("backup file already exists; choose another name: %s", outputPath)
+	} else if !os.IsNotExist(statErr) {
+		return instantBackupOutput{}, fmt.Errorf("inspect backup output: %w", statErr)
+	}
+	return instantBackupOutput{directory: directory, filename: filename, path: outputPath}, nil
 }
 
 func (a *App) runDatabaseBackup(cfg *config.ConnectionConfig, outputPath, returnPage string) {
@@ -142,21 +287,33 @@ func (a *App) runDatabaseBackup(cfg *config.ConnectionConfig, outputPath, return
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
+	// Instant backups have no hidden wall-clock cutoff. The user can stop them
+	// explicitly, while scheduled jobs retain their configurable timeout.
+	ctx, cancel := context.WithCancel(context.Background())
 	var canceled atomic.Bool
-	loadingToken := a.showLoadingModal(fmt.Sprintf("%s Creating %s...", iconBackup, plan.formatLabel),
-		withLoadingCancel("Press Esc to cancel backup.", func() {
+	const cancelText = "Press Esc to cancel safely; partial output is never published."
+	loadingTitle := fmt.Sprintf("%s Creating %s...", iconBackup, plan.formatLabel)
+	loadingToken := a.showLoadingModal(loadingTitle,
+		withLoadingCancelOutcome(cancelText, func() {
 			canceled.Store(true)
 			cancel()
 		}))
 
 	go func() {
 		defer cancel()
-
-		dumpErr := runDatabaseDump(ctx, cfg, outputPath)
+		started := time.Now()
+		var lastProgress atomic.Value
+		lastProgress.Store(backupcore.ProgressEvent{Phase: "preflight", Message: "preparing the instant backup"})
+		dumpErr := runDatabaseDumpWithProgress(ctx, cfg, outputPath, func(event backupcore.ProgressEvent) {
+			if event.Elapsed <= 0 {
+				event.Elapsed = time.Since(started)
+			}
+			lastProgress.Store(event)
+			a.updateBackupProgress(loadingToken, loadingTitle, event, cancelText)
+		})
 		var infoErr error
 		var fileSize string
-		if dumpErr == nil {
+		if dumpErr == nil && !canceled.Load() {
 			var stat os.FileInfo
 			stat, infoErr = os.Stat(outputPath)
 			if infoErr == nil {
@@ -169,13 +326,18 @@ func (a *App) runDatabaseBackup(cfg *config.ConnectionConfig, outputPath, return
 				return
 			}
 
-			if canceled.Load() {
-				a.ShowAlert(fmt.Sprintf("%s Backup canceled.", iconWarn), returnPage)
+			if canceled.Load() && (dumpErr == nil || errors.Is(dumpErr, context.Canceled)) {
+				message := fmt.Sprintf("%s Backup canceled. No partial artifact was published.", iconWarn)
+				if dumpErr == nil {
+					message = fmt.Sprintf("%s Cancellation arrived after the complete backup was atomically published. The verified artifact was preserved at:\n\n%s", iconWarn, tview.Escape(outputPath))
+				}
+				a.ShowAlert(message, returnPage)
 				return
 			}
 
 			if dumpErr != nil {
-				a.ShowAlert(fmt.Sprintf("%s Backup failed:\n\n%v", iconFail, dumpErr), returnPage)
+				last := lastProgress.Load().(backupcore.ProgressEvent)
+				a.ShowAlert(fmt.Sprintf("%s Backup failed:\n\n%s\n\nLast phase: %s — %s", iconFail, tview.Escape(dumpErr.Error()), tview.Escape(nonEmptyOr(last.Phase, "unknown")), tview.Escape(nonEmptyOr(last.Message, "no progress detail"))), returnPage)
 				return
 			}
 
@@ -183,376 +345,29 @@ func (a *App) runDatabaseBackup(cfg *config.ConnectionConfig, outputPath, return
 			if infoErr == nil {
 				sizeLine = fmt.Sprintf("\nSize: %s", fileSize)
 			}
-			a.ShowAlert(fmt.Sprintf("%s Backup created\n\nType: %s\nFormat: %s\nPath: %s%s", iconSuccess, cfg.TypeLabel(), plan.formatLabel, outputPath, sizeLine), returnPage)
+			a.ShowAlert(fmt.Sprintf("%s Backup created\n\nType: %s\nFormat: %s\nPath: %s%s", iconSuccess, cfg.TypeLabel(), plan.formatLabel, tview.Escape(outputPath), sizeLine), returnPage)
 		})
 	}()
 }
 
 func runDatabaseDump(ctx context.Context, cfg *config.ConnectionConfig, outputPath string) error {
-	switch cfg.Type {
-	case config.PostgreSQL:
-		return runPostgresDump(ctx, cfg, outputPath)
-	case config.MySQL:
-		return runMySQLDump(ctx, cfg, outputPath)
-	case config.SQLite:
-		return runSQLiteSnapshot(ctx, cfg, outputPath)
-	case config.Turso, config.CloudflareD1:
-		return runSQLiteCompatibleDump(ctx, cfg, outputPath)
-	default:
-		return fmt.Errorf("backup is not supported for %s", cfg.TypeLabel())
-	}
+	return runDatabaseDumpWithProgress(ctx, cfg, outputPath, nil)
 }
 
-func runPostgresDump(ctx context.Context, cfg *config.ConnectionConfig, outputPath string) error {
-	if _, err := exec.LookPath("pg_dump"); err != nil {
-		return fmt.Errorf("pg_dump not found in PATH")
-	}
-
-	args := []string{
-		"--host", nonEmptyOr(cfg.Host, "localhost"),
-		"--port", defaultPortFor(cfg),
-		"--username", cfg.User,
-		"--format=custom",
-		"--encoding=UTF8",
-		"--compress=6",
-		"--no-owner",
-		"--no-privileges",
-		"--file", outputPath,
-		cfg.Database,
-	}
-	if cfg.Password == "" {
-		args = append(args, "--no-password")
-	}
-
-	cmd := exec.CommandContext(ctx, "pg_dump", args...)
-	cmd.Env = append(os.Environ(), "LC_ALL=C")
-	if cfg.Password != "" {
-		cmd.Env = append(cmd.Env, "PGPASSWORD="+cfg.Password)
-	}
-	if cfg.SSLMode != "" {
-		cmd.Env = append(cmd.Env, "PGSSLMODE="+cfg.SSLMode)
-	}
-
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
-			return fmt.Errorf("pg_dump timed out")
-		}
-		msg := strings.TrimSpace(string(out))
-		if msg == "" {
-			msg = err.Error()
-		}
-		return fmt.Errorf("pg_dump failed: %s", msg)
-	}
-
-	return nil
-}
-
-func runMySQLDump(ctx context.Context, cfg *config.ConnectionConfig, outputPath string) error {
-	if _, err := exec.LookPath("mysqldump"); err != nil {
-		return fmt.Errorf("mysqldump not found in PATH")
-	}
-
-	args := []string{
-		"--single-transaction",
-		"--quick",
-		"--routines",
-		"--events",
-		"--triggers",
-		fmt.Sprintf("--host=%s", nonEmptyOr(cfg.Host, "localhost")),
-		fmt.Sprintf("--port=%s", defaultPortFor(cfg)),
-		fmt.Sprintf("--user=%s", cfg.User),
-		fmt.Sprintf("--result-file=%s", outputPath),
-		"--databases", cfg.Database,
-	}
-
-	cmd := exec.CommandContext(ctx, "mysqldump", args...)
-	cmd.Env = append(os.Environ(), "LC_ALL=C")
-	if cfg.Password != "" {
-		cmd.Env = append(cmd.Env, "MYSQL_PWD="+cfg.Password)
-	}
-
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
-			return fmt.Errorf("mysqldump timed out")
-		}
-		msg := strings.TrimSpace(string(out))
-		if msg == "" {
-			msg = err.Error()
-		}
-		return fmt.Errorf("mysqldump failed: %s", msg)
-	}
-
-	return nil
-}
-
-func runSQLiteSnapshot(ctx context.Context, cfg *config.ConnectionConfig, outputPath string) error {
-	if strings.TrimSpace(cfg.FilePath) == "" {
-		return fmt.Errorf("sqlite backup requires a file-backed database")
-	}
-	if _, err := os.Stat(outputPath); err == nil {
-		return fmt.Errorf("backup file already exists: %s", outputPath)
-	}
-
-	db, err := utils.ConnectDB(cfg)
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-
-	_, err = db.ExecContext(ctx, fmt.Sprintf("VACUUM INTO %s", sqliteStringLiteral(outputPath)))
-	if err != nil {
-		return fmt.Errorf("sqlite backup failed: %w", err)
-	}
-	return nil
-}
-
-func runSQLiteCompatibleDump(ctx context.Context, cfg *config.ConnectionConfig, outputPath string) error {
-	db, err := utils.ConnectDB(cfg)
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-
-	return writeSQLiteCompatibleDump(ctx, db, cfg, outputPath)
-}
-
-func writeSQLiteCompatibleDump(ctx context.Context, db *sql.DB, cfg *config.ConnectionConfig, outputPath string) error {
-	file, err := os.Create(outputPath)
-	if err != nil {
-		return fmt.Errorf("could not create backup file %s: %w", outputPath, err)
-	}
-	defer file.Close()
-
-	writer := bufio.NewWriter(file)
-	defer writer.Flush()
-
-	if err := writeDumpLine(writer, "PRAGMA foreign_keys=OFF;"); err != nil {
-		return err
-	}
-	if err := writeDumpLine(writer, "BEGIN TRANSACTION;"); err != nil {
-		return err
-	}
-
-	tables, err := sqliteDumpTables(ctx, db)
-	if err != nil {
-		return err
-	}
-	for _, table := range tables {
-		if err := writeDumpLine(writer, table.createSQL+";"); err != nil {
-			return err
-		}
-	}
-	for _, table := range tables {
-		if err := sqliteDumpTableData(ctx, db, writer, cfg.Type, table); err != nil {
-			return err
-		}
-	}
-
-	extraObjects, err := sqliteDumpExtraObjects(ctx, db)
-	if err != nil {
-		return err
-	}
-	for _, ddl := range extraObjects {
-		if err := writeDumpLine(writer, ddl+";"); err != nil {
-			return err
-		}
-	}
-
-	if err := writeDumpLine(writer, "COMMIT;"); err != nil {
-		return err
-	}
-
-	return writer.Flush()
-}
-
-type sqliteDumpTable struct {
-	name      string
-	createSQL string
-	columns   []string
-}
-
-func sqliteDumpTables(ctx context.Context, db *sql.DB) ([]sqliteDumpTable, error) {
-	rows, err := db.QueryContext(ctx, `SELECT name, sql
-FROM sqlite_master
-WHERE type = 'table'
-  AND name NOT LIKE 'sqlite_%'
-  AND sql IS NOT NULL
-ORDER BY name`)
-	if err != nil {
-		return nil, fmt.Errorf("could not read sqlite tables: %w", err)
-	}
-	defer rows.Close()
-
-	var tables []sqliteDumpTable
-	for rows.Next() {
-		var name, createSQL string
-		if err := rows.Scan(&name, &createSQL); err != nil {
-			return nil, fmt.Errorf("could not scan sqlite table metadata: %w", err)
-		}
-
-		columns, err := sqliteDumpColumns(ctx, db, name)
-		if err != nil {
-			return nil, err
-		}
-		tables = append(tables, sqliteDumpTable{name: name, createSQL: createSQL, columns: columns})
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("could not iterate sqlite tables: %w", err)
-	}
-	return tables, nil
-}
-
-func sqliteDumpColumns(ctx context.Context, db *sql.DB, tableName string) ([]string, error) {
-	rows, err := db.QueryContext(ctx, fmt.Sprintf("PRAGMA table_info(%s)", quoteIdentifier(config.SQLite, tableName)))
-	if err != nil {
-		return nil, fmt.Errorf("could not read columns for %s: %w", tableName, err)
-	}
-	defer rows.Close()
-
-	var columns []string
-	for rows.Next() {
-		var cid, notNull, pk int
-		var name, dataType string
-		var defaultValue sql.NullString
-		if err := rows.Scan(&cid, &name, &dataType, &notNull, &defaultValue, &pk); err != nil {
-			return nil, fmt.Errorf("could not scan column metadata for %s: %w", tableName, err)
-		}
-		columns = append(columns, name)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("could not iterate columns for %s: %w", tableName, err)
-	}
-	return columns, nil
-}
-
-func sqliteDumpTableData(ctx context.Context, db *sql.DB, writer *bufio.Writer, dbType config.DBType, table sqliteDumpTable) error {
-	if len(table.columns) == 0 {
-		return nil
-	}
-
-	selectParts := make([]string, 0, len(table.columns))
-	insertColumns := make([]string, 0, len(table.columns))
-	for _, column := range table.columns {
-		quotedColumn := quoteIdentifier(dbType, column)
-		selectParts = append(selectParts, fmt.Sprintf("quote(%s)", quotedColumn))
-		insertColumns = append(insertColumns, quoteIdentifier(dbType, column))
-	}
-
-	query := fmt.Sprintf("SELECT %s FROM %s", strings.Join(selectParts, ", "), quoteIdentifier(dbType, table.name))
-	rows, err := db.QueryContext(ctx, query)
-	if err != nil {
-		return fmt.Errorf("could not dump rows for %s: %w", table.name, err)
-	}
-	defer rows.Close()
-
-	values := make([]sql.NullString, len(table.columns))
-	scanTargets := make([]any, len(table.columns))
-	for i := range values {
-		scanTargets[i] = &values[i]
-	}
-
-	insertPrefix := fmt.Sprintf("INSERT INTO %s (%s) VALUES(", quoteIdentifier(dbType, table.name), strings.Join(insertColumns, ", "))
-	for rows.Next() {
-		if err := rows.Scan(scanTargets...); err != nil {
-			return fmt.Errorf("could not scan dump row for %s: %w", table.name, err)
-		}
-
-		literals := make([]string, len(values))
-		for i, value := range values {
-			if value.Valid {
-				literals[i] = value.String
-				continue
-			}
-			literals[i] = "NULL"
-		}
-		if err := writeDumpLine(writer, insertPrefix+strings.Join(literals, ", ")+");"); err != nil {
-			return err
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("could not iterate rows for %s: %w", table.name, err)
-	}
-	return nil
-}
-
-func sqliteDumpExtraObjects(ctx context.Context, db *sql.DB) ([]string, error) {
-	rows, err := db.QueryContext(ctx, `SELECT sql
-FROM sqlite_master
-WHERE type IN ('view', 'index', 'trigger')
-  AND name NOT LIKE 'sqlite_%'
-  AND sql IS NOT NULL
-ORDER BY CASE type
-  WHEN 'view' THEN 0
-  WHEN 'index' THEN 1
-  WHEN 'trigger' THEN 2
-  ELSE 3
-END, name`)
-	if err != nil {
-		return nil, fmt.Errorf("could not read sqlite objects: %w", err)
-	}
-	defer rows.Close()
-
-	var objects []string
-	for rows.Next() {
-		var ddl string
-		if err := rows.Scan(&ddl); err != nil {
-			return nil, fmt.Errorf("could not scan sqlite object definition: %w", err)
-		}
-		objects = append(objects, ddl)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("could not iterate sqlite objects: %w", err)
-	}
-	return objects, nil
-}
-
-func writeDumpLine(writer *bufio.Writer, line string) error {
-	if writer == nil {
-		return fmt.Errorf("dump writer is not available")
-	}
-	if _, err := writer.WriteString(line + "\n"); err != nil {
-		return fmt.Errorf("could not write dump output: %w", err)
-	}
-	return nil
+func runDatabaseDumpWithProgress(ctx context.Context, cfg *config.ConnectionConfig, outputPath string, progress backupcore.ProgressFunc) error {
+	return backupcore.CreateNativeBackup(ctx, cfg, outputPath, backupcore.NativeOptions{PostgresCompression: 6, Progress: progress})
 }
 
 func backupPlanFor(cfg *config.ConnectionConfig) (backupPlan, error) {
-	switch cfg.Type {
-	case config.PostgreSQL:
-		return backupPlan{
-			formatLabel: "pg_dump custom archive (.dump)",
-			toolLabel:   "pg_dump / pg_restore",
-			extension:   ".dump",
-		}, nil
-	case config.MySQL:
-		return backupPlan{
-			formatLabel: "mysqldump SQL (.sql)",
-			toolLabel:   "mysqldump / mysql",
-			extension:   ".sql",
-		}, nil
-	case config.SQLite:
-		return backupPlan{
-			formatLabel: "SQLite snapshot (.sqlite3)",
-			toolLabel:   "VACUUM INTO",
-			extension:   ".sqlite3",
-		}, nil
-	case config.Turso:
-		return backupPlan{
-			formatLabel: "SQLite-compatible SQL dump (.sql)",
-			toolLabel:   "dbterm logical exporter",
-			extension:   ".sql",
-		}, nil
-	case config.CloudflareD1:
-		return backupPlan{
-			formatLabel: "SQLite-compatible SQL dump (.sql)",
-			toolLabel:   "dbterm logical exporter",
-			extension:   ".sql",
-		}, nil
-	default:
-		return backupPlan{}, fmt.Errorf("backup is not supported for %s", cfg.TypeLabel())
+	plan, err := backupcore.PlanFor(cfg)
+	if err != nil {
+		return backupPlan{}, err
 	}
+	return backupPlan{
+		formatLabel: plan.FormatLabel + " (" + plan.Extension + ")",
+		toolLabel:   plan.ToolLabel,
+		extension:   plan.Extension,
+	}, nil
 }
 
 func (a *App) currentConnectionConfig() *config.ConnectionConfig {
@@ -669,8 +484,4 @@ func nonEmptyOr(value, fallback string) string {
 		return fallback
 	}
 	return value
-}
-
-func sqliteStringLiteral(value string) string {
-	return "'" + strings.ReplaceAll(value, "'", "''") + "'"
 }

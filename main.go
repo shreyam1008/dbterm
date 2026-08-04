@@ -20,6 +20,11 @@ func main() {
 			printVersion()
 		case arg == "--info" || arg == "-i" || arg == "info":
 			printInfo()
+		case arg == "backup":
+			if err := runBackupCommand(os.Args[2:]); err != nil {
+				fmt.Fprintf(os.Stderr, "\n  \033[31mBackup command failed:\033[0m %s\n\n", err)
+				os.Exit(1)
+			}
 		case arg == "--update" || arg == "-u" || arg == "update":
 			requestedVersion := ""
 			if len(os.Args) > 2 {
@@ -78,11 +83,12 @@ func printHelp() {
     dbterm --help             Show this help
     dbterm --version          Show version info
     dbterm --info             Config, storage & system info
+    dbterm backup --help      Backup jobs, agent, inspection & restore
     dbterm --update           Update to latest release
     dbterm --update 0.3.4     Update to a specific version
     dbterm --uninstall        Uninstall dbterm binary
     dbterm --uninstall --yes  Uninstall without confirmation prompt
-    dbterm --uninstall --purge Uninstall binary + saved connections
+    dbterm --uninstall --purge Uninstall binary + dbterm-owned data
 
   ` + "\033[33m" + `DATABASES` + "\033[0m" + `
     ⬢ PostgreSQL    ⬡ MySQL    ◆ SQLite    ◇ Turso    ◇ Cloudflare D1
@@ -101,7 +107,9 @@ func printHelp() {
     F / Bksp   Follow foreign key / return    Alt+E  Scoped CSV export
     PgUp/PgDn  Previous/next page      Home/End  First/last page
     +/-        Selected column         Ctrl+/-  All-column zoom
-    Alt+/-/0   Preview rows            Alt+H  Help     Alt+D  Dashboard
+    Alt+/-/0   Preview rows            Alt+B  Instant backup
+    Alt+K      Backup Center           Alt+H  Help
+    Alt+D      Dashboard
     Ctrl+C     Cancel active work or quit
 
   ` + "\033[38;2;108;112;134m" + `Docs: https://shreyam1008.github.io/dbterm/

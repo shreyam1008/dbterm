@@ -7,9 +7,10 @@
 # 3) Version must be SemVer without "v" (example: 0.3.4).
 # 4) Commit and push to main.
 #    The release workflow reads only the first non-comment line and creates that GitHub release.
-# 5) If that tag already exists, the workflow fails (prevents duplicate releases).
+# 5) If that tag already exists, the workflow skips release creation safely.
 #
 # Newest entry first:
+0.6.0|Mahanadi|A native scheduled backup agent with guarded restore, content detection, compression, age encryption, retention, and cross-platform service management.
 0.5.0|Brahmaputra|A fuzzy command palette, composable typed filters, foreign-key navigation, scoped full-value CSV export, and cancellable race-safe data workflows.
 0.4.5|Yamuna|Faster table navigation, selected-cell copy, clipboard-powered exact column filters, clearer help, and reliable result resizing.
 0.4.4|Godavari|Discover accessible MySQL and PostgreSQL databases from new-connection credentials and select one without typing its name.

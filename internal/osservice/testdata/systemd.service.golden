@@ -1,0 +1,17 @@
+[Unit]
+Description=dbterm backup agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=:"/opt/DB Term/dbterm%%prod" "backup" "agent" "--service-mode" "--config-dir" "/home/test/.config/dbterm" "--state-dir" "/home/test/.local/state/dbterm" "--log-dir" "/var/log/DB Term"
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+UMask=0077
+StandardOutput="append:/var/log/DB Term/dbterm-backup.log"
+StandardError="append:/var/log/DB Term/dbterm-backup-error.log"
+
+[Install]
+WantedBy=default.target

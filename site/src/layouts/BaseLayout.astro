@@ -39,6 +39,7 @@ const normalizedPathname = Astro.url.pathname.endsWith("/")
 const navItems = [
   { label: "Product", href: withBase("/#product"), compact: false },
   { label: "Live demo", href: withBase("/#playground") },
+  { label: "Backups", href: withBase("/backup/") },
   { label: "Guide", href: withBase("/guide/") },
   { label: "Compare", href: withBase("/compare/") },
   { label: "Open source", href: withBase("/open-source/"), compact: false }
@@ -179,7 +180,7 @@ const jsonLdBlocks = Array.isArray(jsonLd) ? jsonLd : jsonLd ? [jsonLd] : [];
       </div>
       <div class="site-container mt-12 flex justify-between gap-4 border-t border-[var(--line)] pt-4 font-mono text-[.68rem] text-[var(--ink-faint)] max-[680px]:flex-col">
         <span>Built in the open.</span>
-        <span>dbterm v0.5.0 · Brahmaputra</span>
+        <span>dbterm v0.6.0 · Mahanadi</span>
       </div>
     </footer>
 
