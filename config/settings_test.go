@@ -7,8 +7,7 @@ import (
 )
 
 func TestLoadSettingsCreatesDefaultsWhenMissing(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	configDir := useTestConfigDir(t)
 
 	settings, err := LoadSettings()
 	if err != nil {
@@ -22,17 +21,15 @@ func TestLoadSettingsCreatesDefaultsWhenMissing(t *testing.T) {
 		t.Fatalf("unexpected default binding for %s: %#v", ActionFocusTables, got)
 	}
 
-	path := filepath.Join(home, ".config", "dbterm", "settings.json")
+	path := filepath.Join(configDir, "settings.json")
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("default settings file not created at %s: %v", path, err)
 	}
 }
 
 func TestLoadSettingsMergesPartialOverrides(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-
-	path := filepath.Join(home, ".config", "dbterm", "settings.json")
+	configDir := useTestConfigDir(t)
+	path := filepath.Join(configDir, "settings.json")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
@@ -63,10 +60,8 @@ func TestLoadSettingsMergesPartialOverrides(t *testing.T) {
 }
 
 func TestLoadSettingsInvalidJSONFallsBackToDefaults(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-
-	path := filepath.Join(home, ".config", "dbterm", "settings.json")
+	configDir := useTestConfigDir(t)
+	path := filepath.Join(configDir, "settings.json")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
@@ -89,8 +84,7 @@ func TestLoadSettingsInvalidJSONFallsBackToDefaults(t *testing.T) {
 }
 
 func TestLoadSettingsIncludesDashboardHealthCheckDefault(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	useTestConfigDir(t)
 
 	settings, err := LoadSettings()
 	if err != nil {
@@ -103,10 +97,8 @@ func TestLoadSettingsIncludesDashboardHealthCheckDefault(t *testing.T) {
 }
 
 func TestLoadSettingsMergesDashboardHealthCheckOverride(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-
-	path := filepath.Join(home, ".config", "dbterm", "settings.json")
+	configDir := useTestConfigDir(t)
+	path := filepath.Join(configDir, "settings.json")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
