@@ -8,26 +8,12 @@ const withBase = (path: string) => {
 
 const views = [
   {
-    id: "command-palette",
-    navTitle: "Command palette",
-    navMeta: "Current · Find anything",
-    kicker: "Current workflow",
-    title: "Every action, one search away",
-    description:
-      "Ctrl+P fuzzy-searches actions, database objects, and recent SQL—with matched letters highlighted and context for every command.",
-    src: withBase("assets/command-palette.png"),
-    alt: "dbterm command palette open over a PostgreSQL results table, showing fuzzy-matched actions and keyboard hints",
-    width: 1306,
-    height: 514,
-  },
-  {
     id: "original-workspace",
-    navTitle: "Original workspace",
-    navMeta: "Historical · Shortcut UI",
-    kicker: "The original",
-    title: "Where the keyboard-first model began",
-    description:
-      "The first dbterm workspace established the shortcut-led query, tables, and results layout. It is part of the product story—preserved here, not discarded.",
+    navTitle: "Earlier workspace",
+    navMeta: "Archive · Preserved",
+    kicker: "Earlier dbterm",
+    title: "The layout that started it",
+    description: "The original shortcut-led Tables, Query, and Results workspace.",
     src: withBase("main_ui.png"),
     alt: "Original dbterm terminal workspace with connection sidebar, SQL editor, table browser, and keyboard shortcut footer",
     width: 1916,
@@ -36,11 +22,10 @@ const views = [
   {
     id: "services",
     navTitle: "Services",
-    navMeta: "Operate · One screen",
-    kicker: "Service control",
-    title: "See the state of every database service",
-    description:
-      "Inspect database services and act without breaking your terminal flow. Operational context stays next to the data work.",
+    navMeta: "MySQL · PostgreSQL",
+    kicker: "Local services",
+    title: "Inspect and control local services",
+    description: "MySQL and PostgreSQL status without leaving dbterm.",
     src: withBase("assets/1.png"),
     alt: "dbterm services screen listing database services and their runtime status",
     width: 1222,
@@ -49,11 +34,10 @@ const views = [
   {
     id: "backups",
     navTitle: "Backups",
-    navMeta: "Protect · Visible progress",
-    kicker: "Backup workflow",
-    title: "Backups without a mystery process",
-    description:
-      "Choose the connection and format, then follow visible progress. Long-running work stays cancellable and understandable.",
+    navMeta: "Database · Destination",
+    kicker: "Backup setup",
+    title: "Choose the backup, then run it",
+    description: "A focused destination and filename step before backup begins.",
     src: withBase("assets/2.png"),
     alt: "dbterm backup interface showing connection and backup format choices",
     width: 1222,
@@ -65,12 +49,11 @@ const views = [
 <section class="product-showcase" id="product" aria-labelledby="showcase-title" data-product-showcase>
   <header class="showcase-heading">
     <div>
-      <p class="showcase-eyebrow">The real product</p>
-      <h2 id="showcase-title">Built in public. Sharpened in use.</h2>
+      <p class="showcase-eyebrow">Actual dbterm screens</p>
+      <h2 id="showcase-title">No mockups.</h2>
     </div>
     <p class="showcase-intro">
-      Four views from dbterm itself—from the original shortcut-led workspace to today’s command
-      palette, service control, and resilient backup flow.
+      The earlier workspace is preserved alongside current service and backup flows.
     </p>
   </header>
 
@@ -146,7 +129,7 @@ const views = [
 
     <canvas class="ripple-output" data-ripple-output aria-hidden="true" hidden></canvas>
     <p class="ripple-hint" data-ripple-hint hidden>
-      <span aria-hidden="true">◉</span> Click the frame. The live interface carries the ripple.
+      <span aria-hidden="true">◉</span> Click the frame.
     </p>
   </div>
 
@@ -173,7 +156,6 @@ const views = [
 <script>
   import {
     createRipple,
-    supportsHtmlInCanvas,
     type RippleInstance,
   } from "../lib/canvasui/Ripple";
 
@@ -312,12 +294,10 @@ const views = [
     const webglAvailable = Boolean(document.createElement("canvas").getContext("webgl2"));
 
     if (motionSafe && dataSafe && deviceSafe && webglAvailable) {
-      native = supportsHtmlInCanvas();
-      if (native) {
-        shellElement.style.height = `${Math.ceil(contentElement.getBoundingClientRect().height)}px`;
-        sourceCanvas.hidden = false;
-        sourceCanvas.append(contentElement);
-      }
+      // Canvas UI's experimental DOM capture currently omits some external images in
+      // Chromium. Keep the real screenshots in semantic DOM and use its shader as a
+      // transparent ripple layer so product evidence is never replaced by black frames.
+      native = false;
       outputCanvas.hidden = false;
 
       ripple = createRipple(
@@ -333,11 +313,12 @@ const views = [
           shine: 0.38,
           trigger: "click",
           interval: 0,
+          captureContent: false,
         },
       );
 
       if (ripple) {
-        root.dataset.ripple = native ? "html-in-canvas" : "overlay";
+        root.dataset.ripple = "overlay";
         if (rippleHint) rippleHint.hidden = false;
         shellObserver = new ResizeObserver(syncShellHeight);
         shellObserver.observe(contentElement);
@@ -768,7 +749,7 @@ const views = [
 
     .showcase-tabs {
       display: grid;
-      grid-template-columns: repeat(4, minmax(10.5rem, 1fr));
+      grid-template-columns: repeat(3, minmax(10.5rem, 1fr));
       overflow-x: auto;
       border-right: 0;
       border-bottom: 1px solid var(--showcase-line);

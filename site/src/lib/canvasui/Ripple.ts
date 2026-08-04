@@ -11,6 +11,8 @@
 export type RippleTrigger = "click" | "hover" | "none";
 
 export interface RippleOptions {
+  /** Capture DOM pixels into the shader. Disable for image-heavy content that the experimental API cannot paint reliably. */
+  captureContent?: boolean;
   /** Height of the waves (0 to 3). */
   amplitude?: number;
   /** How fast the rings travel outward. 1 is normal speed. */
@@ -50,6 +52,7 @@ export interface RippleInstance {
 }
 
 const DEFAULTS: Required<RippleOptions> = {
+  captureContent: true,
   amplitude: 0.5,
   speed: 0.65,
   wavelength: 80,
@@ -195,6 +198,7 @@ export function createRipple(
   const sourceCtx = source.getContext("2d") as ElementImageContext | null;
   const paintable = source as PaintableCanvas;
   const htmlInCanvas = Boolean(
+    config.captureContent &&
     sourceCtx &&
       typeof sourceCtx.drawElementImage === "function" &&
       typeof paintable.requestPaint === "function",

@@ -1,5 +1,9 @@
 ---
 import "../styles/global.css";
+import manropeLatinUrl from "@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2?url";
+import plexMonoLatin400Url from "@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2?url";
+import plexMonoLatin500Url from "@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2?url";
+import plexMonoLatin600Url from "@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-600-normal.woff2?url";
 
 export interface Props {
   title: string;
@@ -76,6 +80,10 @@ const jsonLdBlocks = Array.isArray(jsonLd) ? jsonLd : jsonLd ? [jsonLd] : [];
     <link rel="canonical" href={canonical} />
     <link rel="manifest" href={withBase("/manifest.webmanifest")} />
     <link rel="sitemap" type="application/xml" href={withBase("/sitemap.xml")} />
+    <link rel="preload" href={manropeLatinUrl} as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href={plexMonoLatin400Url} as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href={plexMonoLatin500Url} as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href={plexMonoLatin600Url} as="font" type="font/woff2" crossorigin />
 
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="dbterm" />

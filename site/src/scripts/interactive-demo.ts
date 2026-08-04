@@ -15,20 +15,37 @@ interface QueryResult {
 
 interface ResultFilter {
   column: string;
-  operator: "contains" | "equals" | "starts" | "greater" | "less";
+  operator:
+    | "equals"
+    | "not-equals"
+    | "greater"
+    | "greater-equal"
+    | "less"
+    | "less-equal"
+    | "contains"
+    | "starts"
+    | "is-null"
+    | "is-not-null";
   value: string;
 }
 
 interface HistoryEntry {
   sql: string;
   table: string | null;
+  filters: ResultFilter[];
+  sortColumn: number;
+  sortAscending: boolean;
+  selectedRow: number;
+  selectedColumn: number;
 }
 
 interface PaletteAction {
   id: string;
+  kind: "ACTION" | "TABLE" | "RECENT SQL";
   label: string;
   description: string;
   keywords: string;
+  shortcut?: string;
   run: () => void | Promise<void>;
 }
 
@@ -37,27 +54,30 @@ interface ScoredAction {
   score: number;
 }
 
-const DEFAULT_QUERY = `SELECT
-  u.name AS customer,
-  o.id AS order_id,
-  p.name AS product,
-  o.quantity,
-  printf('$%.2f', o.total) AS total,
-  o.status
-FROM orders AS o
-JOIN users AS u ON u.id = o.user_id
-JOIN products AS p ON p.id = o.product_id
-ORDER BY o.created_at DESC
-LIMIT 8;`;
+const DEFAULT_QUERY = "";
 
 const TABLE_QUERIES: Record<string, string> = {
-  users: "SELECT id, name, email, plan, status, created_at FROM users ORDER BY id;",
+  users: "SELECT id, name, email, plan, status, created_at FROM users",
   orders:
-    "SELECT id, user_id, product_id, status, quantity, total, created_at FROM orders ORDER BY created_at DESC;",
+    "SELECT id, user_id, product_id, status, quantity, total, created_at FROM orders",
   payments:
-    "SELECT id, order_id, amount, method, status, paid_at FROM payments ORDER BY paid_at DESC;",
+    "SELECT id, order_id, amount, method, status, paid_at FROM payments",
   products:
-    "SELECT id, name, category, price, inventory FROM products ORDER BY id;"
+    "SELECT id, name, category, price, inventory FROM products"
+};
+
+const TABLE_COLUMNS: Record<string, string[]> = {
+  users: ["id", "name", "email", "plan", "status", "created_at"],
+  orders: ["id", "user_id", "product_id", "status", "quantity", "total", "created_at"],
+  payments: ["id", "order_id", "amount", "method", "status", "paid_at"],
+  products: ["id", "name", "category", "price", "inventory"]
+};
+
+const TABLE_DEFAULT_SORT: Record<string, string> = {
+  users: "id ASC",
+  orders: "created_at DESC",
+  payments: "paid_at DESC",
+  products: "id ASC"
 };
 
 const FIXTURE_SQL = `
@@ -205,13 +225,10 @@ const isTypingTarget = (target: EventTarget | null): boolean => {
   );
 };
 
-const normalizedForFilter = (value: DemoValue): string =>
-  value === null ? "null" : printable(value).toLocaleLowerCase();
-
 const scoreAction = (action: PaletteAction, rawNeedle: string): number => {
   const needle = rawNeedle.trim().toLocaleLowerCase();
   if (!needle) return 1;
-  const haystack = `${action.label} ${action.description} ${action.keywords}`.toLocaleLowerCase();
+  const haystack = `${action.kind} ${action.label} ${action.description} ${action.keywords} ${action.shortcut ?? ""}`.toLocaleLowerCase();
   if (haystack.includes(needle)) {
     return 200 - haystack.indexOf(needle) - needle.length * 0.2;
   }
@@ -273,27 +290,48 @@ class DbtermDemo {
   private readonly duration: HTMLElement;
   private readonly filterChip: HTMLElement;
   private readonly engineVersion: HTMLElement;
+  private readonly resultsTitle: HTMLElement;
+  private readonly tablesTitle: HTMLElement;
+  private readonly sortStatus: HTMLElement;
+  private readonly panels: HTMLElement[];
+  private readonly loadingOverlay: HTMLElement;
+  private readonly loadingTitle: HTMLElement;
+  private readonly loadingMessage: HTMLElement;
   private readonly paletteDialog: HTMLDialogElement;
   private readonly paletteInput: HTMLInputElement;
   private readonly paletteList: HTMLElement;
+  private readonly paletteDetail: HTMLElement;
   private readonly filterDialog: HTMLDialogElement;
   private readonly filterForm: HTMLFormElement;
   private readonly filterColumn: HTMLSelectElement;
   private readonly filterOperator: HTMLSelectElement;
   private readonly filterValue: HTMLInputElement;
+  private readonly filterTitle: HTMLElement;
+  private readonly activeFilters: HTMLElement;
   private readonly helpDialog: HTMLDialogElement;
+  private readonly detailDialog: HTMLDialogElement;
+  private readonly detailList: HTMLElement;
   private sqlite: Sqlite3Static | null = null;
   private database: Database | null = null;
   private databasePromise: Promise<Database> | null = null;
   private result: QueryResult = { columns: [], rows: [], truncated: false, elapsedMs: 0 };
-  private filter: ResultFilter | null = null;
+  private filters: ResultFilter[] = [];
   private selectedRow = 0;
   private selectedColumn = 0;
-  private selectedTable: string | null = null;
+  private selectedRows = new Set<number>();
+  private selectedTable: string | null = "users";
+  private tableCursor = "users";
+  private tableSearch = "";
+  private activeSql = "";
+  private sortColumn = -1;
+  private sortAscending = true;
+  private focusedPanel: "tables" | "query" | "results" = "tables";
   private history: HistoryEntry[] = [];
   private copiedValue = "";
+  private copiedWasNull = false;
   private requestId = 0;
-  private loadingTimer: number | null = null;
+  private loadingRevealTimer: number | null = null;
+  private flashTimer: number | null = null;
   private isLoading = false;
   private lazyObserver: IntersectionObserver | null = null;
   private paletteActions: PaletteAction[] = [];
@@ -315,20 +353,34 @@ class DbtermDemo {
     this.duration = query(root, "[data-demo-duration]");
     this.filterChip = query(root, "[data-demo-filter-chip]");
     this.engineVersion = query(root, "[data-demo-engine-version]");
+    this.resultsTitle = query(root, "[data-demo-results-title]");
+    this.tablesTitle = query(root, "[data-demo-tables-title]");
+    this.sortStatus = query(root, "[data-demo-sort-status]");
+    this.panels = Array.from(root.querySelectorAll<HTMLElement>("[data-demo-panel]"));
+    this.loadingOverlay = query(root, "[data-demo-loading]");
+    this.loadingTitle = query(root, "[data-demo-loading-title]");
+    this.loadingMessage = query(root, "[data-demo-loading-message]");
     this.paletteDialog = query(root, "[data-demo-palette-dialog]");
     this.paletteInput = query(root, "[data-demo-palette-input]");
     this.paletteList = query(root, "[data-demo-palette-list]");
+    this.paletteDetail = query(root, "[data-demo-palette-detail]");
     this.filterDialog = query(root, "[data-demo-filter-dialog]");
     this.filterForm = query(root, "[data-demo-filter-form]");
     this.filterColumn = query(root, "[data-demo-filter-column]");
     this.filterOperator = query(root, "[data-demo-filter-operator]");
     this.filterValue = query(root, "[data-demo-filter-value]");
+    this.filterTitle = query(root, "[data-demo-filter-title]");
+    this.activeFilters = query(root, "[data-demo-active-filters]");
     this.helpDialog = query(root, "[data-demo-help-dialog]");
+    this.detailDialog = query(root, "[data-demo-detail-dialog]");
+    this.detailList = query(root, "[data-demo-detail-list]");
     this.editor.value = DEFAULT_QUERY;
     this.paletteActions = this.createPaletteActions();
     this.bindEvents();
     this.updateTableCounts();
     this.renderEmpty();
+    this.updateTableSelection();
+    this.setPanelFocus("tables", false);
     this.armLazyBoot();
   }
 
@@ -339,7 +391,11 @@ class DbtermDemo {
     this.root.querySelectorAll<HTMLButtonElement>("[data-demo-table]").forEach((button) => {
       button.addEventListener("click", () => {
         const table = button.dataset.demoTable;
-        if (table) void this.openTable(table, true);
+        if (!table) return;
+        this.tableCursor = table;
+        this.clearTableSearch(false);
+        this.setPanelFocus("tables", false);
+        void this.openTable(table, true);
       });
     });
 
@@ -360,7 +416,7 @@ class DbtermDemo {
     });
 
     this.editor.addEventListener("keydown", (event) => {
-      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      if (event.key === "Enter" && !event.shiftKey && !event.altKey) {
         event.preventDefault();
         void this.runQuery();
       }
@@ -368,11 +424,21 @@ class DbtermDemo {
 
     this.resultBody.addEventListener("click", (event) => {
       const cell = (event.target as Element).closest<HTMLButtonElement>("[data-demo-cell]");
-      if (cell) this.selectCell(cell, true);
+      if (cell) {
+        this.setPanelFocus("results", false);
+        this.selectCell(cell, true);
+      }
     });
     this.resultBody.addEventListener("keydown", (event) => this.handleCellArrows(event));
 
     this.root.addEventListener("keydown", (event) => this.handleRootShortcuts(event));
+    this.root.addEventListener("focusin", (event) => {
+      const panel = (event.target as Element | null)?.closest<HTMLElement>("[data-demo-panel]");
+      const name = panel?.dataset.demoPanel;
+      if (name === "tables" || name === "query" || name === "results") {
+        this.setPanelFocus(name, false);
+      }
+    });
 
     this.paletteInput.addEventListener("input", () => this.renderPalette());
     this.paletteInput.addEventListener("keydown", (event) => this.handlePaletteKeys(event));
@@ -391,17 +457,42 @@ class DbtermDemo {
 
     this.filterForm.addEventListener("submit", (event) => {
       event.preventDefault();
-      this.applyFilter({
+      void this.applyFilter({
         column: this.filterColumn.value,
         operator: this.filterOperator.value as ResultFilter["operator"],
         value: this.filterValue.value
-      });
+      }, false);
       this.filterDialog.close();
     });
+    query<HTMLButtonElement>(this.filterDialog, "[data-demo-filter-add]").addEventListener(
+      "click",
+      () => {
+        void this.applyFilter({
+          column: this.filterColumn.value,
+          operator: this.filterOperator.value as ResultFilter["operator"],
+          value: this.filterValue.value
+        }, true);
+        this.filterDialog.close();
+      }
+    );
+    query<HTMLButtonElement>(this.filterDialog, "[data-demo-filter-clipboard]").addEventListener(
+      "click",
+      () => {
+        void this.applyModalClipboardFilter();
+        this.filterDialog.close();
+      }
+    );
+    query<HTMLButtonElement>(this.filterDialog, "[data-demo-filter-remove]").addEventListener(
+      "click",
+      () => {
+        void this.removeLastFilter();
+        this.filterDialog.close();
+      }
+    );
     query<HTMLButtonElement>(this.filterDialog, "[data-demo-filter-reset]").addEventListener(
       "click",
       () => {
-        this.clearFilter();
+        void this.clearFilter();
         this.filterDialog.close();
       }
     );
@@ -409,8 +500,29 @@ class DbtermDemo {
       "click",
       () => this.filterDialog.close()
     );
+    this.filterOperator.addEventListener("change", () => this.updateFilterValueState());
+
+    query<HTMLButtonElement>(this.helpDialog, "[data-demo-help-close]").addEventListener(
+      "click",
+      () => this.helpDialog.close()
+    );
+    query<HTMLButtonElement>(this.detailDialog, "[data-demo-detail-close]").addEventListener(
+      "click",
+      () => this.detailDialog.close()
+    );
+    this.detailDialog.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        this.detailDialog.close();
+      }
+    });
 
     this.root.querySelectorAll<HTMLDialogElement>("dialog").forEach((dialog) => {
+      dialog.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        dialog.close();
+      });
       dialog.addEventListener("click", (event) => {
         if (event.target === dialog) dialog.close();
       });
@@ -424,78 +536,138 @@ class DbtermDemo {
   private createPaletteActions(): PaletteAction[] {
     return [
       {
+        id: "focus-tables",
+        kind: "ACTION",
+        label: "Focus Tables",
+        description: "Move focus to the database object list so you can find and open a table.",
+        keywords: "sidebar objects navigation browse",
+        shortcut: "Alt+T",
+        run: () => this.setPanelFocus("tables")
+      },
+      {
+        id: "focus-query",
+        kind: "ACTION",
+        label: "Focus Query Editor",
+        description: "Move focus to the SQL editor and keep the current query text intact.",
+        keywords: "sql statement editor write",
+        shortcut: "Alt+Q",
+        run: () => this.setPanelFocus("query")
+      },
+      {
+        id: "focus-results",
+        kind: "ACTION",
+        label: "Focus Results",
+        description: "Move focus to the result grid for cell navigation, filtering, and row actions.",
+        keywords: "data grid cells rows navigation",
+        shortcut: "Alt+R",
+        run: () => this.setPanelFocus("results")
+      },
+      {
         id: "run",
-        label: "Run current query",
-        description: "Execute the SQL in the editor with SQLite WASM",
-        keywords: "execute select ctrl enter",
+        kind: "ACTION",
+        label: "Run Current SQL",
+        description: "Execute the SQL currently in the Query editor against the sample SQLite database.",
+        keywords: "execute statement editor",
+        shortcut: "Enter",
         run: () => this.runQuery()
       },
       ...Object.keys(TABLE_QUERIES).map((table) => ({
         id: `table-${table}`,
-        label: `Open ${table}`,
-        description: `Browse all ${TABLE_COUNTS[table]} rows in the ${table} table`,
+        kind: "TABLE" as const,
+        label: table,
+        description: `Browse ${TABLE_COUNTS[table]} sample rows from ${table}.`,
         keywords: `database table select ${table}`,
         run: () => this.openTable(table, true)
       })),
       {
-        id: "schema-users",
-        label: "Inspect users schema",
-        description: "Run PRAGMA table_info('users')",
-        keywords: "columns schema pragma metadata",
-        run: () => {
-          this.pushHistory();
-          this.selectedTable = "users";
-          this.editor.value = "PRAGMA table_info('users');";
-          return this.runQuery();
-        }
-      },
-      {
-        id: "revenue",
-        label: "Revenue by product",
-        description: "Aggregate captured payments across products",
-        keywords: "sum group analytics payment sales",
-        run: () => {
-          this.pushHistory();
-          this.selectedTable = null;
-          this.editor.value = `SELECT p.name AS product,
-  COUNT(*) AS orders,
-  printf('$%.2f', SUM(pay.amount)) AS revenue
-FROM payments AS pay
-JOIN orders AS o ON o.id = pay.order_id
-JOIN products AS p ON p.id = o.product_id
-WHERE pay.status = 'captured'
-GROUP BY p.id
-ORDER BY SUM(pay.amount) DESC;`;
-          return this.runQuery();
-        }
-      },
-      {
         id: "filter",
-        label: "Filter current results",
-        description: "Choose a column, operator, and value",
-        keywords: "find slash search rows",
+        kind: "ACTION",
+        label: "Filter Selected Column",
+        description: "Open the typed filter builder for the selected table column.",
+        keywords: "where search operator contains starts null",
+        shortcut: "/",
         run: () => this.openFilter(this.runButton)
       },
       {
+        id: "filter-clipboard",
+        kind: "ACTION",
+        label: "Filter Column by Clipboard",
+        description: "Apply equality on the selected column using the copied value.",
+        keywords: "paste value cross table lookup",
+        shortcut: "V",
+        run: () => this.filterWithClipboard()
+      },
+      {
+        id: "copy",
+        kind: "ACTION",
+        label: "Copy Selected Cell",
+        description: "Copy the complete selected cell value to the clipboard.",
+        keywords: "clipboard full raw value",
+        shortcut: "C",
+        run: () => this.copySelectedCell()
+      },
+      {
+        id: "follow",
+        kind: "ACTION",
+        label: "Follow Selected Foreign Key",
+        description: "Open the referenced row; Backspace returns to the prior result.",
+        keywords: "relationship join reference navigation",
+        shortcut: "F",
+        run: () => this.followSelectedForeignKey()
+      },
+      {
+        id: "sort",
+        kind: "ACTION",
+        label: "Sort by Selected Column",
+        description: "Toggle ascending or descending sorting for the active result.",
+        keywords: "order ascending descending",
+        shortcut: "S",
+        run: () => this.toggleSort()
+      },
+      {
+        id: "detail",
+        kind: "ACTION",
+        label: "Open Selected Row Details",
+        description: "Inspect every full value in the selected row vertically.",
+        keywords: "inspect record full json",
+        shortcut: "Enter",
+        run: () => this.openRowDetail(this.runButton)
+      },
+      {
         id: "export",
-        label: "Export visible rows",
-        description: "Download the current result scope as CSV",
+        kind: "ACTION",
+        label: "Export Results to CSV",
+        description: "Download the currently visible result scope as CSV.",
         keywords: "csv download save alt e",
+        shortcut: "Alt+E",
         run: () => this.exportCsv()
       },
       {
         id: "help",
-        label: "Show keyboard guide",
-        description: "See every shortcut available in this tour",
+        kind: "ACTION",
+        label: "Open Help & SQL Cheatsheets",
+        description: "Show dbterm keyboard workflows and the browser demo key map.",
         keywords: "commands shortcuts keys alt h",
+        shortcut: "Alt+H",
         run: () => this.openHelp(this.runButton)
       },
       {
-        id: "reset",
-        label: "Reset sample database",
-        description: "Rebuild the private in-memory SQLite fixture",
-        keywords: "restore reload data",
-        run: () => this.reset()
+        id: "fullscreen",
+        kind: "ACTION",
+        label: "Toggle Fullscreen Results",
+        description: "Expand the result grid to the full sample workspace or restore the layout.",
+        keywords: "maximize expand data grid",
+        shortcut: "Alt+F",
+        run: () => this.toggleFullscreen()
+      },
+      {
+        id: "clear-filters",
+        kind: "ACTION",
+        label: "Clear All Active Filters",
+        description: "Remove every active table predicate and reload the table.",
+        keywords: "reset where predicates",
+        shortcut: "Esc",
+        run: () => this.clearFilter()
       }
     ];
   }
@@ -527,13 +699,16 @@ ORDER BY SUM(pay.amount) DESC;`;
   }
 
   private armLazyBoot(): void {
-    if (!("IntersectionObserver" in window)) return;
+    if (!("IntersectionObserver" in window)) {
+      void this.openTable("users", false, false);
+      return;
+    }
     this.lazyObserver = new IntersectionObserver(
       (entries) => {
         if (!entries.some((entry) => entry.isIntersecting)) return;
         this.lazyObserver?.disconnect();
         this.lazyObserver = null;
-        void this.runQuery();
+        void this.openTable("users", false, false);
       },
       { rootMargin: "140px 0px", threshold: 0.05 }
     );
@@ -606,31 +781,40 @@ ORDER BY SUM(pay.amount) DESC;`;
   }
 
   private async runQuery(): Promise<void> {
+    const sql = this.editor.value.trim();
+    if (!sql) {
+      this.announce("Type a SQL query first.");
+      this.setPanelFocus("query");
+      return;
+    }
+    this.pushHistory();
+    this.selectedTable = null;
+    this.filters = [];
+    this.sortColumn = -1;
+    this.sortAscending = true;
+    await this.runSql(sql, "Running SQL…", "Press Esc or Ctrl+C to cancel this query.");
+    this.setPanelFocus("results");
+  }
+
+  private async runSql(sql: string, loadingTitle: string, loadingMessage: string): Promise<void> {
     this.lazyObserver?.disconnect();
     this.lazyObserver = null;
     if (this.isLoading) this.cancelQuery();
     const currentRequest = ++this.requestId;
-    const sql = this.editor.value;
-    this.setLoading(true, "Preparing query… Press Ctrl+C to cancel.");
+    this.activeSql = sql;
+    this.setLoading(true, loadingTitle, loadingMessage);
 
     try {
       const database = await this.ensureDatabase();
       if (currentRequest !== this.requestId) return;
-
-      await new Promise<void>((resolve) => {
-        this.loadingTimer = window.setTimeout(resolve, 360);
-      });
-      this.loadingTimer = null;
-      if (currentRequest !== this.requestId) return;
-
       this.result = this.execute(sql, database);
-      this.filter = null;
       this.selectedRow = 0;
       this.selectedColumn = 0;
+      this.selectedRows.clear();
       this.renderResult();
       const qualifier = this.result.truncated ? " (first 100)" : "";
       this.announce(
-        `${this.result.rows.length} row${this.result.rows.length === 1 ? "" : "s"}${qualifier} in ${this.result.elapsedMs.toFixed(1)} milliseconds.`
+        `${this.result.rows.length} row${this.result.rows.length === 1 ? "" : "s"}${qualifier} in ${this.result.elapsedMs.toFixed(1)} ms.`
       );
     } catch (error) {
       if (currentRequest !== this.requestId) return;
@@ -643,10 +827,8 @@ ORDER BY SUM(pay.amount) DESC;`;
   private cancelQuery(): void {
     if (!this.isLoading) return;
     this.requestId += 1;
-    if (this.loadingTimer !== null) window.clearTimeout(this.loadingTimer);
-    this.loadingTimer = null;
     this.setLoading(false);
-    this.announce("Query cancelled. Your SQL is still in the editor.");
+    this.announce("Operation cancelled. Your workspace is unchanged.");
   }
 
   private async reset(): Promise<void> {
@@ -656,19 +838,34 @@ ORDER BY SUM(pay.amount) DESC;`;
     this.databasePromise = null;
     this.sqlite = null;
     this.history = [];
-    this.filter = null;
-    this.selectedTable = null;
+    this.filters = [];
+    this.selectedTable = "users";
+    this.tableCursor = "users";
+    this.tableSearch = "";
+    this.activeSql = "";
+    this.sortColumn = -1;
+    this.sortAscending = true;
+    this.selectedRows.clear();
     this.editor.value = DEFAULT_QUERY;
     this.renderEmpty("Rebuilding the private sample database…");
-    await this.runQuery();
-    this.announce("Sample database reset. The original product-tour query is ready.");
+    await this.openTable("users", false);
+    this.setPanelFocus("tables");
+    this.announce("Sample database reset.");
   }
 
   private pushHistory(): void {
-    const sql = this.editor.value.trim();
+    const sql = this.activeSql.trim();
     const previous = this.history.at(-1);
     if (!sql || (previous?.sql === sql && previous.table === this.selectedTable)) return;
-    this.history.push({ sql, table: this.selectedTable });
+    this.history.push({
+      sql,
+      table: this.selectedTable,
+      filters: this.filters.map((filter) => ({ ...filter })),
+      sortColumn: this.sortColumn,
+      sortAscending: this.sortAscending,
+      selectedRow: this.selectedRow,
+      selectedColumn: this.selectedColumn
+    });
     if (this.history.length > 20) this.history.shift();
   }
 
@@ -678,22 +875,37 @@ ORDER BY SUM(pay.amount) DESC;`;
       this.announce("No earlier table in this tour yet.");
       return;
     }
-    this.editor.value = previous.sql;
     this.selectedTable = previous.table;
-    await this.runQuery();
+    this.tableCursor = previous.table ?? this.tableCursor;
+    this.filters = previous.filters.map((filter) => ({ ...filter }));
+    this.sortColumn = previous.sortColumn;
+    this.sortAscending = previous.sortAscending;
+    this.updateTableSelection();
+    await this.runSql(previous.sql, "Returning to the previous result…", "Press Esc to cancel navigation.");
+    this.selectedRow = Math.min(previous.selectedRow, Math.max(0, this.result.rows.length - 1));
+    this.selectedColumn = Math.min(previous.selectedColumn, Math.max(0, this.result.columns.length - 1));
+    this.renderResult();
+    this.setPanelFocus("results");
   }
 
-  private async openTable(table: string, addHistory: boolean): Promise<void> {
-    const sql = TABLE_QUERIES[table];
-    if (!sql) return;
+  private async openTable(table: string, addHistory: boolean, focusResults = true): Promise<void> {
+    if (!TABLE_QUERIES[table]) return;
     if (addHistory) this.pushHistory();
     this.selectedTable = table;
-    this.editor.value = sql;
+    this.tableCursor = table;
+    this.filters = [];
+    this.sortColumn = -1;
+    this.sortAscending = true;
     this.updateTableSelection();
-    await this.runQuery();
+    await this.reloadTable(`Opening ${table}…`, false);
+    if (focusResults) this.setPanelFocus("results");
   }
 
   private async followSelectedForeignKey(): Promise<void> {
+    if (!this.selectedTable) {
+      this.announce("Foreign-key navigation is available while browsing a table.");
+      return;
+    }
     const value = this.selectedValue();
     const column = this.result.columns[this.selectedColumn];
     const target = FK_TARGETS[column];
@@ -703,56 +915,94 @@ ORDER BY SUM(pay.amount) DESC;`;
     }
     this.pushHistory();
     this.selectedTable = target.table;
-    const numericValue = typeof value === "number" || typeof value === "bigint";
-    const literal = numericValue ? String(value) : `'${String(value).replaceAll("'", "''")}'`;
-    this.editor.value = `SELECT * FROM ${target.table} WHERE ${target.column} = ${literal};`;
+    this.tableCursor = target.table;
+    this.filters = [{ column: target.column, operator: "equals", value: String(value) }];
+    this.sortColumn = -1;
+    this.sortAscending = true;
     this.updateTableSelection();
-    await this.runQuery();
+    await this.reloadTable(`Following ${column} → ${target.table}.${target.column}…`);
+    this.setPanelFocus("results");
   }
 
   private visibleRows(): DemoValue[][] {
-    if (!this.filter) return this.result.rows;
-    const columnIndex = this.result.columns.indexOf(this.filter.column);
-    if (columnIndex < 0) return this.result.rows;
-    const needle = this.filter.value.toLocaleLowerCase();
-    return this.result.rows.filter((row) => {
-      const haystack = normalizedForFilter(row[columnIndex]);
-      switch (this.filter?.operator) {
-        case "equals":
-          return haystack === needle;
-        case "starts":
-          return haystack.startsWith(needle);
-        case "greater": {
-          const left = Number(row[columnIndex]);
-          const right = Number(this.filter.value);
-          return Number.isFinite(left) && Number.isFinite(right) && left > right;
-        }
-        case "less": {
-          const left = Number(row[columnIndex]);
-          const right = Number(this.filter.value);
-          return Number.isFinite(left) && Number.isFinite(right) && left < right;
-        }
-        default:
-          return haystack.includes(needle);
-      }
-    });
+    return this.result.rows;
   }
 
-  private applyFilter(filter: ResultFilter): void {
-    if (!this.result.columns.includes(filter.column)) return;
-    this.filter = filter;
+  private async applyFilter(filter: ResultFilter, addAnd = false): Promise<void> {
+    if (!this.selectedTable || !TABLE_COLUMNS[this.selectedTable]?.includes(filter.column)) {
+      this.announce("Column filters are available while browsing a table.");
+      return;
+    }
+    if (addAnd) {
+      this.filters.push(filter);
+    } else {
+      const existing = this.filters.findIndex((entry) => entry.column === filter.column);
+      if (existing >= 0) this.filters[existing] = filter;
+      else this.filters.push(filter);
+    }
     this.selectedRow = 0;
     this.selectedColumn = Math.max(0, this.result.columns.indexOf(filter.column));
-    this.renderResult();
-    this.announce(`${this.visibleRows().length} visible rows after filtering ${filter.column}.`);
+    await this.reloadTable(`Applying ${filter.column} filter…`);
   }
 
-  private clearFilter(): void {
-    if (!this.filter) return;
-    this.filter = null;
+  private async clearFilter(): Promise<void> {
+    if (!this.filters.length || !this.selectedTable) return;
+    this.filters = [];
     this.selectedRow = 0;
-    this.renderResult();
-    this.announce(`Filter cleared. ${this.result.rows.length} rows visible.`);
+    await this.reloadTable("Clearing filters…");
+  }
+
+  private async removeLastFilter(): Promise<void> {
+    if (!this.filters.length || !this.selectedTable) return;
+    this.filters.pop();
+    await this.reloadTable("Removing the last filter…");
+  }
+
+  private async reloadTable(message: string, restoreDomFocus = true): Promise<void> {
+    if (!this.selectedTable) return;
+    const restoreFocus = this.focusedPanel;
+    const sql = this.buildTableSql(this.selectedTable);
+    await this.runSql(sql, message, "Press Esc to cancel opening this table.");
+    if (restoreDomFocus) this.setPanelFocus(restoreFocus);
+  }
+
+  private buildTableSql(table: string): string {
+    const base = TABLE_QUERIES[table];
+    const columns = TABLE_COLUMNS[table];
+    if (!base || !columns) throw new Error(`Unknown sample table: ${table}`);
+    const predicates = this.filters
+      .filter((filter) => columns.includes(filter.column))
+      .map((filter) => this.filterSql(filter));
+    let sql = base;
+    if (predicates.length) sql += ` WHERE ${predicates.join(" AND ")}`;
+    if (this.sortColumn >= 0 && columns[this.sortColumn]) {
+      sql += ` ORDER BY "${columns[this.sortColumn]}" ${this.sortAscending ? "ASC" : "DESC"}`;
+    } else {
+      sql += ` ORDER BY ${TABLE_DEFAULT_SORT[table]}`;
+    }
+    return `${sql};`;
+  }
+
+  private filterSql(filter: ResultFilter): string {
+    const column = `"${filter.column.replaceAll('"', '""')}"`;
+    const escaped = filter.value.replaceAll("'", "''");
+    const literal = `'${escaped}'`;
+    switch (filter.operator) {
+      case "not-equals": return `${column} != ${literal}`;
+      case "greater": return `${column} > ${literal}`;
+      case "greater-equal": return `${column} >= ${literal}`;
+      case "less": return `${column} < ${literal}`;
+      case "less-equal": return `${column} <= ${literal}`;
+      case "contains": return `CAST(${column} AS TEXT) LIKE '%${this.escapeLike(escaped)}%' ESCAPE '\\'`;
+      case "starts": return `CAST(${column} AS TEXT) LIKE '${this.escapeLike(escaped)}%' ESCAPE '\\'`;
+      case "is-null": return `${column} IS NULL`;
+      case "is-not-null": return `${column} IS NOT NULL`;
+      default: return `${column} = ${literal}`;
+    }
+  }
+
+  private escapeLike(value: string): string {
+    return value.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_");
   }
 
   private selectedValue(): DemoValue | undefined {
@@ -767,6 +1017,7 @@ ORDER BY SUM(pay.amount) DESC;`;
     }
     const text = value === null ? "NULL" : printable(value);
     this.copiedValue = text;
+    this.copiedWasNull = value === null;
     try {
       await navigator.clipboard.writeText(text);
       this.announce(`Copied ${text} to the clipboard.`);
@@ -776,23 +1027,52 @@ ORDER BY SUM(pay.amount) DESC;`;
   }
 
   private async filterWithClipboard(): Promise<void> {
+    if (!this.selectedTable) {
+      this.announce("Clipboard filtering is available while browsing a table.");
+      return;
+    }
     const column = this.result.columns[this.selectedColumn];
     if (!column) {
       this.announce("Select a result cell before filtering from the clipboard.");
       return;
     }
-    let clipboard = this.copiedValue;
-    try {
-      const liveClipboard = await navigator.clipboard.readText();
-      if (liveClipboard) clipboard = liveClipboard;
-    } catch {
-      // Browsers may deny clipboard reads. The last copied demo cell remains available.
-    }
-    if (!clipboard) {
+    const clipboard = await this.readClipboard();
+    if (!clipboard && !this.copiedWasNull) {
       this.announce("The clipboard is empty. Press C on a selected cell first.");
       return;
     }
-    this.applyFilter({ column, operator: "equals", value: clipboard });
+    const operator: ResultFilter["operator"] = this.copiedWasNull && clipboard === "NULL" ? "is-null" : "equals";
+    await this.applyFilter({ column, operator, value: clipboard }, false);
+  }
+
+  private async applyModalClipboardFilter(): Promise<void> {
+    const clipboard = await this.readClipboard();
+    const selectedOperator = this.filterOperator.value as ResultFilter["operator"];
+    const operator = this.copiedWasNull && clipboard === "NULL" && selectedOperator === "equals"
+      ? "is-null"
+      : selectedOperator;
+    await this.applyFilter({ column: this.filterColumn.value, operator, value: clipboard }, false);
+  }
+
+  private async readClipboard(): Promise<string> {
+    let clipboard = this.copiedValue;
+    try {
+      const liveClipboard = await navigator.clipboard.readText();
+      if (liveClipboard && liveClipboard !== this.copiedValue) {
+        clipboard = liveClipboard;
+        this.copiedWasNull = false;
+      }
+    } catch {
+      // Browser permission is optional; the last dbterm C-copy remains available.
+    }
+    return clipboard;
+  }
+
+  private updateFilterValueState(): void {
+    const operator = this.filterOperator.value as ResultFilter["operator"];
+    const needsValue = operator !== "is-null" && operator !== "is-not-null";
+    this.filterValue.disabled = !needsValue;
+    this.filterValue.placeholder = needsValue ? "type a comparison value" : "not used for NULL operators";
   }
 
   private renderResult(): void {
@@ -804,16 +1084,18 @@ ORDER BY SUM(pay.amount) DESC;`;
     this.resultTable.hidden = false;
 
     const headRow = document.createElement("tr");
-    this.result.columns.forEach((column) => {
+    this.result.columns.forEach((column, columnIndex) => {
       const header = document.createElement("th");
       header.scope = "col";
-      header.textContent = column;
+      const indicator = columnIndex === this.sortColumn ? (this.sortAscending ? " ▲" : " ▼") : "";
+      header.textContent = `${column}${indicator}`;
       headRow.append(header);
     });
     this.resultHead.append(headRow);
 
     rows.forEach((row, rowIndex) => {
       const tableRow = document.createElement("tr");
+      tableRow.dataset.rowSelected = String(this.selectedRows.has(rowIndex));
       row.forEach((value, columnIndex) => {
         const cell = document.createElement("td");
         const button = document.createElement("button");
@@ -824,6 +1106,7 @@ ORDER BY SUM(pay.amount) DESC;`;
         button.tabIndex = rowIndex === this.selectedRow && columnIndex === this.selectedColumn ? 0 : -1;
         button.textContent = printable(value);
         if (value === null) button.classList.add("is-null");
+        if (typeof value === "number" || typeof value === "bigint") button.classList.add("is-number");
         if (FK_TARGETS[this.result.columns[columnIndex]]) button.classList.add("is-linkable");
         if (rowIndex === this.selectedRow && columnIndex === this.selectedColumn) {
           button.dataset.selected = "true";
@@ -847,8 +1130,14 @@ ORDER BY SUM(pay.amount) DESC;`;
       this.resultBody.append(row);
     }
 
-    this.rowCount.textContent = `${rows.length}${this.result.truncated && !this.filter ? "+" : ""} rows`;
+    this.rowCount.textContent = `${rows.length}${this.result.truncated && !this.filters.length ? "+" : ""} rows`;
     this.duration.textContent = `${this.result.elapsedMs.toFixed(1)} ms`;
+    const title = this.selectedTable
+      ? `${this.selectedTable.charAt(0).toUpperCase()}${this.selectedTable.slice(1)}`
+      : "Query Results";
+    this.resultsTitle.textContent = `${title} — ${rows.length} row${rows.length === 1 ? "" : "s"} in ${this.result.elapsedMs.toFixed(1)}ms`;
+    const sortName = this.result.columns[this.sortColumn];
+    this.sortStatus.textContent = sortName ? `sort: ${sortName} ${this.sortAscending ? "▲" : "▼"}` : "sort: none";
     this.renderFilterChip();
     this.updateTableSelection();
   }
@@ -863,10 +1152,16 @@ ORDER BY SUM(pay.amount) DESC;`;
     query<HTMLElement>(this.emptyState, "[data-demo-empty-message]").textContent = message;
     this.rowCount.textContent = "— rows";
     this.duration.textContent = "— ms";
+    this.resultsTitle.textContent = "Results";
+    this.sortStatus.textContent = "sort: none";
     this.filterChip.hidden = true;
   }
 
   private renderError(message: string): void {
+    this.result = { columns: [], rows: [], truncated: false, elapsedMs: 0 };
+    this.selectedRow = 0;
+    this.selectedColumn = 0;
+    this.selectedRows.clear();
     this.resultHead.replaceChildren();
     this.resultBody.replaceChildren();
     this.resultTable.hidden = true;
@@ -876,24 +1171,36 @@ ORDER BY SUM(pay.amount) DESC;`;
     query<HTMLElement>(this.emptyState, "[data-demo-empty-message]").textContent = message;
     this.rowCount.textContent = "0 rows";
     this.duration.textContent = "— ms";
+    this.resultsTitle.textContent = "Results — error";
     this.filterChip.hidden = true;
     this.announce(`Query error: ${message}`);
   }
 
   private renderFilterChip(): void {
     const text = query<HTMLElement>(this.filterChip, "[data-demo-filter-text]");
-    if (!this.filter) {
+    if (!this.filters.length) {
       this.filterChip.hidden = true;
+      this.activeFilters.textContent = "Active filters: none";
       return;
     }
     const operatorLabels: Record<ResultFilter["operator"], string> = {
       contains: "contains",
       equals: "=",
-      starts: "starts with",
+      "not-equals": "!=",
+      starts: "starts-with",
       greater: ">",
-      less: "<"
+      "greater-equal": ">=",
+      less: "<",
+      "less-equal": "<=",
+      "is-null": "IS NULL",
+      "is-not-null": "IS NOT NULL"
     };
-    text.textContent = `${this.filter.column} ${operatorLabels[this.filter.operator]} “${this.filter.value}”`;
+    const summary = this.filters.map((filter) => {
+      const needsValue = filter.operator !== "is-null" && filter.operator !== "is-not-null";
+      return `${filter.column} ${operatorLabels[filter.operator]}${needsValue ? ` “${filter.value}”` : ""}`;
+    }).join(" AND ");
+    text.textContent = `filter: ${summary}`;
+    this.activeFilters.textContent = `Active filters: ${summary}`;
     this.filterChip.hidden = false;
   }
 
@@ -929,15 +1236,36 @@ ORDER BY SUM(pay.amount) DESC;`;
   private handleRootShortcuts(event: KeyboardEvent): void {
     if (!this.root.contains(document.activeElement)) return;
     const key = event.key.toLocaleLowerCase();
+    const target = event.target instanceof Element ? event.target : null;
+    const insideTerminal = Boolean(target?.closest("[data-demo-terminal]"));
 
-    if ((event.ctrlKey || event.metaKey) && key === "p") {
+    if ((insideTerminal || this.paletteDialog.open) && (event.ctrlKey || event.metaKey) && key === "p") {
       event.preventDefault();
-      this.openPalette(document.activeElement as HTMLElement);
+      if (this.paletteDialog.open) this.paletteDialog.close();
+      else this.openPalette(document.activeElement as HTMLElement);
       return;
     }
-    if ((event.ctrlKey || event.metaKey) && key === "c" && this.isLoading) {
+    if (insideTerminal && (event.ctrlKey || event.metaKey) && key === "c" && this.isLoading) {
       event.preventDefault();
       this.cancelQuery();
+      return;
+    }
+    if ((insideTerminal || this.helpDialog.open) && event.altKey && key === "h") {
+      event.preventDefault();
+      if (this.helpDialog.open) this.helpDialog.close();
+      else this.openHelp(document.activeElement as HTMLElement);
+      return;
+    }
+    if (!insideTerminal) return;
+    if (this.isLoading && event.key === "Escape") {
+      event.preventDefault();
+      this.cancelQuery();
+      return;
+    }
+    if (this.paletteDialog.open || this.filterDialog.open || this.helpDialog.open || this.detailDialog.open) return;
+    if (event.altKey && (key === "t" || key === "q" || key === "r")) {
+      event.preventDefault();
+      this.setPanelFocus(key === "t" ? "tables" : key === "q" ? "query" : "results");
       return;
     }
     if (event.altKey && key === "e") {
@@ -945,14 +1273,52 @@ ORDER BY SUM(pay.amount) DESC;`;
       this.exportCsv();
       return;
     }
-    if (event.altKey && key === "h") {
+    if (event.altKey && key === "f") {
       event.preventDefault();
-      this.openHelp(document.activeElement as HTMLElement);
+      this.toggleFullscreen();
       return;
     }
-    if (this.paletteDialog.open || this.filterDialog.open || this.helpDialog.open) return;
-    if (isTypingTarget(event.target)) return;
+    if (event.key === "Tab") {
+      event.preventDefault();
+      this.cyclePanel(event.shiftKey ? -1 : 1);
+      return;
+    }
 
+    if (this.focusedPanel === "tables") {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        this.moveTableCursor(event.key === "ArrowDown" ? 1 : -1);
+      } else if (event.key === "Enter") {
+        event.preventDefault();
+        const table = this.tableCursor;
+        this.clearTableSearch(false);
+        void this.openTable(table, true);
+      } else if (event.key === "Backspace") {
+        if (!this.tableSearch) return;
+        event.preventDefault();
+        this.tableSearch = Array.from(this.tableSearch).slice(0, -1).join("");
+        this.applyTableSearch();
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        if (this.tableSearch) this.clearTableSearch();
+        else this.releaseDemoFocus();
+      } else if (!event.ctrlKey && !event.altKey && !event.metaKey && event.key.length === 1 && !isTypingTarget(event.target)) {
+        event.preventDefault();
+        this.tableSearch += event.key;
+        this.applyTableSearch();
+      }
+      return;
+    }
+
+    if (this.focusedPanel === "query") {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        this.setPanelFocus("tables");
+      }
+      return;
+    }
+
+    if (isTypingTarget(event.target)) return;
     if (event.key === "/") {
       event.preventDefault();
       this.openFilter(document.activeElement as HTMLElement);
@@ -965,10 +1331,157 @@ ORDER BY SUM(pay.amount) DESC;`;
     } else if (key === "f" && !event.ctrlKey && !event.metaKey && !event.altKey) {
       event.preventDefault();
       void this.followSelectedForeignKey();
+    } else if (key === "s" && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      event.preventDefault();
+      void this.toggleSort();
+    } else if (event.key === " ") {
+      event.preventDefault();
+      this.toggleRowSelection();
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      this.openRowDetail(document.activeElement as HTMLElement);
     } else if (event.key === "Backspace") {
       event.preventDefault();
       void this.navigateBack();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      if (this.filters.length) void this.clearFilter();
+      else this.setPanelFocus("tables");
     }
+  }
+
+  private setPanelFocus(panel: "tables" | "query" | "results", focus = true): void {
+    this.focusedPanel = panel;
+    this.root.querySelector<HTMLElement>("[data-demo-terminal]")!.dataset.focus = panel;
+    this.panels.forEach((element) => {
+      element.dataset.active = String(element.dataset.demoPanel === panel);
+    });
+    this.updateContextStatus();
+    if (!focus) return;
+    if (panel === "query") {
+      this.editor.focus();
+      return;
+    }
+    if (panel === "results") {
+      const cell = this.resultBody.querySelector<HTMLButtonElement>("[data-demo-cell][data-selected='true']")
+        ?? this.resultBody.querySelector<HTMLButtonElement>("[data-demo-cell]");
+      if (cell) this.selectCell(cell, true);
+      else this.panels.find((item) => item.dataset.demoPanel === "results")?.focus();
+      return;
+    }
+    const table = this.root.querySelector<HTMLButtonElement>(`[data-demo-table="${this.tableCursor}"]`);
+    table?.focus();
+  }
+
+  private cyclePanel(delta: number): void {
+    const order: Array<"tables" | "query" | "results"> = ["tables", "query", "results"];
+    const current = order.indexOf(this.focusedPanel);
+    this.setPanelFocus(order[(current + delta + order.length) % order.length]);
+  }
+
+  private releaseDemoFocus(): void {
+    const exit = this.root.querySelector<HTMLAnchorElement>(".demo-aftercare a");
+    exit?.focus();
+    this.announce("Demo focus released.");
+  }
+
+  private moveTableCursor(delta: number): void {
+    const names = Object.keys(TABLE_QUERIES);
+    const current = Math.max(0, names.indexOf(this.tableCursor));
+    this.tableCursor = names[(current + delta + names.length) % names.length];
+    this.updateTableSelection();
+    this.root.querySelector<HTMLButtonElement>(`[data-demo-table="${this.tableCursor}"]`)?.focus();
+  }
+
+  private applyTableSearch(): void {
+    const needle = this.tableSearch.toLocaleLowerCase();
+    const names = Object.keys(TABLE_QUERIES);
+    const match = names.find((name) => name.toLocaleLowerCase().includes(needle));
+    if (match) this.tableCursor = match;
+    this.root.querySelectorAll<HTMLButtonElement>("[data-demo-table]").forEach((button) => {
+      const name = button.dataset.demoTable ?? "";
+      const label = query<HTMLElement>(button, "[data-demo-table-label]");
+      label.replaceChildren();
+      const index = needle ? name.toLocaleLowerCase().indexOf(needle) : -1;
+      if (index < 0) label.textContent = name;
+      else {
+        label.append(document.createTextNode(name.slice(0, index)));
+        const mark = document.createElement("mark");
+        mark.textContent = name.slice(index, index + this.tableSearch.length);
+        label.append(mark, document.createTextNode(name.slice(index + this.tableSearch.length)));
+      }
+    });
+    this.tablesTitle.textContent = `Tables (4)${this.tableSearch ? ` find: ${this.tableSearch}` : ""}`;
+    this.updateTableSelection();
+  }
+
+  private clearTableSearch(announce = true): void {
+    this.tableSearch = "";
+    this.applyTableSearch();
+    if (announce) this.announce("Table search cleared.");
+  }
+
+  private async toggleSort(): Promise<void> {
+    const column = this.result.columns[this.selectedColumn];
+    if (!column) {
+      this.announce("Select a result column before sorting.");
+      return;
+    }
+    if (this.sortColumn === this.selectedColumn) this.sortAscending = !this.sortAscending;
+    else {
+      this.sortColumn = this.selectedColumn;
+      this.sortAscending = true;
+    }
+    if (this.selectedTable) {
+      await this.reloadTable(`Sorting ${column} ${this.sortAscending ? "ascending" : "descending"}…`);
+      return;
+    }
+    const direction = this.sortAscending ? 1 : -1;
+    const index = this.sortColumn;
+    this.result.rows.sort((left, right) => {
+      const a = left[index];
+      const b = right[index];
+      if (a === b) return 0;
+      if (a === null) return -direction;
+      if (b === null) return direction;
+      return String(a).localeCompare(String(b), undefined, { numeric: true }) * direction;
+    });
+    this.renderResult();
+    this.announce(`Sorted ${column} ${this.sortAscending ? "ascending" : "descending"}.`);
+  }
+
+  private toggleRowSelection(): void {
+    if (!this.result.rows[this.selectedRow]) return;
+    if (this.selectedRows.has(this.selectedRow)) this.selectedRows.delete(this.selectedRow);
+    else this.selectedRows.add(this.selectedRow);
+    const row = this.resultBody.querySelector<HTMLTableRowElement>(`tr:nth-child(${this.selectedRow + 1})`);
+    if (row) row.dataset.rowSelected = String(this.selectedRows.has(this.selectedRow));
+    this.announce(`${this.selectedRows.size} row${this.selectedRows.size === 1 ? "" : "s"} selected.`);
+  }
+
+  private openRowDetail(opener: HTMLElement): void {
+    const row = this.result.rows[this.selectedRow];
+    if (!row || !this.result.columns.length) {
+      this.announce("Select a result row first.");
+      return;
+    }
+    this.detailList.replaceChildren();
+    this.result.columns.forEach((column, index) => {
+      const term = document.createElement("dt");
+      term.textContent = column;
+      const detail = document.createElement("dd");
+      detail.textContent = printable(row[index]);
+      this.detailList.append(term, detail);
+    });
+    this.focusReturn.set(this.detailDialog, opener);
+    this.detailDialog.showModal();
+  }
+
+  private toggleFullscreen(): void {
+    const fullscreen = this.root.dataset.fullscreen !== "true";
+    this.root.dataset.fullscreen = String(fullscreen);
+    this.announce(fullscreen ? "Results expanded." : "Workspace restored.");
+    if (fullscreen) this.setPanelFocus("results");
   }
 
   private openPalette(opener: HTMLElement): void {
@@ -987,7 +1500,7 @@ ORDER BY SUM(pay.amount) DESC;`;
       .map((action) => ({ action, score: scoreAction(action, search) }))
       .filter((entry): entry is ScoredAction => Number.isFinite(entry.score))
       .sort((left, right) => right.score - left.score)
-      .slice(0, 8)
+      .slice(0, 14)
       .map((entry) => entry.action);
     this.paletteIndex = Math.max(0, Math.min(this.paletteIndex, this.visiblePaletteActions.length - 1));
     this.paletteList.replaceChildren();
@@ -998,6 +1511,7 @@ ORDER BY SUM(pay.amount) DESC;`;
       empty.textContent = "No command found. Try “table”, “export”, or “schema”.";
       this.paletteList.append(empty);
       this.paletteInput.removeAttribute("aria-activedescendant");
+      this.paletteDetail.textContent = "No matching command or object. Try a shorter search.";
       return;
     }
 
@@ -1010,18 +1524,19 @@ ORDER BY SUM(pay.amount) DESC;`;
       const icon = document.createElement("span");
       icon.className = "demo-command-icon";
       icon.setAttribute("aria-hidden", "true");
-      icon.textContent = action.id.startsWith("table-") ? "▦" : action.id === "run" ? "▶" : "⌘";
+      icon.textContent = action.kind;
       const copy = document.createElement("span");
       copy.className = "demo-command-copy";
       const label = document.createElement("strong");
       appendHighlighted(label, action.label, search);
       const description = document.createElement("small");
-      description.textContent = action.description;
+      description.textContent = action.shortcut ?? "";
       copy.append(label, description);
       option.append(icon, copy);
       this.paletteList.append(option);
     });
     this.paletteInput.setAttribute("aria-activedescendant", `demo-palette-option-${this.paletteIndex}`);
+    this.updatePaletteDetail();
   }
 
   private setPaletteIndex(index: number, scroll: boolean): void {
@@ -1033,18 +1548,39 @@ ORDER BY SUM(pay.amount) DESC;`;
     const active = query<HTMLElement>(this.paletteList, `[data-palette-index="${this.paletteIndex}"]`);
     this.paletteInput.setAttribute("aria-activedescendant", active.id);
     if (scroll) active.scrollIntoView({ block: "nearest" });
+    this.updatePaletteDetail();
+  }
+
+  private updatePaletteDetail(): void {
+    const action = this.visiblePaletteActions[this.paletteIndex];
+    this.paletteDetail.replaceChildren();
+    if (!action) {
+      this.paletteDetail.textContent = "No matching command or object.";
+      return;
+    }
+    const title = document.createElement("strong");
+    title.textContent = `${action.kind}  ${action.label}`;
+    const description = document.createElement("span");
+    description.textContent = action.description;
+    this.paletteDetail.append(title, description);
+    if (action.shortcut) {
+      const shortcut = document.createElement("span");
+      shortcut.append("Shortcut: ");
+      const key = document.createElement("kbd");
+      key.textContent = action.shortcut;
+      shortcut.append(key);
+      this.paletteDetail.append(shortcut);
+    }
   }
 
   private handlePaletteKeys(event: KeyboardEvent): void {
+    if (!this.visiblePaletteActions.length) return;
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      this.setPaletteIndex((this.paletteIndex + 1) % this.visiblePaletteActions.length, true);
+      this.setPaletteIndex(this.paletteIndex + 1, true);
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
-      this.setPaletteIndex(
-        (this.paletteIndex - 1 + this.visiblePaletteActions.length) % this.visiblePaletteActions.length,
-        true
-      );
+      this.setPaletteIndex(this.paletteIndex - 1, true);
     } else if (event.key === "Enter") {
       event.preventDefault();
       void this.choosePaletteAction(this.paletteIndex);
@@ -1054,28 +1590,39 @@ ORDER BY SUM(pay.amount) DESC;`;
   private async choosePaletteAction(index: number): Promise<void> {
     const action = this.visiblePaletteActions[index];
     if (!action) return;
+    const closed = new Promise<void>((resolve) => {
+      this.paletteDialog.addEventListener("close", () => resolve(), { once: true });
+    });
     this.paletteDialog.close();
+    await closed;
     await action.run();
   }
 
   private openFilter(opener: HTMLElement): void {
-    if (!this.result.columns.length) {
-      this.announce("Run a query before opening result filters.");
+    if (!this.selectedTable || !this.result.columns.length) {
+      this.announce("Column filters are available while browsing a table.");
       return;
     }
+    const column = this.result.columns[this.selectedColumn];
+    if (!column) return;
     this.filterColumn.replaceChildren();
-    this.result.columns.forEach((column) => {
-      const option = document.createElement("option");
-      option.value = column;
-      option.textContent = column;
-      option.selected = column === (this.filter?.column ?? this.result.columns[this.selectedColumn]);
-      this.filterColumn.append(option);
-    });
-    this.filterOperator.value = this.filter?.operator ?? "contains";
-    this.filterValue.value = this.filter?.value ?? "";
+    const option = document.createElement("option");
+    option.value = column;
+    option.textContent = column;
+    option.selected = true;
+    this.filterColumn.append(option);
+    const active = [...this.filters].reverse().find((filter) => filter.column === column);
+    this.filterOperator.value = active?.operator ?? "equals";
+    this.filterValue.value = active?.value ?? "";
+    this.filterTitle.textContent = `📊 Filters: ${this.selectedTable}.${column}`;
+    this.renderFilterChip();
+    this.updateFilterValueState();
     this.focusReturn.set(this.filterDialog, opener);
     this.filterDialog.showModal();
-    window.setTimeout(() => this.filterValue.focus(), 0);
+    window.setTimeout(() => {
+      if (this.filterValue.disabled) this.filterOperator.focus();
+      else this.filterValue.focus();
+    }, 0);
   }
 
   private openHelp(opener: HTMLElement): void {
@@ -1117,18 +1664,32 @@ ORDER BY SUM(pay.amount) DESC;`;
 
   private updateTableSelection(): void {
     this.root.querySelectorAll<HTMLButtonElement>("[data-demo-table]").forEach((button) => {
-      const active = button.dataset.demoTable === this.selectedTable;
-      button.setAttribute("aria-pressed", String(active));
+      const active = button.dataset.demoTable === this.tableCursor;
+      button.setAttribute("aria-selected", String(active));
+      button.tabIndex = active ? 0 : -1;
     });
   }
 
-  private setLoading(loading: boolean, message?: string): void {
+  private setLoading(loading: boolean, title?: string, message?: string): void {
     this.isLoading = loading;
     this.root.dataset.loading = String(loading);
     this.root.setAttribute("aria-busy", String(loading));
     this.runButton.disabled = loading;
     this.resetButton.disabled = loading;
-    if (message) this.announce(message);
+    if (this.loadingRevealTimer !== null) window.clearTimeout(this.loadingRevealTimer);
+    this.loadingRevealTimer = null;
+    if (loading) {
+      this.loadingTitle.textContent = title ?? "Loading…";
+      this.loadingMessage.textContent = message ?? "Press Esc to cancel.";
+      this.loadingRevealTimer = window.setTimeout(() => {
+        this.loadingOverlay.hidden = false;
+        this.loadingOverlay.setAttribute("aria-hidden", "false");
+      }, 90);
+      if (title) this.status.textContent = title;
+      return;
+    }
+    this.loadingOverlay.hidden = true;
+    this.loadingOverlay.setAttribute("aria-hidden", "true");
   }
 
   private setEngineState(state: "idle" | "loading" | "ready" | "error", label: string): void {
@@ -1138,7 +1699,26 @@ ORDER BY SUM(pay.amount) DESC;`;
   }
 
   private announce(message: string): void {
+    if (this.flashTimer !== null) window.clearTimeout(this.flashTimer);
     this.status.textContent = message;
+    this.flashTimer = window.setTimeout(() => this.updateContextStatus(), 2400);
+  }
+
+  private updateContextStatus(): void {
+    if (this.isLoading) return;
+    if (this.focusedPanel === "query") {
+      this.status.textContent = "Enter Run ▶ · Shift+Enter Newline · Esc Tables";
+      return;
+    }
+    if (this.focusedPanel === "results") {
+      this.status.textContent = this.filters.length
+        ? "Esc Clear filter · / Change · C Copy · Alt+E CSV"
+        : "C Copy · / Filter · V Clipboard · F Follow FK · Alt+E CSV";
+      return;
+    }
+    this.status.textContent = this.tableSearch
+      ? `find: ${this.tableSearch} · Enter open · Backspace edit · Esc clear`
+      : "Tables focused · type to find · Enter open · Esc release";
   }
 }
 
