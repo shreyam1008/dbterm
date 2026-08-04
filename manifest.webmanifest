@@ -4,9 +4,21 @@
   "description": "Open-source terminal database client for PostgreSQL, MySQL, SQLite, Turso, and Cloudflare D1.",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#f4efe2",
-  "theme_color": "#0b5d52",
+  "background_color": "#090c12",
+  "theme_color": "#090c12",
   "icons": [
+    {
+      "src": "favicon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "favicon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
     {
       "src": "favicon.svg",
       "sizes": "any",
