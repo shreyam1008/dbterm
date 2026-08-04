@@ -33,8 +33,8 @@ Run website locally:
 
 ```bash
 cd site
-npm install
-npm run dev
+bun install
+bun run dev
 ```
 
 ## 3. What to work on first
@@ -69,6 +69,7 @@ When applicable, update these together:
 - `README.md`
 - `site/src/pages/index.astro`
 - `site/src/pages/guide.astro`
+- `site/src/pages/compare.astro`
 - `site/src/pages/open-source.astro`
 
 ## 7. Release notes source

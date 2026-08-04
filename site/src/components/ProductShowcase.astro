@@ -1,0 +1,839 @@
+---
+const baseUrl = import.meta.env.BASE_URL;
+const withBase = (path: string) => {
+  const trimmedBase = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
+  const trimmedPath = path.startsWith("/") ? path.slice(1) : path;
+  return `${trimmedBase}/${trimmedPath}`.replace(/\/{2,}/g, "/");
+};
+
+const views = [
+  {
+    id: "command-palette",
+    navTitle: "Command palette",
+    navMeta: "Current · Find anything",
+    kicker: "Current workflow",
+    title: "Every action, one search away",
+    description:
+      "Ctrl+P fuzzy-searches actions, database objects, and recent SQL—with matched letters highlighted and context for every command.",
+    src: withBase("assets/command-palette.png"),
+    alt: "dbterm command palette open over a PostgreSQL results table, showing fuzzy-matched actions and keyboard hints",
+    width: 1306,
+    height: 514,
+  },
+  {
+    id: "original-workspace",
+    navTitle: "Original workspace",
+    navMeta: "Historical · Shortcut UI",
+    kicker: "The original",
+    title: "Where the keyboard-first model began",
+    description:
+      "The first dbterm workspace established the shortcut-led query, tables, and results layout. It is part of the product story—preserved here, not discarded.",
+    src: withBase("main_ui.png"),
+    alt: "Original dbterm terminal workspace with connection sidebar, SQL editor, table browser, and keyboard shortcut footer",
+    width: 1916,
+    height: 933,
+  },
+  {
+    id: "services",
+    navTitle: "Services",
+    navMeta: "Operate · One screen",
+    kicker: "Service control",
+    title: "See the state of every database service",
+    description:
+      "Inspect database services and act without breaking your terminal flow. Operational context stays next to the data work.",
+    src: withBase("assets/1.png"),
+    alt: "dbterm services screen listing database services and their runtime status",
+    width: 1222,
+    height: 683,
+  },
+  {
+    id: "backups",
+    navTitle: "Backups",
+    navMeta: "Protect · Visible progress",
+    kicker: "Backup workflow",
+    title: "Backups without a mystery process",
+    description:
+      "Choose the connection and format, then follow visible progress. Long-running work stays cancellable and understandable.",
+    src: withBase("assets/2.png"),
+    alt: "dbterm backup interface showing connection and backup format choices",
+    width: 1222,
+    height: 456,
+  },
+];
+---
+
+<section class="product-showcase" id="product" aria-labelledby="showcase-title" data-product-showcase>
+  <header class="showcase-heading">
+    <div>
+      <p class="showcase-eyebrow">The real product</p>
+      <h2 id="showcase-title">Built in public. Sharpened in use.</h2>
+    </div>
+    <p class="showcase-intro">
+      Four views from dbterm itself—from the original shortcut-led workspace to today’s command
+      palette, service control, and resilient backup flow.
+    </p>
+  </header>
+
+  <div class="showcase-ripple-shell" data-ripple-shell>
+    <canvas
+      class="ripple-source"
+      data-ripple-source
+      hidden
+    ></canvas>
+
+    <div class="showcase-content" data-showcase-content>
+      <nav class="showcase-tabs" aria-label="Product views" data-showcase-tabs>
+        {views.map((view, index) => (
+          <a
+            class="showcase-tab"
+            href={`#shot-${view.id}`}
+            data-showcase-tab
+            data-index={index}
+          >
+            <span class="tab-index" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
+            <span class="tab-copy">
+              <strong>{view.navTitle}</strong>
+              <small>{view.navMeta}</small>
+            </span>
+            <span class="tab-arrow" aria-hidden="true">↗</span>
+          </a>
+        ))}
+      </nav>
+
+      <div class="showcase-stage" data-showcase-stage>
+        {views.map((view, index) => (
+          <figure
+            class="showcase-view"
+            id={`shot-${view.id}`}
+            data-showcase-panel
+            data-index={index}
+          >
+            <div class="image-frame">
+              <img
+                src={view.src}
+                alt={view.alt}
+                width={view.width}
+                height={view.height}
+                loading="lazy"
+                decoding="async"
+              />
+              <a
+                class="zoom-link"
+                href={view.src}
+                target="_blank"
+                rel="noopener"
+                data-zoom-link
+                data-src={view.src}
+                data-alt={view.alt}
+                data-width={view.width}
+                data-height={view.height}
+                data-title={view.title}
+                aria-label={`Full size: ${view.navTitle}`}
+              >
+                <span aria-hidden="true">↗</span>
+                Full size
+              </a>
+            </div>
+            <figcaption>
+              <p class="view-kicker">{view.kicker}</p>
+              <h3>{view.title}</h3>
+              <p>{view.description}</p>
+            </figcaption>
+          </figure>
+        ))}
+      </div>
+    </div>
+
+    <canvas class="ripple-output" data-ripple-output aria-hidden="true" hidden></canvas>
+    <p class="ripple-hint" data-ripple-hint hidden>
+      <span aria-hidden="true">◉</span> Click the frame. The live interface carries the ripple.
+    </p>
+  </div>
+
+  <dialog class="showcase-dialog" data-showcase-dialog aria-label="Full-size dbterm screenshot">
+    <div class="dialog-bar">
+      <p data-dialog-title>dbterm product view</p>
+      <button type="button" class="dialog-close" data-dialog-close aria-label="Close full-size image">
+        <span aria-hidden="true">×</span>
+      </button>
+    </div>
+    <div class="dialog-image-wrap">
+      <img
+        src={views[0].src}
+        alt=""
+        width={views[0].width}
+        height={views[0].height}
+        data-dialog-image
+      />
+    </div>
+    <p class="dialog-help">Press Esc to close</p>
+  </dialog>
+</section>
+
+<script>
+  import {
+    createRipple,
+    supportsHtmlInCanvas,
+    type RippleInstance,
+  } from "../lib/canvasui/Ripple";
+
+  interface NetworkInformationLike {
+    saveData?: boolean;
+  }
+
+  interface NavigatorWithConnection extends Navigator {
+    connection?: NetworkInformationLike;
+    deviceMemory?: number;
+  }
+
+  const initialized = new WeakSet<HTMLElement>();
+
+  function setupShowcase(root: HTMLElement) {
+    if (initialized.has(root)) return;
+    initialized.add(root);
+    root.dataset.enhanced = "true";
+
+    const tabsContainer = root.querySelector<HTMLElement>("[data-showcase-tabs]");
+    const tabs = Array.from(root.querySelectorAll<HTMLAnchorElement>("[data-showcase-tab]"));
+    const panels = Array.from(root.querySelectorAll<HTMLElement>("[data-showcase-panel]"));
+    const shell = root.querySelector<HTMLElement>("[data-ripple-shell]");
+    const content = root.querySelector<HTMLElement>("[data-showcase-content]");
+    const source = root.querySelector<HTMLCanvasElement>("[data-ripple-source]");
+    const output = root.querySelector<HTMLCanvasElement>("[data-ripple-output]");
+    const rippleHint = root.querySelector<HTMLElement>("[data-ripple-hint]");
+    const dialog = root.querySelector<HTMLDialogElement>("[data-showcase-dialog]");
+    const dialogImage = dialog?.querySelector<HTMLImageElement>("[data-dialog-image]");
+    const dialogTitle = dialog?.querySelector<HTMLElement>("[data-dialog-title]");
+    const closeButton = dialog?.querySelector<HTMLButtonElement>("[data-dialog-close]");
+
+    if (!tabsContainer || !shell || !content || !source || !output) return;
+
+    const shellElement = shell;
+    const contentElement = content;
+    const sourceCanvas = source;
+    const outputCanvas = output;
+    sourceCanvas.setAttribute("layoutsubtree", "true");
+
+    tabsContainer.setAttribute("role", "tablist");
+    let activeIndex = 0;
+
+    function activate(index: number, focus = false) {
+      activeIndex = (index + tabs.length) % tabs.length;
+      tabs.forEach((tab, tabIndex) => {
+        const selected = tabIndex === activeIndex;
+        tab.setAttribute("role", "tab");
+        tab.setAttribute("aria-selected", String(selected));
+        tab.setAttribute("aria-controls", panels[tabIndex].id);
+        tab.tabIndex = selected ? 0 : -1;
+      });
+      panels.forEach((panel, panelIndex) => {
+        const selected = panelIndex === activeIndex;
+        panel.hidden = !selected;
+        panel.setAttribute("role", "tabpanel");
+        panel.setAttribute("aria-labelledby", tabs[panelIndex].id);
+        panel.tabIndex = 0;
+      });
+      if (focus) tabs[activeIndex].focus();
+      requestAnimationFrame(syncShellHeight);
+    }
+
+    tabs.forEach((tab, index) => {
+      tab.id = `showcase-tab-${index}`;
+      tab.addEventListener("click", (event) => {
+        event.preventDefault();
+        activate(index);
+      });
+      tab.addEventListener("keydown", (event) => {
+        let nextIndex: number | undefined;
+        if (event.key === "ArrowRight" || event.key === "ArrowDown") nextIndex = activeIndex + 1;
+        if (event.key === "ArrowLeft" || event.key === "ArrowUp") nextIndex = activeIndex - 1;
+        if (event.key === "Home") nextIndex = 0;
+        if (event.key === "End") nextIndex = tabs.length - 1;
+        if (nextIndex === undefined) return;
+        event.preventDefault();
+        activate(nextIndex, true);
+      });
+    });
+
+    activate(0);
+
+    let dialogOpener: HTMLElement | null = null;
+    root.querySelectorAll<HTMLAnchorElement>("[data-zoom-link]").forEach((link) => {
+      link.addEventListener("click", (event) => {
+        if (!dialog || !dialogImage || typeof dialog.showModal !== "function") return;
+        event.preventDefault();
+        dialogOpener = link;
+        dialogImage.src = link.dataset.src ?? link.href;
+        dialogImage.alt = link.dataset.alt ?? "Full-size dbterm screenshot";
+        dialogImage.width = Number(link.dataset.width) || 1306;
+        dialogImage.height = Number(link.dataset.height) || 514;
+        if (dialogTitle) dialogTitle.textContent = link.dataset.title ?? "dbterm product view";
+        dialog.showModal();
+      });
+    });
+
+    closeButton?.addEventListener("click", () => dialog?.close());
+    dialog?.addEventListener("click", (event) => {
+      if (event.target === dialog) dialog.close();
+    });
+    dialog?.addEventListener("close", () => dialogOpener?.focus());
+
+    const anchor = document.createElement("span");
+    anchor.hidden = true;
+    anchor.dataset.rippleAnchor = "";
+    contentElement.before(anchor);
+
+    let ripple: RippleInstance | null = null;
+    let native = false;
+    let shellObserver: ResizeObserver | null = null;
+
+    function syncShellHeight() {
+      if (!native) return;
+      shellElement.style.height = `${Math.ceil(contentElement.getBoundingClientRect().height)}px`;
+      ripple?.resize();
+    }
+
+    function restoreContent() {
+      if (native && contentElement.parentElement === sourceCanvas) anchor.after(contentElement);
+      native = false;
+      sourceCanvas.hidden = true;
+      outputCanvas.hidden = true;
+      shellElement.style.removeProperty("height");
+      root.dataset.ripple = "fallback";
+      if (rippleHint) rippleHint.hidden = true;
+    }
+
+    const navigatorHints = navigator as NavigatorWithConnection;
+    const motionSafe = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const dataSafe = !navigatorHints.connection?.saveData;
+    const deviceSafe =
+      !window.matchMedia("(pointer: coarse)").matches &&
+      (navigatorHints.deviceMemory === undefined || navigatorHints.deviceMemory > 2);
+    const webglAvailable = Boolean(document.createElement("canvas").getContext("webgl2"));
+
+    if (motionSafe && dataSafe && deviceSafe && webglAvailable) {
+      native = supportsHtmlInCanvas();
+      if (native) {
+        shellElement.style.height = `${Math.ceil(contentElement.getBoundingClientRect().height)}px`;
+        sourceCanvas.hidden = false;
+        sourceCanvas.append(contentElement);
+      }
+      outputCanvas.hidden = false;
+
+      ripple = createRipple(
+        { source: sourceCanvas, content: contentElement, output: outputCanvas },
+        {
+          amplitude: 0.34,
+          speed: 0.58,
+          wavelength: 96,
+          rings: 2,
+          decay: 1.35,
+          refraction: 42,
+          dispersion: 0.16,
+          shine: 0.38,
+          trigger: "click",
+          interval: 0,
+        },
+      );
+
+      if (ripple) {
+        root.dataset.ripple = native ? "html-in-canvas" : "overlay";
+        if (rippleHint) rippleHint.hidden = false;
+        shellObserver = new ResizeObserver(syncShellHeight);
+        shellObserver.observe(contentElement);
+        contentElement.querySelectorAll("img").forEach((image) =>
+          image.addEventListener("load", syncShellHeight, { once: true }),
+        );
+        requestAnimationFrame(syncShellHeight);
+      } else {
+        restoreContent();
+      }
+    } else {
+      root.dataset.ripple = "fallback";
+    }
+
+    function destroy() {
+      shellObserver?.disconnect();
+      ripple?.destroy();
+      ripple = null;
+      restoreContent();
+    }
+
+    document.addEventListener("astro:before-swap", destroy, { once: true });
+    window.addEventListener("pagehide", destroy, { once: true });
+  }
+
+  const scheduled = new WeakSet<HTMLElement>();
+  const showcaseObserver =
+    "IntersectionObserver" in window
+      ? new IntersectionObserver(
+          (entries, observer) => {
+            entries.forEach((entry) => {
+              if (!entry.isIntersecting) return;
+              observer.unobserve(entry.target);
+              setupShowcase(entry.target as HTMLElement);
+            });
+          },
+          { rootMargin: "500px 0px" },
+        )
+      : null;
+
+  function initializeShowcases() {
+    document.querySelectorAll<HTMLElement>("[data-product-showcase]").forEach((root) => {
+      if (initialized.has(root) || scheduled.has(root)) return;
+      scheduled.add(root);
+      if (showcaseObserver) showcaseObserver.observe(root);
+      else setupShowcase(root);
+    });
+  }
+
+  initializeShowcases();
+  document.addEventListener("astro:page-load", initializeShowcases);
+</script>
+
+<style>
+  .product-showcase {
+    --showcase-ink: #17241b;
+    --showcase-muted: #657067;
+    --showcase-paper: #f7f4ea;
+    --showcase-panel: #fffdf7;
+    --showcase-line: #d8dacd;
+    --showcase-green: #1d6a48;
+    --showcase-warm: #c56d3f;
+    position: relative;
+    width: min(100%, 76rem);
+    margin-inline: auto;
+    color: var(--showcase-ink);
+  }
+
+  .showcase-heading {
+    display: grid;
+    grid-template-columns: minmax(0, 1.12fr) minmax(18rem, 0.88fr);
+    gap: clamp(2rem, 6vw, 7rem);
+    align-items: end;
+    margin-bottom: clamp(1.5rem, 4vw, 2.75rem);
+  }
+
+  .showcase-eyebrow,
+  .view-kicker {
+    margin: 0 0 0.75rem;
+    color: var(--showcase-green);
+    font: 650 0.72rem/1.2 var(--font-mono, ui-monospace, monospace);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  .showcase-heading h2 {
+    max-width: 14ch;
+    margin: 0;
+    color: var(--showcase-ink);
+    font-size: clamp(2.25rem, 5.8vw, 5rem);
+    line-height: 0.94;
+    letter-spacing: -0.06em;
+    text-wrap: balance;
+  }
+
+  .showcase-intro {
+    max-width: 42rem;
+    margin: 0 0 0.4rem;
+    color: var(--showcase-muted);
+    font-size: clamp(1rem, 1.5vw, 1.18rem);
+    line-height: 1.65;
+  }
+
+  .showcase-ripple-shell {
+    position: relative;
+    isolation: isolate;
+    border: 1px solid var(--showcase-line);
+    border-radius: 1.4rem;
+    background: var(--showcase-panel);
+    box-shadow:
+      0 1px 0 rgb(255 255 255 / 80%) inset,
+      0 30px 80px rgb(34 48 38 / 10%);
+  }
+
+  .showcase-content {
+    position: relative;
+    display: grid;
+    grid-template-columns: 15.5rem minmax(0, 1fr);
+    width: 100%;
+    min-height: 36rem;
+    overflow: hidden;
+    border-radius: inherit;
+  }
+
+  .showcase-tabs {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 1rem;
+    border-right: 1px solid var(--showcase-line);
+    background:
+      linear-gradient(145deg, rgb(29 106 72 / 5%), transparent 48%),
+      var(--showcase-paper);
+  }
+
+  .showcase-tab {
+    display: grid;
+    grid-template-columns: 1.8rem minmax(0, 1fr) auto;
+    gap: 0.7rem;
+    align-items: start;
+    padding: 1rem 0.8rem;
+    border-bottom: 1px solid color-mix(in srgb, var(--showcase-line), transparent 20%);
+    color: var(--showcase-muted);
+    text-decoration: none;
+    transition: color 160ms ease, background-color 160ms ease, transform 160ms ease;
+  }
+
+  .showcase-tab:hover {
+    color: var(--showcase-ink);
+    background: rgb(255 255 255 / 54%);
+  }
+
+  .showcase-tab[aria-selected="true"] {
+    color: var(--showcase-ink);
+    background: var(--showcase-panel);
+    transform: translateX(0.22rem);
+  }
+
+  .showcase-tab:focus-visible,
+  .zoom-link:focus-visible,
+  .dialog-close:focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--showcase-green), white 30%);
+    outline-offset: 3px;
+  }
+
+  .tab-index {
+    color: var(--showcase-green);
+    font: 600 0.67rem/1.4 var(--font-mono, ui-monospace, monospace);
+    letter-spacing: 0.08em;
+  }
+
+  .tab-copy {
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .tab-copy strong {
+    font-size: 0.92rem;
+    line-height: 1.25;
+  }
+
+  .tab-copy small {
+    color: var(--showcase-muted);
+    font: 500 0.67rem/1.4 var(--font-mono, ui-monospace, monospace);
+  }
+
+  .tab-arrow {
+    opacity: 0;
+    color: var(--showcase-green);
+    transition: opacity 160ms ease;
+  }
+
+  .showcase-tab[aria-selected="true"] .tab-arrow,
+  .showcase-tab:hover .tab-arrow {
+    opacity: 1;
+  }
+
+  .showcase-stage {
+    min-width: 0;
+    padding: clamp(1rem, 2vw, 1.5rem);
+  }
+
+  .showcase-view {
+    display: grid;
+    gap: 1.2rem;
+    margin: 0 0 clamp(2.5rem, 7vw, 5rem);
+  }
+
+  .product-showcase[data-enhanced="true"] .showcase-view {
+    margin-bottom: 0;
+  }
+
+  .showcase-view[hidden] {
+    display: none;
+  }
+
+  .image-frame {
+    position: relative;
+    display: grid;
+    min-height: 20rem;
+    overflow: hidden;
+    place-items: center;
+    border: 1px solid #2c3430;
+    border-radius: 0.75rem;
+    background:
+      radial-gradient(circle at 50% 0%, #26332c, #111713 70%),
+      #111713;
+    box-shadow: 0 18px 50px rgb(12 20 15 / 18%);
+  }
+
+  .image-frame::before {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    border-radius: inherit;
+    box-shadow: 0 0 0 1px rgb(255 255 255 / 7%) inset;
+    content: "";
+    pointer-events: none;
+  }
+
+  .image-frame img {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 31rem;
+    object-fit: contain;
+  }
+
+  .zoom-link {
+    position: absolute;
+    right: 0.75rem;
+    bottom: 0.75rem;
+    z-index: 2;
+    display: inline-flex;
+    gap: 0.45rem;
+    align-items: center;
+    padding: 0.55rem 0.72rem;
+    border: 1px solid rgb(255 255 255 / 20%);
+    border-radius: 999px;
+    color: #f4f7f3;
+    background: rgb(9 15 11 / 78%);
+    backdrop-filter: blur(12px);
+    font: 600 0.7rem/1 var(--font-mono, ui-monospace, monospace);
+    letter-spacing: 0.03em;
+    text-decoration: none;
+  }
+
+  .showcase-view figcaption {
+    display: grid;
+    grid-template-columns: minmax(0, 0.75fr) minmax(15rem, 1fr);
+    column-gap: clamp(1.5rem, 4vw, 4rem);
+    align-items: start;
+  }
+
+  .showcase-view figcaption .view-kicker {
+    grid-column: 1 / -1;
+  }
+
+  .showcase-view h3 {
+    margin: 0;
+    color: var(--showcase-ink);
+    font-size: clamp(1.45rem, 2.5vw, 2.35rem);
+    line-height: 1.04;
+    letter-spacing: -0.04em;
+    text-wrap: balance;
+  }
+
+  .showcase-view figcaption > p:last-child {
+    margin: 0;
+    color: var(--showcase-muted);
+    font-size: 0.95rem;
+    line-height: 1.6;
+  }
+
+  .ripple-source,
+  .ripple-output {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: inherit;
+  }
+
+  .ripple-source {
+    z-index: 1;
+    border: 0;
+  }
+
+  .ripple-output {
+    z-index: 2;
+    pointer-events: none;
+  }
+
+  .ripple-hint {
+    position: absolute;
+    right: 1rem;
+    bottom: -2.15rem;
+    display: inline-flex;
+    gap: 0.4rem;
+    align-items: center;
+    margin: 0;
+    color: var(--showcase-muted);
+    font: 500 0.65rem/1.2 var(--font-mono, ui-monospace, monospace);
+    letter-spacing: 0.02em;
+  }
+
+  .ripple-hint span {
+    color: var(--showcase-green);
+  }
+
+  .showcase-dialog {
+    width: min(96vw, 88rem);
+    max-width: none;
+    max-height: 94vh;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid #354038;
+    border-radius: 1rem;
+    color: #edf4ef;
+    background: #111713;
+    box-shadow: 0 28px 100px rgb(0 0 0 / 45%);
+  }
+
+  .showcase-dialog::backdrop {
+    background: rgb(11 18 13 / 72%);
+    backdrop-filter: blur(7px);
+  }
+
+  .dialog-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 0.85rem 0.75rem 1rem;
+    border-bottom: 1px solid #354038;
+  }
+
+  .dialog-bar p,
+  .dialog-help {
+    margin: 0;
+    font: 500 0.72rem/1.3 var(--font-mono, ui-monospace, monospace);
+  }
+
+  .dialog-close {
+    display: grid;
+    width: 2.2rem;
+    height: 2.2rem;
+    padding: 0;
+    border: 1px solid #445249;
+    border-radius: 999px;
+    color: #edf4ef;
+    background: transparent;
+    cursor: pointer;
+    font-size: 1.4rem;
+    place-items: center;
+  }
+
+  .dialog-image-wrap {
+    display: grid;
+    max-height: calc(94vh - 7rem);
+    overflow: auto;
+    place-items: center;
+  }
+
+  .dialog-image-wrap img {
+    display: block;
+    width: auto;
+    max-width: 100%;
+    height: auto;
+    max-height: calc(94vh - 7rem);
+  }
+
+  .dialog-help {
+    padding: 0.65rem 1rem;
+    color: #a8b4ab;
+    text-align: right;
+  }
+
+  :global([data-theme="dark"]) .product-showcase,
+  :global(.dark) .product-showcase {
+    --showcase-ink: #ecf3ed;
+    --showcase-muted: #9daaa0;
+    --showcase-paper: #111812;
+    --showcase-panel: #151d17;
+    --showcase-line: #303a32;
+    --showcase-green: #82d09b;
+    --showcase-warm: #e49a70;
+  }
+
+  :global([data-theme="dark"]) .showcase-tab:hover,
+  :global(.dark) .showcase-tab:hover {
+    background: rgb(255 255 255 / 4%);
+  }
+
+  @media (max-width: 860px) {
+    .showcase-heading {
+      grid-template-columns: 1fr;
+      gap: 1.25rem;
+    }
+
+    .showcase-heading h2 {
+      max-width: 15ch;
+    }
+
+    .showcase-content {
+      grid-template-columns: 1fr;
+      min-height: 0;
+    }
+
+    .showcase-tabs {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(10.5rem, 1fr));
+      overflow-x: auto;
+      border-right: 0;
+      border-bottom: 1px solid var(--showcase-line);
+      scrollbar-width: thin;
+    }
+
+    .showcase-tab {
+      grid-template-columns: 1.5rem minmax(0, 1fr);
+      border-right: 1px solid var(--showcase-line);
+      border-bottom: 0;
+    }
+
+    .showcase-tab[aria-selected="true"] {
+      transform: translateY(0.15rem);
+    }
+
+    .tab-arrow {
+      display: none;
+    }
+  }
+
+  @media (max-width: 620px) {
+    .showcase-heading h2 {
+      font-size: clamp(2.2rem, 13vw, 3.4rem);
+    }
+
+    .showcase-ripple-shell {
+      border-radius: 1rem;
+    }
+
+    .showcase-stage {
+      padding: 0.75rem;
+    }
+
+    .image-frame {
+      min-height: 12rem;
+    }
+
+    .showcase-view figcaption {
+      grid-template-columns: 1fr;
+      gap: 0.75rem;
+      padding: 0.35rem 0.2rem 0.75rem;
+    }
+
+    .showcase-view figcaption .view-kicker {
+      margin-bottom: 0;
+    }
+
+    .ripple-hint {
+      display: none;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .showcase-tab,
+    .tab-arrow {
+      transition: none;
+    }
+  }
+
+  @media (prefers-contrast: more) {
+    .showcase-ripple-shell,
+    .image-frame,
+    .showcase-tab {
+      border-color: currentColor;
+    }
+  }
+</style>

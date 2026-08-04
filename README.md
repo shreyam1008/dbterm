@@ -156,9 +156,11 @@ Build website:
 
 ```bash
 cd site
-npm install
-npm run build
+bun install
+bun run verify
 ```
+
+For a local preview, run `bun run dev` and open the URL Astro prints.
 
 ## Release automation
 

@@ -1,0 +1,1343 @@
+<section
+  class="dbt-demo"
+  id="playground"
+  data-dbt-playground
+  aria-labelledby="playground-title"
+  aria-busy="false"
+  tabindex="-1"
+>
+  <header class="demo-intro">
+    <div>
+      <p class="demo-kicker">
+        <span class="demo-kicker-dot" aria-hidden="true"></span>
+        Interactive product tour · sample SQLite data stays in this browser
+      </p>
+      <h2 id="playground-title">Don’t take our word for it. Run the query.</h2>
+      <p class="demo-deck">
+        This is a working, read-only SQLite database—not a video. Browse tables, follow a foreign
+        key, filter a result, and export the rows without leaving this page.
+      </p>
+    </div>
+    <div class="demo-privacy" aria-label="Playground properties">
+      <span>WASM powered</span>
+      <span>Zero uploads</span>
+      <span>No account</span>
+    </div>
+  </header>
+
+  <div class="demo-window">
+    <div class="demo-titlebar">
+      <div class="demo-window-dots" aria-hidden="true">
+        <i></i><i></i><i></i>
+      </div>
+      <div class="demo-window-title">
+        <span class="demo-mini-mark" aria-hidden="true"><b>&gt;</b><i>_</i></span>
+        <span><strong>dbterm</strong><small> / local-demo.sqlite</small></span>
+      </div>
+      <div class="demo-window-tools">
+        <span class="demo-engine" data-demo-engine data-state="idle">
+          <i aria-hidden="true"></i>
+          <span data-demo-engine-label>Ready on demand</span>
+        </span>
+        <button class="demo-icon-button" type="button" data-demo-reset title="Reset sample data">
+          <svg viewBox="0 0 20 20" aria-hidden="true">
+            <path d="M15.8 5.4A7 7 0 1 0 17 11h-2a5 5 0 1 1-.9-2.9L11.2 11H18V4.2l-2.2 1.2Z"></path>
+          </svg>
+          <span class="sr-only">Reset sample data</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="demo-shell">
+      <aside class="demo-sidebar" aria-label="Sample database objects">
+        <div class="demo-sidebar-heading">
+          <span>Tables</span>
+          <kbd>4</kbd>
+        </div>
+        <div class="demo-table-list">
+          <button type="button" data-demo-table="users" aria-pressed="false">
+            <span class="demo-table-glyph" aria-hidden="true">▦</span>
+            <span>users</span>
+            <small data-demo-table-count="users">8</small>
+          </button>
+          <button type="button" data-demo-table="orders" aria-pressed="false">
+            <span class="demo-table-glyph" aria-hidden="true">▦</span>
+            <span>orders</span>
+            <small data-demo-table-count="orders">10</small>
+          </button>
+          <button type="button" data-demo-table="payments" aria-pressed="false">
+            <span class="demo-table-glyph" aria-hidden="true">▦</span>
+            <span>payments</span>
+            <small data-demo-table-count="payments">10</small>
+          </button>
+          <button type="button" data-demo-table="products" aria-pressed="false">
+            <span class="demo-table-glyph" aria-hidden="true">▦</span>
+            <span>products</span>
+            <small data-demo-table-count="products">6</small>
+          </button>
+        </div>
+
+        <div class="demo-sidebar-note">
+          <svg viewBox="0 0 20 20" aria-hidden="true">
+            <path d="M10 1.8 3.3 4.4v4.4c0 4.2 2.8 7.8 6.7 9.4 3.9-1.6 6.7-5.2 6.7-9.4V4.4L10 1.8Zm0 2.1 4.8 1.9v3c0 3.1-1.9 5.9-4.8 7.3-2.9-1.4-4.8-4.2-4.8-7.3v-3L10 3.9Z"></path>
+          </svg>
+          <span><strong>Private by design</strong><small>In-memory and discarded on exit</small></span>
+        </div>
+      </aside>
+
+      <div class="demo-workspace">
+        <section class="demo-editor-panel" aria-labelledby="demo-editor-title">
+          <div class="demo-panel-bar">
+            <div>
+              <span class="demo-panel-index">01</span>
+              <h3 id="demo-editor-title">Query editor</h3>
+              <span class="demo-readonly">tour sandbox · read-only</span>
+            </div>
+            <div class="demo-editor-actions">
+              <button type="button" data-demo-open-palette>
+                Commands <kbd>Ctrl P</kbd>
+              </button>
+              <button type="button" data-demo-open-filter>
+                Filter <kbd>/</kbd>
+              </button>
+              <button type="button" data-demo-export>
+                Export <kbd>Alt E</kbd>
+              </button>
+              <button type="button" data-demo-open-help aria-label="Open keyboard guide">
+                <span aria-hidden="true">?</span>
+              </button>
+            </div>
+          </div>
+
+          <label class="sr-only" for="dbterm-demo-query">SQL query</label>
+          <div class="demo-editor-wrap">
+            <div class="demo-line-numbers" aria-hidden="true">
+              <span>01</span><span>02</span><span>03</span><span>04</span><span>05</span><span>06</span
+              ><span>07</span><span>08</span><span>09</span><span>10</span><span>11</span><span>12</span>
+            </div>
+            <textarea
+              id="dbterm-demo-query"
+              data-demo-editor
+              spellcheck="false"
+              autocapitalize="off"
+              autocomplete="off"
+              aria-describedby="demo-query-policy"
+            ></textarea>
+          </div>
+          <div class="demo-editor-footer">
+            <p id="demo-query-policy">
+              <span aria-hidden="true">●</span> Real SQLite <span aria-hidden="true">·</span> SELECT,
+              WITH, EXPLAIN &amp; PRAGMA
+            </p>
+            <button class="demo-run" type="button" data-demo-run>
+              <span class="demo-run-icon" aria-hidden="true">▶</span>
+              <span data-demo-run-label>Run query</span>
+              <kbd>Ctrl ↵</kbd>
+            </button>
+          </div>
+        </section>
+
+        <section class="demo-results-panel" aria-labelledby="demo-results-title">
+          <div class="demo-panel-bar demo-results-bar">
+            <div>
+              <span class="demo-panel-index">02</span>
+              <h3 id="demo-results-title">Results</h3>
+              <span class="demo-filter-chip" data-demo-filter-chip hidden>
+                <span data-demo-filter-text></span>
+                <button type="button" data-demo-clear-filter aria-label="Clear result filter">×</button>
+              </span>
+            </div>
+            <dl class="demo-result-meta">
+              <div><dt class="sr-only">Rows</dt><dd data-demo-row-count>— rows</dd></div>
+              <div><dt class="sr-only">Execution time</dt><dd data-demo-duration>— ms</dd></div>
+              <div><dt class="sr-only">Engine version</dt><dd data-demo-engine-version>SQLite WASM</dd></div>
+            </dl>
+          </div>
+
+          <div class="demo-result-scroller" data-demo-result-scroller>
+            <table class="demo-result-table" data-demo-result-table hidden>
+              <caption class="sr-only">SQLite query results. Select a cell with the arrow keys.</caption>
+              <thead data-demo-result-head></thead>
+              <tbody data-demo-result-body></tbody>
+            </table>
+            <div class="demo-empty" data-demo-empty>
+              <div class="demo-empty-orbit" aria-hidden="true">
+                <span></span><i></i><b>&gt;_</b>
+              </div>
+              <div>
+                <strong data-demo-empty-title>SQLite is standing by</strong>
+                <p data-demo-empty-message>Run the query to wake the in-browser SQLite engine.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="demo-result-footer" aria-hidden="true">
+            <span><kbd>↑↓←→</kbd> select</span>
+            <span><kbd>C</kbd> copy</span>
+            <span><kbd>V</kbd> filter clipboard</span>
+            <span><kbd>F</kbd> follow key</span>
+            <span><kbd>⌫</kbd> back</span>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <nav class="demo-mobile-actions" aria-label="Playground actions">
+      <button type="button" data-demo-open-palette><span aria-hidden="true">⌘</span> Commands</button>
+      <button type="button" data-demo-open-filter><span aria-hidden="true">⌕</span> Filter</button>
+      <button type="button" data-demo-export><span aria-hidden="true">⇩</span> Export</button>
+      <button type="button" data-demo-open-help><span aria-hidden="true">?</span> Help</button>
+    </nav>
+  </div>
+
+  <p class="demo-live" data-demo-status role="status" aria-live="polite">
+    Demo ready. Run a query to load SQLite.
+  </p>
+
+  <dialog class="demo-dialog demo-palette" data-demo-palette-dialog aria-labelledby="demo-palette-title">
+    <div class="demo-dialog-topline">
+      <div>
+        <span class="demo-dialog-kicker">Command palette</span>
+        <h3 id="demo-palette-title">Go anywhere. Do anything.</h3>
+      </div>
+      <form method="dialog"><button type="submit" aria-label="Close command palette">×</button></form>
+    </div>
+    <div class="demo-combobox">
+      <svg viewBox="0 0 20 20" aria-hidden="true">
+        <path d="m14.5 13.1 4 4-1.4 1.4-4-4a7 7 0 1 1 1.4-1.4ZM3 9a5 5 0 1 0 10 0A5 5 0 0 0 3 9Z"></path>
+      </svg>
+      <input
+        data-demo-palette-input
+        type="text"
+        role="combobox"
+        aria-autocomplete="list"
+        aria-expanded="true"
+        aria-controls="demo-palette-listbox"
+        placeholder="Search actions, tables, and workflows…"
+        autocomplete="off"
+      />
+      <kbd>Esc</kbd>
+    </div>
+    <div
+      class="demo-palette-list"
+      id="demo-palette-listbox"
+      data-demo-palette-list
+      role="listbox"
+      aria-label="Available commands"
+    ></div>
+    <div class="demo-dialog-footer">
+      <span><kbd>↑↓</kbd> navigate</span>
+      <span><kbd>↵</kbd> run</span>
+      <span class="demo-dialog-footer-note">Fuzzy search includes descriptions</span>
+    </div>
+  </dialog>
+
+  <dialog class="demo-dialog demo-filter-dialog" data-demo-filter-dialog aria-labelledby="demo-filter-title">
+    <form data-demo-filter-form>
+      <div class="demo-dialog-topline">
+        <div>
+          <span class="demo-dialog-kicker">Result scope</span>
+          <h3 id="demo-filter-title">Filter visible rows</h3>
+        </div>
+        <button type="button" data-demo-filter-close aria-label="Close filter">×</button>
+      </div>
+      <p class="demo-dialog-deck">Compose a temporary filter without changing the SQL or sample data.</p>
+      <div class="demo-filter-grid">
+        <label>
+          <span>Column</span>
+          <select data-demo-filter-column></select>
+        </label>
+        <label>
+          <span>Operator</span>
+          <select data-demo-filter-operator>
+            <option value="contains">contains</option>
+            <option value="equals">equals</option>
+            <option value="starts">starts with</option>
+            <option value="greater">is greater than</option>
+            <option value="less">is less than</option>
+          </select>
+        </label>
+        <label class="demo-filter-value">
+          <span>Value</span>
+          <input data-demo-filter-value type="text" placeholder="e.g. paid" autocomplete="off" />
+        </label>
+      </div>
+      <div class="demo-dialog-actions">
+        <button class="demo-dialog-secondary" type="button" data-demo-filter-reset>Clear filter</button>
+        <button class="demo-dialog-primary" type="submit">Apply filter</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="demo-dialog demo-help-dialog" data-demo-help-dialog aria-labelledby="demo-help-title">
+    <div class="demo-dialog-topline">
+      <div>
+        <span class="demo-dialog-kicker">Keyboard guide</span>
+        <h3 id="demo-help-title">The fast path through dbterm</h3>
+      </div>
+      <form method="dialog">
+        <button type="submit" data-demo-help-close aria-label="Close keyboard guide">×</button>
+      </form>
+    </div>
+    <p class="demo-dialog-deck">
+      Shortcuts activate only while focus is inside this tour. Your browser keeps its normal keys everywhere else.
+    </p>
+    <div class="demo-shortcut-grid">
+      <div><kbd>Ctrl P</kbd><span><strong>Command palette</strong><small>Fuzzy-find actions and tables</small></span></div>
+      <div><kbd>Ctrl ↵</kbd><span><strong>Run query</strong><small>Execute editor contents</small></span></div>
+      <div><kbd>/</kbd><span><strong>Filter results</strong><small>Compose a scoped row filter</small></span></div>
+      <div><kbd>C</kbd><span><strong>Copy cell</strong><small>Copy the selected value</small></span></div>
+      <div><kbd>V</kbd><span><strong>Filter from clipboard</strong><small>Exact-match the selected column</small></span></div>
+      <div><kbd>F</kbd><span><strong>Follow foreign key</strong><small>Open users, orders, or products</small></span></div>
+      <div><kbd>⌫</kbd><span><strong>Go back</strong><small>Return to the previous result</small></span></div>
+      <div><kbd>Alt E</kbd><span><strong>Export CSV</strong><small>Download visible rows</small></span></div>
+      <div><kbd>Alt H</kbd><span><strong>Open this guide</strong><small>Help is always one chord away</small></span></div>
+      <div><kbd>Ctrl C</kbd><span><strong>Cancel loading</strong><small>Stop a pending tour query</small></span></div>
+    </div>
+  </dialog>
+</section>
+
+<script>
+  import { mountInteractiveDemo } from "../scripts/interactive-demo";
+
+  document.querySelectorAll("[data-dbt-playground]").forEach((node) => {
+    if (node instanceof HTMLElement) mountInteractiveDemo(node);
+  });
+</script>
+
+<style>
+  .dbt-demo {
+    --demo-bg: #f3f1e9;
+    --demo-surface: #fffef9;
+    --demo-surface-soft: #f8f7f1;
+    --demo-surface-raised: #ffffff;
+    --demo-ink: #18211c;
+    --demo-ink-soft: #4e5b53;
+    --demo-ink-faint: #7b867f;
+    --demo-border: #d9ddd6;
+    --demo-border-strong: #bdc6bd;
+    --demo-accent: #18734e;
+    --demo-accent-strong: #0d5c3d;
+    --demo-accent-soft: #dff3e8;
+    --demo-lime: #a4ec80;
+    --demo-violet: #7149a8;
+    --demo-violet-soft: #eee6f8;
+    --demo-error: #a23b35;
+    --demo-error-soft: #fbe8e4;
+    --demo-shadow: 0 38px 90px rgba(36, 50, 42, 0.16), 0 7px 20px rgba(36, 50, 42, 0.08);
+    position: relative;
+    isolation: isolate;
+    margin-block: clamp(5rem, 10vw, 9rem);
+    color: var(--demo-ink);
+    color-scheme: light;
+    font-family: var(--font-sans, "Inter", "Segoe UI", sans-serif);
+  }
+
+  :global([data-theme="dark"]) .dbt-demo {
+    --demo-bg: #111711;
+    --demo-surface: #161d18;
+    --demo-surface-soft: #1b241e;
+    --demo-surface-raised: #212b24;
+    --demo-ink: #eff7ef;
+    --demo-ink-soft: #b2c0b5;
+    --demo-ink-faint: #839187;
+    --demo-border: #344039;
+    --demo-border-strong: #4b5b50;
+    --demo-accent: #9ce978;
+    --demo-accent-strong: #b6f598;
+    --demo-accent-soft: #203c2b;
+    --demo-violet: #c19ae7;
+    --demo-violet-soft: #352940;
+    --demo-error: #ffaaa1;
+    --demo-error-soft: #422725;
+    --demo-shadow: 0 42px 100px rgba(0, 0, 0, 0.42), 0 8px 24px rgba(0, 0, 0, 0.25);
+    color-scheme: dark;
+  }
+
+  .dbt-demo::before {
+    position: absolute;
+    inset: 6rem -5vw -3rem;
+    z-index: -2;
+    border-radius: 4rem;
+    background:
+      radial-gradient(circle at 12% 16%, color-mix(in srgb, var(--demo-accent) 13%, transparent), transparent 30%),
+      radial-gradient(circle at 88% 80%, color-mix(in srgb, var(--demo-violet) 12%, transparent), transparent 32%);
+    content: "";
+    pointer-events: none;
+  }
+
+  .demo-intro {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(15rem, 0.65fr);
+    align-items: end;
+    gap: 2.5rem;
+    margin-bottom: 2rem;
+  }
+
+  .demo-kicker {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin: 0 0 0.9rem;
+    color: var(--demo-accent-strong);
+    font-family: var(--font-mono, "IBM Plex Mono", monospace);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.055em;
+    line-height: 1.4;
+    text-transform: uppercase;
+  }
+
+  .demo-kicker-dot {
+    width: 0.52rem;
+    height: 0.52rem;
+    border-radius: 50%;
+    background: var(--demo-accent);
+    box-shadow: 0 0 0 0.25rem var(--demo-accent-soft);
+  }
+
+  .demo-intro h2 {
+    max-width: 17ch;
+    margin: 0;
+    color: var(--demo-ink);
+    font-size: clamp(2.2rem, 5vw, 4.25rem);
+    letter-spacing: -0.065em;
+    line-height: 0.98;
+  }
+
+  .demo-deck {
+    max-width: 62ch;
+    margin: 1.15rem 0 0;
+    color: var(--demo-ink-soft);
+    font-size: clamp(1rem, 1.5vw, 1.12rem);
+    line-height: 1.65;
+  }
+
+  .demo-privacy {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.55rem;
+  }
+
+  .demo-privacy span {
+    padding: 0.48rem 0.72rem;
+    border: 1px solid var(--demo-border);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--demo-surface) 82%, transparent);
+    color: var(--demo-ink-soft);
+    font-family: var(--font-mono, monospace);
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+
+  .demo-window {
+    overflow: hidden;
+    border: 1px solid var(--demo-border-strong);
+    border-radius: clamp(1rem, 2vw, 1.55rem);
+    background: var(--demo-surface);
+    box-shadow: var(--demo-shadow);
+  }
+
+  .demo-titlebar {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 1rem;
+    min-height: 3.75rem;
+    padding: 0.7rem 1rem;
+    border-bottom: 1px solid var(--demo-border);
+    background:
+      linear-gradient(to bottom, color-mix(in srgb, var(--demo-surface-raised) 96%, transparent), var(--demo-surface-soft));
+  }
+
+  .demo-window-dots {
+    display: flex;
+    gap: 0.42rem;
+  }
+
+  .demo-window-dots i {
+    width: 0.65rem;
+    height: 0.65rem;
+    border: 1px solid color-mix(in srgb, var(--demo-ink) 20%, transparent);
+    border-radius: 50%;
+    background: var(--demo-border);
+  }
+
+  .demo-window-dots i:first-child { background: #f08c78; }
+  .demo-window-dots i:nth-child(2) { background: #eebd67; }
+  .demo-window-dots i:nth-child(3) { background: #76c993; }
+
+  .demo-window-title {
+    display: flex;
+    align-items: center;
+    gap: 0.62rem;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.73rem;
+  }
+
+  .demo-window-title small {
+    color: var(--demo-ink-faint);
+    font-size: inherit;
+  }
+
+  .demo-mini-mark {
+    display: inline-grid;
+    grid-auto-flow: column;
+    align-items: center;
+    justify-content: center;
+    width: 1.78rem;
+    height: 1.78rem;
+    border-radius: 0.42rem;
+    background: #132319;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.7rem;
+    line-height: 1;
+  }
+
+  .demo-mini-mark b { color: #d7b9ff; }
+  .demo-mini-mark i { color: var(--demo-lime); font-style: normal; }
+
+  .demo-window-tools {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.6rem;
+  }
+
+  .demo-engine {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--demo-ink-faint);
+    font-family: var(--font-mono, monospace);
+    font-size: 0.65rem;
+    white-space: nowrap;
+  }
+
+  .demo-engine i {
+    width: 0.42rem;
+    height: 0.42rem;
+    border-radius: 50%;
+    background: var(--demo-border-strong);
+  }
+
+  .demo-engine[data-state="loading"] i {
+    border: 1px solid var(--demo-accent);
+    border-top-color: transparent;
+    background: transparent;
+    animation: demo-spin 700ms linear infinite;
+  }
+
+  .demo-engine[data-state="ready"] { color: var(--demo-accent-strong); }
+  .demo-engine[data-state="ready"] i { background: var(--demo-accent); box-shadow: 0 0 0 0.2rem var(--demo-accent-soft); }
+  .demo-engine[data-state="error"] { color: var(--demo-error); }
+  .demo-engine[data-state="error"] i { background: var(--demo-error); }
+
+  .demo-icon-button,
+  .demo-editor-actions button,
+  .demo-table-list button,
+  .demo-mobile-actions button {
+    appearance: none;
+    border: 0;
+    color: inherit;
+    font: inherit;
+  }
+
+  .demo-icon-button {
+    display: grid;
+    place-items: center;
+    width: 1.9rem;
+    height: 1.9rem;
+    border: 1px solid var(--demo-border);
+    border-radius: 0.46rem;
+    background: var(--demo-surface-raised);
+    cursor: pointer;
+  }
+
+  .demo-icon-button svg { width: 0.95rem; fill: currentColor; }
+
+  .demo-shell {
+    display: grid;
+    grid-template-columns: 12.2rem minmax(0, 1fr);
+    min-height: 43rem;
+  }
+
+  .demo-sidebar {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    padding: 1.2rem 0.8rem;
+    border-right: 1px solid var(--demo-border);
+    background: var(--demo-surface-soft);
+  }
+
+  .demo-sidebar-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 0.65rem 0.7rem;
+    color: var(--demo-ink-faint);
+    font-family: var(--font-mono, monospace);
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .demo-sidebar-heading kbd,
+  .demo-result-footer kbd,
+  .demo-editor-actions kbd,
+  .demo-run kbd,
+  .demo-dialog kbd {
+    border: 1px solid var(--demo-border);
+    border-bottom-color: var(--demo-border-strong);
+    border-radius: 0.3rem;
+    background: var(--demo-surface-raised);
+    box-shadow: 0 1px 0 var(--demo-border);
+    color: var(--demo-ink-faint);
+    font-family: var(--font-mono, monospace);
+    font-size: 0.6rem;
+    font-weight: 600;
+    line-height: 1;
+  }
+
+  .demo-sidebar-heading kbd { padding: 0.22rem 0.36rem; }
+
+  .demo-table-list {
+    display: grid;
+    gap: 0.28rem;
+  }
+
+  .demo-table-list button {
+    display: grid;
+    grid-template-columns: 1.3rem 1fr auto;
+    align-items: center;
+    gap: 0.45rem;
+    width: 100%;
+    min-height: 2.35rem;
+    padding: 0.45rem 0.58rem;
+    border: 1px solid transparent;
+    border-radius: 0.55rem;
+    background: transparent;
+    color: var(--demo-ink-soft);
+    cursor: pointer;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.72rem;
+    text-align: left;
+    transition: 140ms ease;
+  }
+
+  .demo-table-list button:hover {
+    border-color: var(--demo-border);
+    background: var(--demo-surface-raised);
+    color: var(--demo-ink);
+  }
+
+  .demo-table-list button[aria-pressed="true"] {
+    border-color: color-mix(in srgb, var(--demo-accent) 35%, var(--demo-border));
+    background: var(--demo-accent-soft);
+    color: var(--demo-accent-strong);
+    font-weight: 700;
+  }
+
+  .demo-table-glyph { color: var(--demo-accent); font-size: 0.9rem; }
+  .demo-table-list small { color: var(--demo-ink-faint); font-size: 0.62rem; }
+
+  .demo-sidebar-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.55rem;
+    margin-top: auto;
+    padding: 0.7rem;
+    border: 1px solid var(--demo-border);
+    border-radius: 0.65rem;
+    background: var(--demo-surface);
+  }
+
+  .demo-sidebar-note svg { flex: 0 0 auto; width: 1rem; fill: var(--demo-accent); }
+  .demo-sidebar-note span { display: grid; gap: 0.15rem; }
+  .demo-sidebar-note strong { font-size: 0.64rem; line-height: 1.25; }
+  .demo-sidebar-note small { color: var(--demo-ink-faint); font-size: 0.55rem; line-height: 1.35; }
+
+  .demo-workspace {
+    display: grid;
+    grid-template-rows: minmax(17rem, auto) minmax(0, 1fr);
+    min-width: 0;
+    background: var(--demo-surface);
+  }
+
+  .demo-editor-panel,
+  .demo-results-panel { min-width: 0; }
+  .demo-editor-panel { border-bottom: 1px solid var(--demo-border); }
+  .demo-results-panel { display: flex; flex-direction: column; min-height: 0; }
+
+  .demo-panel-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    min-height: 3rem;
+    padding: 0.55rem 0.9rem;
+    border-bottom: 1px solid var(--demo-border);
+    background: var(--demo-surface-soft);
+  }
+
+  .demo-panel-bar > div:first-child {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    gap: 0.5rem;
+  }
+
+  .demo-panel-bar h3 {
+    margin: 0;
+    color: var(--demo-ink);
+    font-family: var(--font-mono, monospace);
+    font-size: 0.72rem;
+    letter-spacing: 0;
+    white-space: nowrap;
+  }
+
+  .demo-panel-index {
+    color: var(--demo-accent);
+    font-family: var(--font-mono, monospace);
+    font-size: 0.6rem;
+    font-weight: 700;
+  }
+
+  .demo-readonly {
+    overflow: hidden;
+    color: var(--demo-ink-faint);
+    font-family: var(--font-mono, monospace);
+    font-size: 0.58rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .demo-editor-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+
+  .demo-editor-actions button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.38rem;
+    min-height: 1.82rem;
+    padding: 0.32rem 0.45rem;
+    border: 1px solid transparent;
+    border-radius: 0.4rem;
+    background: transparent;
+    color: var(--demo-ink-soft);
+    cursor: pointer;
+    font-size: 0.62rem;
+    font-weight: 600;
+  }
+
+  .demo-editor-actions button:hover { border-color: var(--demo-border); background: var(--demo-surface-raised); }
+  .demo-editor-actions button:last-child { width: 1.82rem; justify-content: center; padding: 0; border-color: var(--demo-border); }
+  .demo-editor-actions kbd { padding: 0.2rem 0.27rem; }
+
+  .demo-editor-wrap {
+    display: grid;
+    grid-template-columns: 2.8rem minmax(0, 1fr);
+    min-height: 14rem;
+    background:
+      linear-gradient(90deg, color-mix(in srgb, var(--demo-accent) 3%, transparent), transparent 42%),
+      var(--demo-surface);
+  }
+
+  .demo-line-numbers {
+    display: grid;
+    grid-auto-rows: 1.42rem;
+    align-content: start;
+    padding: 1rem 0.7rem;
+    border-right: 1px solid var(--demo-border);
+    color: var(--demo-ink-faint);
+    font-family: var(--font-mono, monospace);
+    font-size: 0.61rem;
+    line-height: 1.42rem;
+    text-align: right;
+    user-select: none;
+  }
+
+  .demo-editor-wrap textarea {
+    width: 100%;
+    min-height: 14rem;
+    resize: vertical;
+    padding: 1rem 1.15rem;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--demo-ink);
+    caret-color: var(--demo-accent);
+    font-family: var(--font-mono, "IBM Plex Mono", monospace);
+    font-size: clamp(0.68rem, 1.25vw, 0.78rem);
+    font-variant-ligatures: none;
+    line-height: 1.42rem;
+    tab-size: 2;
+  }
+
+  .demo-editor-wrap:focus-within { box-shadow: inset 3px 0 var(--demo-accent); }
+
+  .demo-editor-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    min-height: 3.25rem;
+    padding: 0.55rem 0.85rem 0.55rem 1rem;
+    border-top: 1px solid var(--demo-border);
+    background: var(--demo-surface-soft);
+  }
+
+  .demo-editor-footer p {
+    color: var(--demo-ink-faint);
+    font-family: var(--font-mono, monospace);
+    font-size: 0.58rem;
+  }
+
+  .demo-editor-footer p span:first-child { color: var(--demo-accent); }
+
+  .demo-run {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    min-height: 2.1rem;
+    padding: 0.43rem 0.55rem 0.43rem 0.78rem;
+    border: 1px solid var(--demo-accent-strong);
+    border-radius: 0.5rem;
+    background: var(--demo-accent);
+    color: #fff;
+    cursor: pointer;
+    font: 700 0.68rem/1 var(--font-sans, sans-serif);
+    box-shadow: 0 4px 12px color-mix(in srgb, var(--demo-accent) 22%, transparent);
+  }
+
+  :global([data-theme="dark"]) .demo-run { color: #102016; }
+  .demo-run:hover { background: var(--demo-accent-strong); transform: translateY(-1px); }
+  :global([data-theme="dark"]) .demo-run:hover { color: #102016; }
+  .demo-run:disabled { opacity: 0.68; cursor: wait; transform: none; }
+  .demo-run kbd { padding: 0.25rem 0.35rem; border-color: color-mix(in srgb, white 30%, transparent); background: color-mix(in srgb, black 14%, transparent); color: inherit; box-shadow: none; }
+  .demo-run-icon { font-size: 0.58rem; }
+
+  .dbt-demo[data-loading="true"] .demo-run-icon { font-size: 0; }
+  .dbt-demo[data-loading="true"] .demo-run-icon::after {
+    display: block;
+    width: 0.65rem;
+    height: 0.65rem;
+    border: 1.5px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    content: "";
+    animation: demo-spin 650ms linear infinite;
+  }
+
+  .demo-results-bar { min-height: 3.15rem; }
+
+  .demo-result-meta {
+    display: flex;
+    align-items: center;
+    margin: 0;
+    color: var(--demo-ink-faint);
+    font-family: var(--font-mono, monospace);
+    font-size: 0.57rem;
+  }
+
+  .demo-result-meta div { padding-inline: 0.55rem; border-left: 1px solid var(--demo-border); }
+  .demo-result-meta dd { margin: 0; white-space: nowrap; }
+
+  .demo-filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    max-width: 22rem;
+    padding: 0.2rem 0.3rem 0.2rem 0.48rem;
+    border: 1px solid color-mix(in srgb, var(--demo-violet) 32%, var(--demo-border));
+    border-radius: 999px;
+    background: var(--demo-violet-soft);
+    color: var(--demo-violet);
+    font-family: var(--font-mono, monospace);
+    font-size: 0.57rem;
+  }
+
+  .demo-filter-chip[hidden] { display: none; }
+  .demo-filter-chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .demo-filter-chip button { display: grid; place-items: center; width: 1rem; height: 1rem; padding: 0; border: 0; border-radius: 50%; background: color-mix(in srgb, var(--demo-violet) 13%, transparent); color: inherit; cursor: pointer; }
+
+  .demo-result-scroller {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 18rem;
+    max-height: 25rem;
+    overflow: auto;
+    background: var(--demo-surface);
+    overscroll-behavior: contain;
+  }
+
+  .demo-result-table {
+    width: max-content;
+    min-width: 100%;
+    border: 0;
+    border-collapse: separate;
+    border-spacing: 0;
+    color: var(--demo-ink-soft);
+    font-family: var(--font-mono, monospace);
+    font-size: 0.65rem;
+  }
+
+  .demo-result-table[hidden] { display: none; }
+
+  .demo-result-table th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    height: 2.35rem;
+    padding: 0.45rem 0.72rem;
+    border-right: 1px solid var(--demo-border);
+    border-bottom: 1px solid var(--demo-border-strong);
+    background: color-mix(in srgb, var(--demo-surface-soft) 94%, transparent);
+    color: var(--demo-ink);
+    font-weight: 700;
+    text-align: left;
+    white-space: nowrap;
+    backdrop-filter: blur(10px);
+  }
+
+  .demo-result-table td {
+    height: 2.3rem;
+    padding: 0;
+    border-right: 1px solid var(--demo-border);
+    border-bottom: 1px solid var(--demo-border);
+    white-space: nowrap;
+  }
+
+  .demo-result-table tr:nth-child(even) td { background: color-mix(in srgb, var(--demo-surface-soft) 52%, transparent); }
+
+  .demo-result-table td button {
+    display: block;
+    width: 100%;
+    min-width: 5rem;
+    height: 2.3rem;
+    overflow: hidden;
+    padding: 0.48rem 0.72rem;
+    border: 1px solid transparent;
+    outline: 0;
+    background: transparent;
+    color: inherit;
+    cursor: cell;
+    font: inherit;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .demo-result-table td button:hover { background: var(--demo-accent-soft); }
+  .demo-result-table td button[data-selected="true"] {
+    border-color: var(--demo-accent);
+    background: var(--demo-accent-soft);
+    color: var(--demo-accent-strong);
+    box-shadow: inset 0 0 0 1px var(--demo-accent);
+    font-weight: 700;
+  }
+  .demo-result-table td button.is-null { color: var(--demo-ink-faint); font-style: italic; }
+  .demo-result-table td button.is-linkable { text-decoration: underline dotted; text-underline-offset: 0.22rem; }
+  .demo-no-matches { padding: 2.5rem !important; color: var(--demo-ink-faint); text-align: center; }
+
+  .demo-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1.4rem;
+    min-height: 18rem;
+    padding: 2rem;
+    color: var(--demo-ink-soft);
+  }
+
+  .demo-empty[hidden] { display: none; }
+  .demo-empty strong { display: block; margin-bottom: 0.25rem; color: var(--demo-ink); font-size: 0.88rem; }
+  .demo-empty p { max-width: 38ch; margin: 0; color: var(--demo-ink-faint); font-size: 0.76rem; line-height: 1.5; }
+  .demo-empty[data-state="error"] strong { color: var(--demo-error); }
+
+  .demo-empty-orbit {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 4rem;
+    height: 4rem;
+    flex: 0 0 auto;
+  }
+
+  .demo-empty-orbit::before,
+  .demo-empty-orbit::after {
+    position: absolute;
+    inset: 0;
+    border: 1px solid var(--demo-border);
+    border-radius: 50%;
+    content: "";
+  }
+  .demo-empty-orbit::after { inset: 0.5rem; border-style: dashed; animation: demo-spin 12s linear infinite; }
+  .demo-empty-orbit span { position: absolute; top: 0.1rem; left: 50%; width: 0.48rem; height: 0.48rem; border-radius: 50%; background: var(--demo-accent); box-shadow: 0 0 0 0.2rem var(--demo-accent-soft); }
+  .demo-empty-orbit i { position: absolute; right: 0.2rem; bottom: 0.6rem; width: 0.35rem; height: 0.35rem; border-radius: 50%; background: var(--demo-violet); }
+  .demo-empty-orbit b { color: var(--demo-accent-strong); font-family: var(--font-mono, monospace); font-size: 0.75rem; }
+
+  .demo-result-footer {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    min-height: 2.55rem;
+    padding: 0.45rem 0.8rem;
+    border-top: 1px solid var(--demo-border);
+    background: var(--demo-surface-soft);
+    color: var(--demo-ink-faint);
+    font-family: var(--font-mono, monospace);
+    font-size: 0.54rem;
+  }
+  .demo-result-footer span { display: inline-flex; align-items: center; gap: 0.3rem; white-space: nowrap; }
+  .demo-result-footer kbd { padding: 0.2rem 0.28rem; }
+
+  .demo-mobile-actions { display: none; }
+
+  .demo-live {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2rem;
+    margin: 0.8rem auto 0;
+    color: var(--demo-ink-faint);
+    font-family: var(--font-mono, monospace);
+    font-size: 0.62rem;
+    line-height: 1.45;
+    text-align: center;
+  }
+
+  .demo-live::before {
+    width: 0.36rem;
+    height: 0.36rem;
+    margin-right: 0.45rem;
+    border-radius: 50%;
+    background: var(--demo-accent);
+    content: "";
+  }
+
+  .demo-dialog {
+    width: min(94vw, 42rem);
+    max-height: min(80vh, 44rem);
+    overflow: hidden auto;
+    margin: auto;
+    padding: 0;
+    border: 1px solid var(--demo-border-strong);
+    border-radius: 1rem;
+    outline: 0;
+    background: var(--demo-surface-raised);
+    color: var(--demo-ink);
+    box-shadow: 0 30px 90px rgba(14, 24, 18, 0.34);
+    font-family: var(--font-sans, sans-serif);
+  }
+
+  .demo-dialog::backdrop {
+    background: rgba(20, 29, 24, 0.48);
+    backdrop-filter: blur(7px) saturate(0.8);
+  }
+
+  .demo-dialog-topline {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1.2rem;
+    padding: 1.2rem 1.3rem 0.9rem;
+  }
+
+  .demo-dialog-kicker {
+    display: block;
+    margin-bottom: 0.3rem;
+    color: var(--demo-accent-strong);
+    font-family: var(--font-mono, monospace);
+    font-size: 0.58rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .demo-dialog h3 {
+    margin: 0;
+    color: var(--demo-ink);
+    font-size: 1.2rem;
+    letter-spacing: -0.035em;
+  }
+
+  .demo-dialog-topline button {
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    border: 1px solid var(--demo-border);
+    border-radius: 0.46rem;
+    background: var(--demo-surface-soft);
+    color: var(--demo-ink-soft);
+    cursor: pointer;
+    font-size: 1.15rem;
+  }
+
+  .demo-combobox {
+    display: grid;
+    grid-template-columns: 1.2rem minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.7rem;
+    margin: 0 1.3rem 0.75rem;
+    padding: 0.64rem 0.72rem;
+    border: 1px solid var(--demo-border-strong);
+    border-radius: 0.6rem;
+    background: var(--demo-surface);
+    box-shadow: 0 0 0 3px var(--demo-accent-soft);
+  }
+
+  .demo-combobox svg { width: 1rem; fill: var(--demo-ink-faint); }
+  .demo-combobox input { min-width: 0; padding: 0.25rem 0; border: 0; outline: 0; background: transparent; color: var(--demo-ink); font: 0.86rem/1.3 var(--font-sans, sans-serif); }
+  .demo-combobox input::placeholder { color: var(--demo-ink-faint); }
+  .demo-combobox kbd { padding: 0.28rem 0.38rem; }
+
+  .demo-palette-list {
+    min-height: 12rem;
+    max-height: min(46vh, 24rem);
+    overflow: auto;
+    padding: 0.25rem 0.7rem 0.7rem;
+  }
+
+  .demo-palette-list [role="option"] {
+    display: grid;
+    grid-template-columns: 2rem minmax(0, 1fr);
+    align-items: center;
+    gap: 0.65rem;
+    min-height: 3.5rem;
+    padding: 0.55rem 0.68rem;
+    border: 1px solid transparent;
+    border-radius: 0.62rem;
+    cursor: pointer;
+  }
+
+  .demo-palette-list [role="option"][aria-selected="true"] {
+    border-color: color-mix(in srgb, var(--demo-accent) 30%, var(--demo-border));
+    background: var(--demo-accent-soft);
+  }
+
+  .demo-command-icon {
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    border: 1px solid var(--demo-border);
+    border-radius: 0.5rem;
+    background: var(--demo-surface-raised);
+    color: var(--demo-accent-strong);
+    font-family: var(--font-mono, monospace);
+    font-size: 0.7rem;
+  }
+
+  .demo-command-copy { display: grid; gap: 0.12rem; min-width: 0; }
+  .demo-command-copy strong { color: var(--demo-ink); font-size: 0.78rem; }
+  .demo-command-copy small { overflow: hidden; color: var(--demo-ink-faint); font-size: 0.65rem; text-overflow: ellipsis; white-space: nowrap; }
+  .demo-command-copy mark { padding: 0; border-radius: 0.12rem; background: color-mix(in srgb, var(--demo-violet) 22%, transparent); color: var(--demo-violet); }
+  .demo-palette-empty { padding: 3rem 1rem; color: var(--demo-ink-faint); font-size: 0.75rem; text-align: center; }
+
+  .demo-dialog-footer {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    min-height: 2.7rem;
+    padding: 0.5rem 1.3rem;
+    border-top: 1px solid var(--demo-border);
+    background: var(--demo-surface-soft);
+    color: var(--demo-ink-faint);
+    font-family: var(--font-mono, monospace);
+    font-size: 0.58rem;
+  }
+  .demo-dialog-footer span { display: flex; align-items: center; gap: 0.3rem; }
+  .demo-dialog-footer kbd { padding: 0.22rem 0.3rem; }
+  .demo-dialog-footer-note { margin-left: auto; }
+
+  .demo-dialog-deck {
+    margin: 0;
+    padding: 0 1.3rem 1rem;
+    color: var(--demo-ink-soft);
+    font-size: 0.76rem;
+    line-height: 1.5;
+  }
+
+  .demo-filter-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.8rem;
+    padding: 0 1.3rem 1.3rem;
+  }
+
+  .demo-filter-grid label { display: grid; gap: 0.4rem; }
+  .demo-filter-grid label > span { color: var(--demo-ink-soft); font-size: 0.66rem; font-weight: 700; }
+  .demo-filter-value { grid-column: 1 / -1; }
+  .demo-filter-grid select,
+  .demo-filter-grid input {
+    width: 100%;
+    min-height: 2.65rem;
+    padding: 0.58rem 0.7rem;
+    border: 1px solid var(--demo-border-strong);
+    border-radius: 0.52rem;
+    outline: 0;
+    background: var(--demo-surface);
+    color: var(--demo-ink);
+    font: 0.74rem/1.2 var(--font-mono, monospace);
+  }
+  .demo-filter-grid select:focus,
+  .demo-filter-grid input:focus { border-color: var(--demo-accent); box-shadow: 0 0 0 3px var(--demo-accent-soft); }
+
+  .demo-dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.55rem;
+    padding: 0.8rem 1.3rem;
+    border-top: 1px solid var(--demo-border);
+    background: var(--demo-surface-soft);
+  }
+  .demo-dialog-actions button { min-height: 2.35rem; padding: 0.5rem 0.8rem; border-radius: 0.5rem; cursor: pointer; font: 700 0.7rem/1 var(--font-sans, sans-serif); }
+  .demo-dialog-secondary { border: 1px solid var(--demo-border); background: var(--demo-surface-raised); color: var(--demo-ink-soft); }
+  .demo-dialog-primary { border: 1px solid var(--demo-accent-strong); background: var(--demo-accent); color: white; }
+  :global([data-theme="dark"]) .demo-dialog-primary { color: #102016; }
+
+  .demo-help-dialog { width: min(94vw, 48rem); }
+  .demo-shortcut-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.55rem;
+    padding: 0 1.3rem 1.3rem;
+  }
+  .demo-shortcut-grid > div {
+    display: grid;
+    grid-template-columns: 4.2rem minmax(0, 1fr);
+    align-items: center;
+    gap: 0.65rem;
+    min-height: 3.4rem;
+    padding: 0.55rem 0.62rem;
+    border: 1px solid var(--demo-border);
+    border-radius: 0.58rem;
+    background: var(--demo-surface-soft);
+  }
+  .demo-shortcut-grid kbd { justify-self: start; padding: 0.33rem 0.42rem; color: var(--demo-accent-strong); }
+  .demo-shortcut-grid span { display: grid; gap: 0.1rem; }
+  .demo-shortcut-grid strong { font-size: 0.7rem; }
+  .demo-shortcut-grid small { color: var(--demo-ink-faint); font-size: 0.58rem; }
+
+  .demo-icon-button:focus-visible,
+  .demo-table-list button:focus-visible,
+  .demo-editor-actions button:focus-visible,
+  .demo-run:focus-visible,
+  .demo-mobile-actions button:focus-visible,
+  .demo-dialog button:focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--demo-accent) 36%, transparent);
+    outline-offset: 2px;
+  }
+
+  @keyframes demo-spin { to { transform: rotate(360deg); } }
+
+  @media (max-width: 900px) {
+    .demo-intro { grid-template-columns: 1fr; gap: 1.4rem; }
+    .demo-privacy { justify-content: flex-start; }
+    .demo-titlebar { grid-template-columns: auto 1fr auto; }
+    .demo-window-dots { display: none; }
+    .demo-window-title { justify-self: start; }
+    .demo-shell { grid-template-columns: 1fr; }
+    .demo-sidebar { padding: 0.65rem; border-right: 0; border-bottom: 1px solid var(--demo-border); }
+    .demo-sidebar-heading { display: none; }
+    .demo-table-list { display: flex; overflow-x: auto; padding-bottom: 0.1rem; }
+    .demo-table-list button { flex: 0 0 auto; width: auto; min-width: 8.5rem; }
+    .demo-sidebar-note { display: none; }
+    .demo-editor-actions button { font-size: 0; }
+    .demo-editor-actions button kbd { font-size: 0.58rem; }
+    .demo-editor-actions button:last-child { font-size: 0.7rem; }
+    .demo-result-footer { overflow-x: auto; }
+  }
+
+  @media (max-width: 640px) {
+    .dbt-demo { margin-block: 4.5rem; }
+    .dbt-demo::before { inset-inline: -1rem; }
+    .demo-intro h2 { font-size: clamp(2.2rem, 12vw, 3.2rem); }
+    .demo-privacy { display: grid; grid-template-columns: repeat(3, 1fr); }
+    .demo-privacy span { padding-inline: 0.4rem; text-align: center; }
+    .demo-window { margin-inline: calc(var(--container-pad, 1rem) * -0.45); border-radius: 0.85rem; }
+    .demo-titlebar { padding-inline: 0.75rem; }
+    .demo-window-title small,
+    .demo-engine span { display: none; }
+    .demo-shell { min-height: 0; }
+    .demo-panel-bar { align-items: flex-start; padding-inline: 0.65rem; }
+    .demo-readonly { display: none; }
+    .demo-editor-actions { display: none; }
+    .demo-editor-wrap { grid-template-columns: 2.3rem minmax(0, 1fr); min-height: 15rem; }
+    .demo-editor-wrap textarea { min-height: 15rem; padding-inline: 0.75rem; font-size: 0.66rem; }
+    .demo-line-numbers { padding-inline: 0.45rem; }
+    .demo-editor-footer { align-items: flex-end; padding-inline: 0.65rem; }
+    .demo-editor-footer p { max-width: 19ch; line-height: 1.5; }
+    .demo-run kbd { display: none; }
+    .demo-results-bar { align-items: center; }
+    .demo-result-meta div:last-child { display: none; }
+    .demo-result-meta div { padding-inline: 0.35rem; }
+    .demo-filter-chip { position: absolute; margin-top: 4.5rem; max-width: 80vw; }
+    .demo-result-scroller { min-height: 19rem; max-height: 25rem; }
+    .demo-result-footer { display: none; }
+    .demo-mobile-actions {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      min-height: 3.7rem;
+      border-top: 1px solid var(--demo-border);
+      background: var(--demo-surface-soft);
+    }
+    .demo-mobile-actions button {
+      display: grid;
+      place-items: center;
+      align-content: center;
+      gap: 0.15rem;
+      padding: 0.45rem 0.2rem;
+      border-right: 1px solid var(--demo-border);
+      background: transparent;
+      color: var(--demo-ink-soft);
+      cursor: pointer;
+      font-size: 0.55rem;
+      font-weight: 700;
+    }
+    .demo-mobile-actions button span { color: var(--demo-accent-strong); font-family: var(--font-mono, monospace); font-size: 0.78rem; }
+    .demo-dialog { width: calc(100vw - 1rem); max-height: calc(100vh - 1rem); border-radius: 0.8rem; }
+    .demo-dialog-topline { padding-inline: 1rem; }
+    .demo-combobox { margin-inline: 1rem; }
+    .demo-dialog-footer { padding-inline: 1rem; }
+    .demo-dialog-footer-note { display: none !important; }
+    .demo-filter-grid,
+    .demo-shortcut-grid { grid-template-columns: 1fr; padding-inline: 1rem; }
+    .demo-filter-value { grid-column: auto; }
+    .demo-shortcut-grid > div { min-height: 3rem; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .dbt-demo *,
+    .dbt-demo *::before,
+    .dbt-demo *::after {
+      scroll-behavior: auto !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+</style>

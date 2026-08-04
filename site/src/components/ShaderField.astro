@@ -1,0 +1,223 @@
+---
+export interface Props {
+  class?: string;
+}
+
+const { class: className = "" } = Astro.props;
+---
+
+<div
+  class:list={["shader-field", className]}
+  data-shader-field
+  aria-hidden="true"
+></div>
+
+<script>
+  import {
+    ShaderFitOptions,
+    ShaderMount,
+    getShaderColorFromString,
+    neuroNoiseFragmentShader,
+  } from "@paper-design/shaders";
+
+  interface NetworkInformationLike {
+    saveData?: boolean;
+  }
+
+  interface NavigatorWithHints extends Navigator {
+    connection?: NetworkInformationLike;
+    deviceMemory?: number;
+  }
+
+  const active = new Map<HTMLElement, ShaderMount>();
+
+  const isDark = () => {
+    const root = document.documentElement;
+    return root.dataset.theme === "dark" || root.classList.contains("dark");
+  };
+
+  const sizingUniforms = {
+    u_fit: ShaderFitOptions.none,
+    u_scale: 1.08,
+    u_rotation: -7,
+    u_originX: 0.5,
+    u_originY: 0.5,
+    u_offsetX: 0.18,
+    u_offsetY: -0.08,
+    u_worldWidth: 0,
+    u_worldHeight: 0,
+  };
+
+  const themeUniforms = () =>
+    isDark()
+      ? {
+          u_colorFront: getShaderColorFromString("rgba(126, 211, 150, 0.32)"),
+          u_colorMid: getShaderColorFromString("rgba(238, 171, 108, 0.2)"),
+          u_colorBack: getShaderColorFromString("rgba(9, 18, 13, 0)"),
+          u_brightness: 0.42,
+          u_contrast: 0.58,
+        }
+      : {
+          u_colorFront: getShaderColorFromString("rgba(26, 112, 72, 0.28)"),
+          u_colorMid: getShaderColorFromString("rgba(207, 118, 67, 0.18)"),
+          u_colorBack: getShaderColorFromString("rgba(248, 246, 238, 0)"),
+          u_brightness: 0.34,
+          u_contrast: 0.62,
+        };
+
+  function shouldUseShader() {
+    const navigatorHints = navigator as NavigatorWithHints;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const compactViewport = window.matchMedia("(max-width: 760px), (pointer: coarse)").matches;
+    const lowPower =
+      (navigatorHints.deviceMemory !== undefined && navigatorHints.deviceMemory <= 2) ||
+      (navigator.hardwareConcurrency !== undefined && navigator.hardwareConcurrency <= 2);
+
+    return !(
+      reducedMotion ||
+      compactViewport ||
+      lowPower ||
+      navigatorHints.connection?.saveData
+    );
+  }
+
+  function mountShader(element: HTMLElement) {
+    if (active.has(element) || !shouldUseShader()) return;
+
+    try {
+      const mount = new ShaderMount(
+        element,
+        neuroNoiseFragmentShader,
+        { ...sizingUniforms, ...themeUniforms() },
+        {
+          alpha: true,
+          antialias: false,
+          depth: false,
+          stencil: false,
+          premultipliedAlpha: true,
+          powerPreference: "low-power",
+        },
+        0.12,
+        1600,
+        0.75,
+        480_000,
+      );
+      active.set(element, mount);
+      element.dataset.shaderReady = "true";
+    } catch {
+      // The layered CSS background remains when WebGL2 is unavailable.
+      element.dataset.shaderReady = "fallback";
+    }
+  }
+
+  function initialize() {
+    document.querySelectorAll<HTMLElement>("[data-shader-field]").forEach(mountShader);
+  }
+
+  let idleTimer = 0;
+
+  function scheduleInitialize() {
+    const activate = () => {
+      window.clearTimeout(idleTimer);
+      initialize();
+    };
+
+    // The CSS field paints immediately. WebGL joins after real user intent, or
+    // well after the critical rendering path on an untouched page.
+    window.addEventListener("pointermove", activate, { once: true, passive: true });
+    window.addEventListener("pointerdown", activate, { once: true, passive: true });
+    window.addEventListener("keydown", activate, { once: true });
+    idleTimer = window.setTimeout(() => {
+      if ("requestIdleCallback" in window) {
+        window.requestIdleCallback(initialize, { timeout: 2_000 });
+      } else {
+        initialize();
+      }
+    }, 5_000);
+  }
+
+  function updateTheme() {
+    active.forEach((mount) => mount.setUniforms(themeUniforms()));
+  }
+
+  function dispose() {
+    active.forEach((mount, element) => {
+      mount.dispose();
+      delete element.dataset.shaderReady;
+    });
+    active.clear();
+  }
+
+  scheduleInitialize();
+
+  const themeObserver = new MutationObserver(updateTheme);
+  themeObserver.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["class", "data-theme"],
+  });
+
+  document.addEventListener("astro:page-load", scheduleInitialize);
+  document.addEventListener(
+    "astro:before-swap",
+    () => {
+      themeObserver.disconnect();
+      window.clearTimeout(idleTimer);
+      dispose();
+    },
+    { once: true },
+  );
+</script>
+
+<style>
+  .shader-field {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0.82;
+    background:
+      radial-gradient(circle at 78% 22%, rgb(203 111 58 / 14%), transparent 30%),
+      radial-gradient(circle at 64% 52%, rgb(31 125 79 / 15%), transparent 42%),
+      linear-gradient(120deg, transparent 28%, rgb(31 125 79 / 5%) 48%, transparent 68%);
+    mask-image: linear-gradient(90deg, transparent 0%, #000 24%, #000 100%);
+    contain: strict;
+  }
+
+  .shader-field::after {
+    position: absolute;
+    inset: 0;
+    content: "";
+    opacity: 0.38;
+    background-image: radial-gradient(circle, rgb(24 83 55 / 22%) 0 0.75px, transparent 1px);
+    background-size: 18px 18px;
+    mask-image: linear-gradient(120deg, transparent 12%, #000 58%, transparent 96%);
+  }
+
+  :global([data-theme="dark"]) .shader-field,
+  :global(.dark) .shader-field {
+    opacity: 0.7;
+    background:
+      radial-gradient(circle at 78% 22%, rgb(238 171 108 / 13%), transparent 30%),
+      radial-gradient(circle at 64% 52%, rgb(126 211 150 / 12%), transparent 42%),
+      linear-gradient(120deg, transparent 28%, rgb(126 211 150 / 5%) 48%, transparent 68%);
+  }
+
+  :global([data-theme="dark"]) .shader-field::after,
+  :global(.dark) .shader-field::after {
+    background-image: radial-gradient(circle, rgb(161 222 176 / 20%) 0 0.75px, transparent 1px);
+  }
+
+  @media (max-width: 760px), (pointer: coarse), (prefers-reduced-motion: reduce) {
+    .shader-field {
+      opacity: 0.62;
+    }
+  }
+
+  @media (prefers-contrast: more) {
+    .shader-field {
+      display: none;
+    }
+  }
+</style>

@@ -1,0 +1,1094 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+
+const title = "dbterm vs DBeaver & Terminal SQL Clients (2026)";
+const description =
+  "Compare dbterm with Harlequin, rainfrog, LazySQL, sqlit, Gobang, and DBeaver using verified official documentation for databases, workflows, installs, and licensing.";
+const keywords =
+  "dbterm vs harlequin, dbterm vs rainfrog, dbterm vs lazysql, terminal SQL client comparison, database TUI comparison, sqlit, gobang, DBeaver alternative";
+
+const baseUrl = import.meta.env.BASE_URL;
+const withBase = (path: string) => {
+  const trimmedBase = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
+  const trimmedPath = path.startsWith("/") ? path.slice(1) : path;
+  return `${trimmedBase}/${trimmedPath}`.replace(/\/{2,}/g, "/");
+};
+
+const reportOutdatedHref =
+  "https://github.com/shreyam1008/dbterm/issues/new?title=Comparison%20page%20correction&body=Tool%3A%0AOfficial%20source%20URL%3A%0AWhat%20changed%3A%0A";
+
+const products = [
+  {
+    name: "dbterm",
+    href: "https://github.com/shreyam1008/dbterm",
+    surface: "Terminal TUI · Go",
+    coverage: "PostgreSQL, MySQL, SQLite, Turso (LibSQL), and Cloudflare D1.",
+    strengths:
+      "Saved connections; fuzzy command, object, and recent-query palette; foreign-key navigation; typed result filters; scoped CSV export; PostgreSQL/MySQL service, backup, and import flows.",
+    delivery:
+      "Single release binary. Linux, macOS, and Windows builds for AMD64 and ARM64, plus Debian packages.",
+    maturity: null,
+    license: "MIT",
+    licenseHref: "https://github.com/shreyam1008/dbterm/blob/main/LICENSE",
+    source: "source-dbterm",
+    featured: true
+  },
+  {
+    name: "Harlequin",
+    href: "https://harlequin.sh/",
+    surface: "Terminal SQL IDE · Python",
+    coverage:
+      "DuckDB and SQLite ship with Harlequin. Core adapter packages cover PostgreSQL/Redshift, MySQL/MariaDB, and ODBC; community adapters extend the list.",
+    strengths:
+      "Interactive data catalog; full-featured SQL editor with autocomplete and multiple tabbed buffers; large interactive results viewer; plug-in adapter model.",
+    delivery:
+      "Python program; uv is the recommended install path. Extra database adapters are installed into the same environment. A community Homebrew formula is available.",
+    maturity: null,
+    license: "MIT",
+    licenseHref: "https://github.com/tconbeer/harlequin/blob/main/LICENSE",
+    source: "source-harlequin"
+  },
+  {
+    name: "rainfrog",
+    href: "https://github.com/achristmascarl/rainfrog",
+    surface: "Terminal TUI · Rust",
+    coverage:
+      "PostgreSQL is tier 1; MySQL, SQLite, and Redshift are tier 2; DuckDB and Oracle are tier 4/experimental in the project’s own support model.",
+    strengths:
+      "Vim-like navigation and mouse controls; highlighted query editor; session history and favorites; table filtering, schema switching, metadata shortcuts, and exports.",
+    delivery:
+      "Cargo, Homebrew, Arch, Nix, conda/pixi, install script, and release binaries are documented. Some database drivers have extra runtime requirements.",
+    maturity: "Beta",
+    license: "MIT",
+    licenseHref: "https://github.com/achristmascarl/rainfrog/blob/main/LICENSE",
+    source: "source-rainfrog"
+  },
+  {
+    name: "LazySQL",
+    href: "https://github.com/jorgerojas26/lazysql",
+    surface: "Terminal TUI · Go",
+    coverage:
+      "MySQL, PostgreSQL, SQLite, and Microsoft SQL Server are checked as supported; MongoDB remains unchecked in the official support list.",
+    strengths:
+      "Multiple connections and tabs; SQL editor; read-only connections; configurable pre-connect commands; global search; query history; row editing; paged or all-record CSV export.",
+    delivery:
+      "Homebrew, go install, and release binaries for Windows, macOS, and Linux are documented.",
+    maturity: "Alpha",
+    license: "MIT",
+    licenseHref: "https://github.com/jorgerojas26/lazysql/blob/master/LICENSE.txt",
+    source: "source-lazysql"
+  },
+  {
+    name: "sqlit",
+    href: "https://github.com/Maxteabag/sqlit",
+    surface: "Terminal TUI · Python",
+    coverage:
+      "The official README lists PostgreSQL, MySQL/MariaDB, SQLite, SQL Server, Turso, Cloudflare D1, major warehouses, and many additional SQL/data systems.",
+    strengths:
+      "Connection manager; Docker discovery; optional SSH tunnelling; cloud CLI integration; OS-keyring credentials; SQL autocomplete; query history; fuzzy result search.",
+    delivery:
+      "Installed as the sqlit-tui Python package, with pipx documented. SSH support is an optional package extra.",
+    maturity: null,
+    license: "MIT",
+    licenseHref: "https://github.com/Maxteabag/sqlit/blob/main/LICENSE",
+    source: "source-sqlit"
+  },
+  {
+    name: "Gobang",
+    href: "https://github.com/TaKO8Ki/gobang",
+    surface: "Terminal TUI · Rust",
+    coverage: "MySQL, PostgreSQL, and SQLite.",
+    strengths:
+      "Focused database management with keyboard-only control. The project still lists a SQL editor, custom keybindings, and theme settings under TODO.",
+    delivery: "Homebrew/Linuxbrew, Windows Scoop, Nix, and Arch/AUR installs are documented.",
+    maturity: "Alpha",
+    license: "MIT",
+    licenseHref: "https://github.com/TaKO8Ki/gobang/blob/main/LICENSE",
+    source: "source-gobang"
+  },
+  {
+    name: "DBeaver Community",
+    href: "https://dbeaver.io/",
+    surface: "Desktop GUI · Java ecosystem",
+    coverage:
+      "The project states support for any database with a JDBC driver and publishes a long list of built-in database integrations.",
+    strengths:
+      "Desktop extensions and database utilities including ER diagrams, data transfer, data comparison, import/export, and mock-data generation.",
+    delivery: "A multiplatform desktop application rather than a terminal TUI.",
+    maturity: null,
+    license: "Apache-2.0",
+    licenseHref: "https://github.com/dbeaver/dbeaver/blob/devel/LICENSE.md",
+    source: "source-dbeaver",
+    adjacent: true
+  }
+];
+
+const bestFits = [
+  {
+    name: "dbterm",
+    label: "Operations-first terminal workflow",
+    body: "A strong fit when you want one downloadable binary for five focused targets, fast object navigation, and built-in PostgreSQL/MySQL backup, import, and service workflows."
+  },
+  {
+    name: "Harlequin",
+    label: "Editor-first SQL work",
+    body: "A strong fit when a rich, tabbed SQL editor and an extensible adapter ecosystem matter more than a single self-contained binary."
+  },
+  {
+    name: "rainfrog",
+    label: "Vim-flavoured database exploration",
+    body: "A strong fit when you value Vim-like editing, history and favourites, mouse support, and the project’s explicit database support tiers."
+  },
+  {
+    name: "LazySQL",
+    label: "Guardrails and scripted connections",
+    body: "A strong fit when per-connection read-only mode or chained pre-connect commands for tunnels and port forwarding are central to your workflow."
+  },
+  {
+    name: "sqlit",
+    label: "Wide connector and discovery surface",
+    body: "A strong fit when Docker discovery, SSH tunnels, cloud CLI integration, or its unusually broad documented database list matches your environment."
+  },
+  {
+    name: "Gobang",
+    label: "Focused table management",
+    body: "A fit for keyboard-only browsing across PostgreSQL, MySQL, and SQLite when you are comfortable with its alpha label and documented SQL-editor TODO."
+  },
+  {
+    name: "DBeaver Community",
+    label: "Full desktop database tooling",
+    body: "A better category of tool when you need a visual desktop client, ER diagrams, JDBC breadth, data transfer, or comparison utilities."
+  }
+];
+
+const sources = [
+  {
+    id: "source-dbterm",
+    number: "1",
+    name: "dbterm README and release documentation",
+    href: "https://github.com/shreyam1008/dbterm#readme",
+    secondaryName: null,
+    secondaryHref: null
+  },
+  {
+    id: "source-harlequin",
+    number: "2",
+    name: "Harlequin database adapters",
+    href: "https://harlequin.sh/docs/adapters",
+    secondaryName: "usage guide",
+    secondaryHref: "https://harlequin.sh/docs/getting-started/usage"
+  },
+  {
+    id: "source-rainfrog",
+    number: "3",
+    name: "rainfrog official README",
+    href: "https://github.com/achristmascarl/rainfrog#readme",
+    secondaryName: null,
+    secondaryHref: null
+  },
+  {
+    id: "source-lazysql",
+    number: "4",
+    name: "LazySQL official README",
+    href: "https://github.com/jorgerojas26/lazysql#readme",
+    secondaryName: null,
+    secondaryHref: null
+  },
+  {
+    id: "source-sqlit",
+    number: "5",
+    name: "sqlit official README",
+    href: "https://github.com/Maxteabag/sqlit#readme",
+    secondaryName: null,
+    secondaryHref: null
+  },
+  {
+    id: "source-gobang",
+    number: "6",
+    name: "Gobang official README",
+    href: "https://github.com/TaKO8Ki/gobang#readme",
+    secondaryName: null,
+    secondaryHref: null
+  },
+  {
+    id: "source-dbeaver",
+    number: "7",
+    name: "DBeaver Community official overview",
+    href: "https://dbeaver.io/about/",
+    secondaryName: null,
+    secondaryHref: null
+  }
+];
+
+const sourceNumber = (id: string) => sources.find((source) => source.id === id)?.number;
+const productId = (name: string) =>
+  `compare-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`;
+const canonicalUrl = "https://shreyam1008.github.io/dbterm/compare/";
+
+const articleJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "Article",
+  additionalType: "https://schema.org/TechArticle",
+  headline: "dbterm vs DBeaver and terminal SQL clients: a fair 2026 comparison",
+  description,
+  image: "https://shreyam1008.github.io/dbterm/assets/command-palette.png",
+  datePublished: "2026-08-04",
+  dateModified: "2026-08-04",
+  mainEntityOfPage: canonicalUrl,
+  author: {
+    "@type": "Organization",
+    name: "dbterm contributors",
+    url: "https://github.com/shreyam1008/dbterm"
+  },
+  about: products.map((product) => ({
+    "@type": "SoftwareApplication",
+    name: product.name,
+    applicationCategory: "DeveloperApplication",
+    url: product.href
+  })),
+  citation: sources.flatMap((source) =>
+    source.secondaryHref ? [source.href, source.secondaryHref] : [source.href]
+  )
+};
+
+const breadcrumbJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  itemListElement: [
+    {
+      "@type": "ListItem",
+      position: 1,
+      name: "Home",
+      item: "https://shreyam1008.github.io/dbterm/"
+    },
+    {
+      "@type": "ListItem",
+      position: 2,
+      name: "Terminal SQL client comparison",
+      item: canonicalUrl
+    }
+  ]
+};
+---
+
+<BaseLayout
+  title={title}
+  description={description}
+  keywords={keywords}
+  ogImage="assets/command-palette.png"
+  jsonLd={[articleJsonLd, breadcrumbJsonLd]}
+>
+  <article class="compare-page">
+    <header class="compare-hero">
+      <nav class="breadcrumbs" aria-label="Breadcrumb">
+        <ol>
+          <li><a href={withBase("/")}>Home</a></li>
+          <li aria-current="page">Compare</li>
+        </ol>
+      </nav>
+
+      <div class="hero-grid">
+        <div>
+          <p class="compare-kicker">Official sources · no scores · no paid placement</p>
+          <h1>dbterm vs DBeaver and terminal SQL clients</h1>
+          <p class="compare-lede">
+            Harlequin, rainfrog, LazySQL, sqlit, and Gobang all make different trade-offs.
+            DBeaver sits nearby as a desktop GUI. This comparison maps those choices without
+            pretending one tool is best for every database workflow.
+          </p>
+          <div class="hero-actions">
+            <a class="button primary large" href={withBase("/#install")}>Install dbterm</a>
+            <a class="button subtle large" href="#comparison-table">Compare the tools</a>
+          </div>
+        </div>
+
+        <aside class="method-stamp" aria-labelledby="verified-heading">
+          <span class="stamp-mark" aria-hidden="true">✓</span>
+          <div>
+            <p id="verified-heading">Verified as of</p>
+            <strong><time datetime="2026-08-04">4 August 2026</time></strong>
+            <small>Official project websites, documentation, repositories, and license files only.</small>
+          </div>
+        </aside>
+      </div>
+    </header>
+
+    <section class="methodology" id="methodology" aria-labelledby="methodology-heading">
+      <div class="section-heading">
+        <p class="compare-kicker">How this was built</p>
+        <h2 id="methodology-heading">A comparison with boundaries.</h2>
+      </div>
+      <div class="method-grid">
+        <div>
+          <span aria-hidden="true">01</span>
+          <h3>Primary sources only</h3>
+          <p>Every product fact is traceable to a maintainer-controlled page linked below.</p>
+        </div>
+        <div>
+          <span aria-hidden="true">02</span>
+          <h3>Documented today</h3>
+          <p>Roadmap promises are excluded, except where a TODO materially clarifies current scope.</p>
+        </div>
+        <div>
+          <span aria-hidden="true">03</span>
+          <h3>No synthetic winner</h3>
+          <p>No star counts, unrepeatable memory claims, subjective scores, or invented benchmarks.</p>
+        </div>
+      </div>
+      <p class="legend" id="comparison-legend">
+        <span class="nd-badge">ND</span>
+        <strong>Not documented</strong> means the reviewed official source did not publish a maturity
+        label. It does <em>not</em> mean a feature is absent or a project is immature.
+      </p>
+    </section>
+
+    <section class="comparison-section" id="comparison-table" aria-labelledby="table-heading">
+      <div class="section-heading split-heading">
+        <div>
+          <p class="compare-kicker">At a glance</p>
+          <h2 id="table-heading">Seven tools, seven different centres of gravity.</h2>
+        </div>
+        <p>Scroll the table horizontally on a small screen. Product names remain pinned for context.</p>
+      </div>
+
+      <div class="table-shell" tabindex="0" role="region" aria-labelledby="table-heading" aria-describedby="comparison-legend">
+        <table>
+          <caption>
+            Database client comparison based on official documentation reviewed on 4 August 2026.
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">Product</th>
+              <th scope="col">Surface</th>
+              <th scope="col">Documented database coverage</th>
+              <th scope="col">Documented workflow strengths</th>
+              <th scope="col">Delivery model</th>
+              <th scope="col">Maturity label</th>
+              <th scope="col">License</th>
+            </tr>
+          </thead>
+          <tbody>
+            {products.map((product) => (
+              <tr id={productId(product.name)} class:list={{ featured: product.featured, adjacent: product.adjacent }}>
+                <th scope="row">
+                  <a class="product-link" href={product.href}>{product.name}</a>
+                  {product.featured && <span class="row-note">this project</span>}
+                  {product.adjacent && <span class="row-note">adjacent GUI</span>}
+                  <a class="source-ref" href={`#${product.source}`} aria-label={`Source ${sourceNumber(product.source)} for ${product.name}`}>
+                    [{sourceNumber(product.source)}]
+                  </a>
+                </th>
+                <td>{product.surface}</td>
+                <td>{product.coverage}</td>
+                <td>{product.strengths}</td>
+                <td>{product.delivery}</td>
+                <td>
+                  {product.maturity ? (
+                    <span class="maturity-badge">{product.maturity}</span>
+                  ) : (
+                    <abbr class="nd-badge" title="Not documented">ND</abbr>
+                  )}
+                </td>
+                <td><a href={product.licenseHref}>{product.license}</a></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="fit-section" aria-labelledby="fit-heading">
+      <div class="section-heading split-heading">
+        <div>
+          <p class="compare-kicker">Choose by workflow</p>
+          <h2 id="fit-heading">The best fit depends on the job.</h2>
+        </div>
+        <p>These summaries describe each project’s documented centre of gravity, not a quality ranking.</p>
+      </div>
+
+      <div class="fit-grid">
+        {bestFits.map((fit, index) => (
+          <article class:list={["fit-card", { featured: index === 0 }]}>
+            <span class="fit-index">{String(index + 1).padStart(2, "0")}</span>
+            <p>{fit.name}</p>
+            <h3>{fit.label}</h3>
+            <p>{fit.body}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+
+    <section class="choice-section" aria-labelledby="choice-heading">
+      <div class="choice-card dbterm-choice">
+        <p class="compare-kicker">Choose dbterm when</p>
+        <h2 id="choice-heading">You want a focused tool that arrives ready.</h2>
+        <ul>
+          <li>You prefer a downloadable binary over managing a Python or Java runtime.</li>
+          <li>Your work centres on PostgreSQL, MySQL, SQLite, Turso, or Cloudflare D1.</li>
+          <li>You want command search, foreign-key navigation, filtered export, and database operations in one keyboard-first workspace.</li>
+        </ul>
+      </div>
+
+      <div class="choice-card other-choice">
+        <p class="compare-kicker">When another tool is better</p>
+        <h2>Pick the capability you actually need.</h2>
+        <ul>
+          <li><strong>Harlequin:</strong> a richer tabbed SQL-editing environment or adapter extensibility.</li>
+          <li><strong>rainfrog:</strong> Vim-like editing, favourites, mouse input, or its tiered database model.</li>
+          <li><strong>LazySQL:</strong> read-only connection enforcement or scripted tunnel/port-forward setup.</li>
+          <li><strong>sqlit:</strong> Docker discovery, built-in SSH tunnelling, cloud CLI integration, or a much wider connector list.</li>
+          <li><strong>Gobang:</strong> a narrowly focused, keyboard-only table manager for its three supported engines.</li>
+          <li><strong>DBeaver:</strong> a graphical desktop, ER diagrams, JDBC breadth, and rich data-transfer tooling.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section
+      class="grid gap-8 rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--brand-pale)] p-[clamp(1.5rem,4vw,3rem)] lg:grid-cols-[.78fr_1.22fr]"
+      aria-labelledby="dbeaver-alternative-heading"
+    >
+      <div>
+        <p class="compare-kicker">DBeaver alternative, with limits</p>
+        <h2 id="dbeaver-alternative-heading" class="max-w-[13ch] text-[clamp(2rem,4vw,3.35rem)] leading-none">
+          Is dbterm a DBeaver alternative?
+        </h2>
+        <p class="mt-4 text-[var(--ink-soft)]">
+          For some terminal-first workflows, yes. As a full desktop workbench, no—and that
+          distinction matters more than a feature-count score.
+        </p>
+      </div>
+      <div class="grid overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)] sm:grid-cols-2">
+        <article class="p-5 sm:border-r sm:border-[var(--line)]">
+          <p class="mb-5 font-mono text-[.66rem] font-semibold tracking-wider text-[var(--brand-strong)] uppercase">Where dbterm can replace it</p>
+          <h3>A fast five-engine terminal loop</h3>
+          <p class="mb-0 text-sm leading-relaxed text-[var(--ink-soft)]">
+            Choose dbterm when a single binary, keyboard navigation, foreign-key jumps, typed
+            filters, scoped CSV export, and selected PostgreSQL/MySQL operations cover the job.
+          </p>
+        </article>
+        <article class="border-t border-[var(--line)] p-5 sm:border-t-0">
+          <p class="mb-5 font-mono text-[.66rem] font-semibold tracking-wider text-[var(--amber)] uppercase">Where DBeaver is better</p>
+          <h3>A broad graphical workbench</h3>
+          <p class="mb-0 text-sm leading-relaxed text-[var(--ink-soft)]">
+            Choose DBeaver for ER diagrams, JDBC breadth, visual data comparison, mock data, and
+            desktop-scale transfer tooling documented by its maintainers
+            <a href="#source-dbeaver" aria-label="DBeaver source 7">[7]</a>.
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section class="sources-section" id="sources" aria-labelledby="sources-heading">
+      <div class="section-heading split-heading">
+        <div>
+          <p class="compare-kicker">Audit trail</p>
+          <h2 id="sources-heading">Read the source, then decide.</h2>
+        </div>
+        <a class="report-link" href={reportOutdatedHref}>Report outdated information →</a>
+      </div>
+      <ol class="source-list">
+        {sources.map((source) => (
+          <li id={source.id}>
+            <span aria-hidden="true">{source.number.padStart(2, "0")}</span>
+            <p>
+              <a href={source.href}>{source.name}</a>
+              {source.secondaryHref && source.secondaryName && (
+                <><span aria-hidden="true"> · </span><a href={source.secondaryHref}>{source.secondaryName}</a></>
+              )}
+            </p>
+          </li>
+        ))}
+      </ol>
+      <p class="source-note">
+        Product capabilities can change between releases. Before adopting any tool, confirm the
+        current installation, database-driver, and production-safety guidance in its official docs.
+      </p>
+    </section>
+
+    <section class="compare-cta" aria-labelledby="cta-heading">
+      <div>
+        <p class="compare-kicker">Test the fit yourself</p>
+        <h2 id="cta-heading">Take dbterm from install to first query.</h2>
+        <p>Start with the release binary, then use the guide to learn the workspace and shortcuts.</p>
+      </div>
+      <div class="cta-actions">
+        <a class="button primary large" href={withBase("/#install")}>Install dbterm</a>
+        <a class="button subtle large" href={withBase("/guide/")}>Read the guide</a>
+        <a class="button subtle large" href="https://github.com/shreyam1008/dbterm">View source</a>
+      </div>
+    </section>
+  </article>
+</BaseLayout>
+
+<style>
+  .compare-page {
+    display: grid;
+    width: min(var(--container), calc(100% - var(--gutter) * 2));
+    min-width: 0;
+    margin-inline: auto;
+    gap: clamp(4rem, 8vw, 7rem);
+    padding-block: clamp(2.5rem, 6vw, 5rem) 5rem;
+  }
+
+  .compare-page > *,
+  .hero-grid > * {
+    min-width: 0;
+  }
+
+  .compare-hero {
+    display: grid;
+    gap: clamp(2.5rem, 5vw, 4rem);
+    padding-bottom: clamp(2.5rem, 5vw, 4.5rem);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .breadcrumbs ol {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    margin: 0;
+    padding: 0;
+    color: var(--muted-foreground);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    list-style: none;
+  }
+
+  .breadcrumbs li + li::before {
+    content: "/";
+    margin-right: 0.55rem;
+    color: color-mix(in srgb, var(--muted-foreground) 55%, transparent);
+  }
+
+  .breadcrumbs a {
+    color: inherit;
+  }
+
+  .hero-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.55fr) minmax(17rem, 0.65fr);
+    gap: clamp(2rem, 7vw, 6.5rem);
+    align-items: end;
+  }
+
+  .compare-kicker {
+    margin-bottom: 0.8rem;
+    color: var(--primary);
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .compare-hero h1 {
+    max-width: 13ch;
+    margin-bottom: 1.25rem;
+    font-size: clamp(3rem, 7vw, 6.25rem);
+    line-height: 0.94;
+    letter-spacing: -0.065em;
+    text-wrap: balance;
+  }
+
+  .compare-lede {
+    max-width: 47rem;
+    color: var(--muted-foreground);
+    font-size: clamp(1.03rem, 1.5vw, 1.25rem);
+    line-height: 1.65;
+  }
+
+  .hero-actions,
+  .cta-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+    margin-top: 1.75rem;
+  }
+
+  .method-stamp {
+    display: flex;
+    gap: 1rem;
+    padding: 1.2rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: color-mix(in srgb, var(--card) 88%, transparent);
+    box-shadow: 0 18px 48px color-mix(in srgb, var(--foreground) 7%, transparent);
+  }
+
+  .stamp-mark {
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    width: 2.55rem;
+    height: 2.55rem;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--primary) 16%, transparent);
+    color: var(--primary);
+    font-weight: 800;
+  }
+
+  .method-stamp p,
+  .method-stamp small {
+    color: var(--muted-foreground);
+  }
+
+  .method-stamp p {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .method-stamp strong {
+    display: block;
+    margin: 0.2rem 0 0.45rem;
+    color: var(--foreground);
+    font-size: 1.1rem;
+  }
+
+  .method-stamp small {
+    display: block;
+    line-height: 1.5;
+  }
+
+  .section-heading h2,
+  .choice-card h2,
+  .compare-cta h2 {
+    max-width: 18ch;
+    margin-bottom: 0;
+    font-size: clamp(2rem, 4.2vw, 3.6rem);
+    letter-spacing: -0.055em;
+    text-wrap: balance;
+  }
+
+  .split-heading {
+    display: flex;
+    justify-content: space-between;
+    gap: 2rem;
+    align-items: end;
+    margin-bottom: 1.6rem;
+  }
+
+  .split-heading > p {
+    max-width: 33rem;
+    color: var(--muted-foreground);
+  }
+
+  .method-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1px;
+    margin-top: 1.6rem;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--border);
+  }
+
+  .method-grid > div {
+    min-height: 13rem;
+    padding: clamp(1.25rem, 3vw, 2rem);
+    background: var(--card);
+  }
+
+  .method-grid span,
+  .fit-index {
+    color: var(--primary);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+  }
+
+  .method-grid h3 {
+    margin: 2.4rem 0 0.7rem;
+    font-size: 1.1rem;
+  }
+
+  .method-grid p,
+  .fit-card > p:last-child,
+  .source-note {
+    color: var(--muted-foreground);
+  }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    align-items: baseline;
+    margin-top: 1rem;
+    padding: 0.9rem 1rem;
+    border-left: 3px solid var(--primary);
+    background: color-mix(in srgb, var(--primary) 6%, var(--card));
+    color: var(--muted-foreground);
+    font-size: 0.9rem;
+  }
+
+  .legend strong {
+    color: var(--foreground);
+  }
+
+  .table-shell {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--card);
+    box-shadow: 0 24px 72px color-mix(in srgb, var(--foreground) 6%, transparent);
+    outline: none;
+  }
+
+  .table-shell:focus-visible {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 30%, transparent);
+  }
+
+  table {
+    width: 100%;
+    min-width: 82rem;
+    border-collapse: separate;
+    border-spacing: 0;
+    color: var(--card-foreground);
+    font-size: 0.88rem;
+    line-height: 1.55;
+  }
+
+  caption {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  th,
+  td {
+    padding: 1.1rem;
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+    text-align: left;
+  }
+
+  th:last-child,
+  td:last-child {
+    border-right: 0;
+  }
+
+  tbody tr:last-child th,
+  tbody tr:last-child td {
+    border-bottom: 0;
+  }
+
+  thead th {
+    background: color-mix(in srgb, var(--muted) 88%, var(--card));
+    color: var(--muted-foreground);
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+  }
+
+  tbody th {
+    min-width: 10.5rem;
+    background: var(--card);
+  }
+
+  thead th:first-child,
+  tbody th {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+  }
+
+  thead th:first-child {
+    z-index: 3;
+  }
+
+  tbody tr.featured th,
+  tbody tr.featured td {
+    background: color-mix(in srgb, var(--primary) 5%, var(--card));
+  }
+
+  tbody tr.featured th {
+    box-shadow: inset 3px 0 0 var(--primary);
+  }
+
+  tbody tr.adjacent th,
+  tbody tr.adjacent td {
+    background: color-mix(in srgb, var(--muted) 55%, var(--card));
+  }
+
+  .product-link {
+    display: block;
+    color: var(--foreground);
+    font-size: 1rem;
+    text-decoration-thickness: 1px;
+  }
+
+  .row-note {
+    display: inline-flex;
+    margin-top: 0.45rem;
+    padding: 0.16rem 0.4rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--muted-foreground);
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    font-weight: 500;
+    text-transform: uppercase;
+  }
+
+  .source-ref {
+    display: block;
+    width: fit-content;
+    margin-top: 0.5rem;
+    color: var(--muted-foreground);
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+  }
+
+  .nd-badge,
+  .maturity-badge {
+    display: inline-flex;
+    padding: 0.18rem 0.42rem;
+    border: 1px solid var(--border);
+    border-radius: 0.35rem;
+    color: var(--muted-foreground);
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-decoration: none;
+  }
+
+  .maturity-badge {
+    border-color: color-mix(in srgb, var(--amber) 42%, var(--border));
+    color: var(--amber);
+  }
+
+  .fit-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.85rem;
+  }
+
+  .fit-card {
+    position: relative;
+    min-height: 17rem;
+    padding: clamp(1.25rem, 2.5vw, 1.8rem);
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--card);
+  }
+
+  .fit-card::after {
+    content: "";
+    position: absolute;
+    right: -2rem;
+    bottom: -3.5rem;
+    width: 9rem;
+    height: 9rem;
+    border: 1px solid color-mix(in srgb, var(--primary) 18%, transparent);
+    border-radius: 50%;
+  }
+
+  .fit-card.featured {
+    grid-column: span 2;
+    background:
+      linear-gradient(135deg, color-mix(in srgb, var(--primary) 9%, var(--card)), var(--card) 62%);
+  }
+
+  .fit-card > p:nth-of-type(1) {
+    margin-top: 3.5rem;
+    color: var(--primary);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+  }
+
+  .fit-card h3 {
+    max-width: 18ch;
+    margin: 0.45rem 0 0.8rem;
+    font-size: 1.3rem;
+  }
+
+  .choice-section {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    gap: 1rem;
+  }
+
+  .choice-card {
+    padding: clamp(1.5rem, 4vw, 3rem);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--card);
+  }
+
+  .dbterm-choice {
+    background:
+      radial-gradient(circle at 92% 8%, color-mix(in srgb, var(--primary) 15%, transparent), transparent 32%),
+      var(--card);
+  }
+
+  .choice-card ul {
+    display: grid;
+    gap: 0.85rem;
+    margin: 2rem 0 0;
+    padding-left: 1.2rem;
+    color: var(--muted-foreground);
+  }
+
+  .choice-card li::marker {
+    color: var(--primary);
+  }
+
+  .choice-card strong {
+    color: var(--foreground);
+  }
+
+  .report-link {
+    flex: 0 0 auto;
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+  }
+
+  .source-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1px;
+    margin: 1.5rem 0 0;
+    padding: 1px;
+    border-radius: var(--radius-lg);
+    background: var(--border);
+    list-style: none;
+  }
+
+  .source-list li {
+    display: flex;
+    gap: 1rem;
+    align-items: baseline;
+    padding: 1rem 1.15rem;
+    background: var(--card);
+    scroll-margin-top: 7rem;
+  }
+
+  .source-list span {
+    color: var(--muted-foreground);
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+  }
+
+  .source-list p {
+    margin: 0;
+  }
+
+  .source-list a {
+    color: var(--foreground);
+  }
+
+  .source-note {
+    max-width: 54rem;
+    margin-top: 1rem;
+    font-size: 0.86rem;
+  }
+
+  .compare-cta {
+    display: flex;
+    justify-content: space-between;
+    gap: 2rem;
+    align-items: end;
+    padding: clamp(1.5rem, 4.5vw, 3.5rem);
+    border: 1px solid color-mix(in srgb, var(--primary) 44%, var(--border));
+    border-radius: var(--radius-lg);
+    background:
+      linear-gradient(120deg, color-mix(in srgb, var(--primary) 11%, var(--card)), var(--card) 58%);
+  }
+
+  .compare-cta h2 {
+    max-width: 20ch;
+  }
+
+  .compare-cta > div > p:last-child {
+    max-width: 37rem;
+    margin-top: 1rem;
+    color: var(--muted-foreground);
+  }
+
+  .cta-actions {
+    flex: 0 0 auto;
+    justify-content: flex-end;
+    margin-top: 0;
+  }
+
+  @media (max-width: 900px) {
+    .hero-grid,
+    .choice-section {
+      grid-template-columns: 1fr;
+    }
+
+    .method-stamp {
+      max-width: 32rem;
+    }
+
+    .fit-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .fit-card.featured {
+      grid-column: auto;
+    }
+
+    .compare-cta {
+      display: grid;
+    }
+
+    .cta-actions {
+      justify-content: flex-start;
+    }
+  }
+
+  @media (max-width: 700px) {
+    .compare-page {
+      gap: 4.25rem;
+      padding-top: 2rem;
+    }
+
+    .method-grid,
+    .fit-grid,
+    .source-list {
+      grid-template-columns: 1fr;
+    }
+
+    .method-grid > div {
+      min-height: auto;
+    }
+
+    .method-grid h3 {
+      margin-top: 1.5rem;
+    }
+
+    .split-heading {
+      display: grid;
+      align-items: start;
+    }
+
+    .fit-card {
+      min-height: 15rem;
+    }
+
+    .cta-actions .button {
+      width: 100%;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .table-shell {
+      scroll-behavior: auto;
+    }
+  }
+</style>

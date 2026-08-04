@@ -1,4 +1,5 @@
 import { defineConfig } from "astro/config";
+import tailwindcss from "@tailwindcss/vite";
 
 const repositoryName = process.env.PUBLIC_REPOSITORY_NAME || "dbterm";
 const basePath = process.env.PUBLIC_BASE_PATH || `/${repositoryName}`;
@@ -10,5 +11,11 @@ export default defineConfig({
   output: "static",
   site: siteUrl,
   base: basePath,
-  trailingSlash: "always"
+  trailingSlash: "always",
+  vite: {
+    plugins: [tailwindcss()],
+    optimizeDeps: {
+      exclude: ["@sqlite.org/sqlite-wasm"]
+    }
+  }
 });

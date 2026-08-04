@@ -22,18 +22,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      - name: Set up Node
-        uses: actions/setup-node@v4
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: site/package-lock.json
+          bun-version: 1.3.14
 
       - name: Install dependencies
         working-directory: site
-        run: npm ci
+        run: bun ci
 
       - name: Build static site
         working-directory: site
@@ -42,7 +40,7 @@ jobs:
           PUBLIC_REPOSITORY_NAME: ${{ github.event.repository.name }}
           PUBLIC_BASE_PATH: /${{ github.event.repository.name }}
           PUBLIC_SITE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
-        run: npm run build
+        run: bun run verify
 
       - name: Publish to gh-pages (preserve apt/)
         env:

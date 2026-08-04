@@ -1,11 +1,12 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
+import InteractiveDemo from "../components/InteractiveDemo.astro";
+import ProductShowcase from "../components/ProductShowcase.astro";
+import ShaderField from "../components/ShaderField.astro";
 
 const title = "dbterm — Fast, Keyboard-First Terminal Database Client";
 const description =
-  "Explore schemas, run SQL, follow foreign keys, filter results, and export data from one fast terminal UI for PostgreSQL, MySQL, SQLite, Turso, and Cloudflare D1.";
-const keywords =
-  "dbterm, terminal database client, terminal sql client, postgres tui, mysql tui, sqlite tui, turso, cloudflare d1";
+  "Explore schemas, run SQL, follow foreign keys, filter results, and export data in one fast terminal UI for PostgreSQL, MySQL, SQLite, Turso, and Cloudflare D1.";
 
 const baseUrl = import.meta.env.BASE_URL;
 const withBase = (path: string) => {
@@ -19,82 +20,78 @@ const installUnix =
 const installWindows =
   'powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/shreyam1008/dbterm/main/install.ps1 | iex"';
 
+const primaryButton =
+  "inline-flex min-h-12 items-center justify-center gap-2 rounded-lg border border-[var(--brand-strong)] bg-[var(--brand)] px-5 py-3 text-sm font-bold text-[var(--primary-foreground)] no-underline shadow-[0_10px_30px_color-mix(in_srgb,var(--brand)_22%,transparent)] transition hover:-translate-y-0.5 hover:bg-[var(--brand-strong)] hover:text-[var(--primary-foreground)] focus-visible:outline-3";
+const secondaryButton =
+  "inline-flex min-h-12 items-center justify-center gap-2 rounded-lg border border-[var(--line-strong)] bg-[var(--surface-raised)] px-5 py-3 text-sm font-bold text-[var(--ink)] no-underline shadow-sm transition hover:-translate-y-0.5 hover:border-[var(--brand)] hover:bg-[var(--brand-pale)] hover:text-[var(--ink)]";
+
 const features = [
   {
-    marker: "⌘",
+    index: "01",
     key: "Ctrl P",
-    title: "Find anything",
-    body: "Fuzzy-search every command, database object, and recent query. Matches highlight as you type, with context before you act.",
-    tone: "violet"
+    title: "Search the whole workspace",
+    body: "Fuzzy-find commands, tables, procedures, and recent SQL. Every result explains what it will do before you run it."
   },
   {
-    marker: "↗",
+    index: "02",
     key: "F / Backspace",
-    title: "Follow the data",
-    body: "Jump across declared foreign keys—including composite keys—then return to the exact table and row you came from.",
-    tone: "cyan"
+    title: "Follow relationships",
+    body: "Jump through declared foreign keys—including composite keys—then return to the exact table and row where you started."
   },
   {
-    marker: "≡",
-    key: "/  C  V",
-    title: "Filter in place",
-    body: "Compose typed AND filters, copy a complete cell, or filter a column by the clipboard value without leaving Results.",
-    tone: "lime"
+    index: "03",
+    key: "/ · C · V",
+    title: "Turn a cell into an answer",
+    body: "Copy a complete value, build typed AND filters, or search the selected column using the clipboard without leaving Results."
   },
   {
-    marker: "⇩",
+    index: "04",
     key: "Alt E",
-    title: "Export what matters",
-    body: "Export selected rows, the current page, or every matching row to CSV with progress, cancellation, and no silent overwrite.",
-    tone: "amber"
+    title: "Export the right scope",
+    body: "Choose selected rows, the current page, or every filtered match. Long exports show progress and stay cancellable."
   },
   {
-    marker: "◌",
+    index: "05",
+    key: "+ · Ctrl +",
+    title: "Make dense data legible",
+    body: "Resize one column or scale the full table. Adjust preview limits and move between panels without reaching for a mouse."
+  },
+  {
+    index: "06",
     key: "Esc / Ctrl C",
-    title: "Stay responsive",
-    body: "Queries, imports, exports, and refreshes show clear progress and can be cancelled without freezing the interface.",
-    tone: "coral"
-  },
-  {
-    marker: "↔",
-    key: "+ / Ctrl +",
-    title: "Shape the view",
-    body: "Resize one column, scale the full table, change preview limits, and move between panels entirely from the keyboard.",
-    tone: "blue"
+    title: "Never wonder if it froze",
+    body: "Queries, imports, exports, and refreshes expose their state and accept cancellation instead of holding the interface hostage."
   }
 ];
 
-const databases = [
-  { short: "PG", name: "PostgreSQL", detail: "Query · schema · backup · import", tone: "blue" },
-  { short: "MY", name: "MySQL", detail: "Query · schema · backup · import", tone: "amber" },
-  { short: "SQ", name: "SQLite", detail: "Local files · snapshots", tone: "cyan" },
-  { short: "TU", name: "Turso", detail: "Cloud LibSQL workflows", tone: "lime" },
-  { short: "D1", name: "Cloudflare D1", detail: "API-backed SQL", tone: "coral" }
-];
-
-const workflow = [
-  { number: "01", title: "Connect", body: "Save local, remote, or cloud database connections once." },
-  { number: "02", title: "Explore", body: "Search tables, inspect schemas, and move through relationships." },
-  { number: "03", title: "Query", body: "Write SQL, use history, and inspect results without a mouse." },
-  { number: "04", title: "Act", body: "Filter, copy, export, back up, or import with visible progress." }
+const engines = [
+  ["PostgreSQL", "Query · schema · FK navigation · service · backup · import", "PG"],
+  ["MySQL", "Query · schema · FK navigation · service · backup · import", "MY"],
+  ["SQLite", "Local database files · snapshots · zero server setup", "SQ"],
+  ["Turso", "Remote LibSQL databases through the same workspace", "TU"],
+  ["Cloudflare D1", "API-backed SQL without leaving the terminal", "D1"]
 ];
 
 const faqItems = [
   {
-    question: "Is dbterm really a single binary?",
-    answer: "Yes. End users do not need Go, Java, Python, or Node. Download the platform binary or use the installer and run dbterm."
+    question: "Is the browser demo real?",
+    answer:
+      "Yes. It loads SQLite compiled to WebAssembly and runs read-only SQL against an in-memory sample database. The sample data stays in your browser and is discarded when you leave."
   },
   {
-    question: "Which operating systems are supported?",
-    answer: "Release binaries are published for Linux, macOS, and Windows on AMD64 and ARM64. Debian packages are also available."
+    question: "Does dbterm need Go, Node, Python, or Java installed?",
+    answer:
+      "No. dbterm is distributed as a single release binary for Linux, macOS, and Windows. Those frontend tools build this website only; they are not runtime requirements for dbterm."
   },
   {
-    question: "Can I use it with production databases?",
-    answer: "Yes, with the same care as any SQL client: use least-privilege credentials and validate destructive statements outside production first."
+    question: "Can it work with production databases?",
+    answer:
+      "Yes, with the same discipline as any database client: use least-privilege credentials, review mutating SQL, and validate destructive operations away from production first."
   },
   {
-    question: "Where is the full shortcut reference?",
-    answer: "The Guide covers setup, every workspace panel, keybindings, service actions, backups, imports, and troubleshooting. Alt+H also opens help inside dbterm."
+    question: "Why another terminal SQL client?",
+    answer:
+      "dbterm focuses on a tight end-to-end loop: connection, schema, query, relationship navigation, typed filtering, scoped export, and selected PostgreSQL/MySQL operations in one keyboard model. The comparison page also calls out where another tool may fit better."
   }
 ];
 
@@ -103,18 +100,43 @@ const softwareJsonLd = {
   "@type": "SoftwareApplication",
   name: "dbterm",
   applicationCategory: "DeveloperApplication",
+  applicationSubCategory: "Database client",
   operatingSystem: "Linux, macOS, Windows",
   softwareVersion: "0.5.0",
   description,
   url: "https://shreyam1008.github.io/dbterm/",
   downloadUrl: "https://github.com/shreyam1008/dbterm/releases/tag/v0.5.0",
   softwareHelp: "https://shreyam1008.github.io/dbterm/guide/",
+  codeRepository: "https://github.com/shreyam1008/dbterm",
   license: "https://github.com/shreyam1008/dbterm/blob/main/LICENSE",
   image: "https://shreyam1008.github.io/dbterm/assets/command-palette.png",
-  screenshot: "https://shreyam1008.github.io/dbterm/assets/command-palette.png",
+  screenshot: [
+    "https://shreyam1008.github.io/dbterm/assets/command-palette.png",
+    "https://shreyam1008.github.io/dbterm/main_ui.png"
+  ],
   offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
   isAccessibleForFree: true,
   featureList: features.map((feature) => feature.title)
+};
+
+const websiteJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: "dbterm",
+  alternateName: "dbterm terminal SQL client",
+  url: "https://shreyam1008.github.io/dbterm/",
+  description
+};
+
+const sourceJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareSourceCode",
+  name: "dbterm",
+  description,
+  codeRepository: "https://github.com/shreyam1008/dbterm",
+  programmingLanguage: "Go",
+  runtimePlatform: "Linux, macOS, Windows",
+  license: "https://github.com/shreyam1008/dbterm/blob/main/LICENSE"
 };
 
 const faqJsonLd = {
@@ -131,222 +153,236 @@ const faqJsonLd = {
 <BaseLayout
   title={title}
   description={description}
-  keywords={keywords}
   ogImage="assets/command-palette.png"
-  jsonLd={[softwareJsonLd, faqJsonLd]}
+  ogImageAlt="dbterm command palette over a PostgreSQL result table"
+  jsonLd={[websiteJsonLd, softwareJsonLd, sourceJsonLd, faqJsonLd]}
 >
-  <section class="landing-hero">
-    <div class="hero-copy">
-      <a class="release-pill" href="https://github.com/shreyam1008/dbterm/releases/tag/v0.5.0">
-        <span class="release-dot" aria-hidden="true"></span>
-        v0.5.0 · Brahmaputra
-        <span aria-hidden="true">→</span>
-      </a>
-
-      <p class="hero-kicker">Open-source terminal database client</p>
-      <h1>See your database.<br /><span>Stay in the flow.</span></h1>
-      <p class="hero-lede">
-        Explore schemas, run SQL, follow relationships, filter results, and export data—without
-        reaching for a heavyweight desktop client.
-      </p>
-
-      <div class="hero-actions">
-        <a class="button primary large" href="#install">Install dbterm</a>
-        <a class="button subtle large" href="https://github.com/shreyam1008/dbterm">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .7a11.5 11.5 0 0 0-3.64 22.41c.58.11.79-.25.79-.56v-2.24c-3.22.7-3.9-1.37-3.9-1.37-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.7.08-.7 1.17.08 1.78 1.2 1.78 1.2 1.04 1.77 2.72 1.26 3.38.96.1-.75.4-1.26.74-1.55-2.57-.29-5.27-1.28-5.27-5.69 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.16 1.18a10.98 10.98 0 0 1 5.76 0c2.19-1.49 3.15-1.18 3.15-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.42-2.71 5.39-5.29 5.68.42.36.78 1.06.78 2.14v3.17c0 .31.21.68.8.56A11.5 11.5 0 0 0 12 .7Z" /></svg>
-          View on GitHub
-        </a>
-      </div>
-
-      <ul class="hero-proof" aria-label="Product highlights">
-        <li><span>01</span> Single binary</li>
-        <li><span>02</span> Keyboard first</li>
-        <li><span>03</span> MIT licensed</li>
-      </ul>
-    </div>
-
-    <aside class="hero-console" aria-label="Quick installation preview">
-      <div class="console-bar">
-        <div class="window-dots" aria-hidden="true"><i></i><i></i><i></i></div>
-        <span>~/install</span>
-        <span class="console-status">ready</span>
-      </div>
-      <div class="console-body">
-        <p class="console-comment"># Install the latest release</p>
-        <div class="console-command">
-          <span aria-hidden="true">$</span>
-          <code id="hero-install">{installUnix}</code>
-        </div>
-        <button
-          class="console-copy copy-button"
-          type="button"
-          data-copy-target="hero-install"
-          data-default-label="Copy command"
-        >
-          Copy command
-        </button>
-        <div class="console-output" aria-hidden="true">
-          <p><span>✓</span> Platform detected</p>
-          <p><span>✓</span> dbterm v0.5.0 installed</p>
-          <p><b>→</b> Run <strong>dbterm</strong> to begin<span class="cursor"></span></p>
-        </div>
-      </div>
-    </aside>
-  </section>
-
-  <section class="product-stage" id="product">
-    <div class="stage-heading">
+  <section class="relative isolate overflow-hidden border-b border-[var(--line)] py-18 sm:py-24 lg:py-30">
+    <ShaderField />
+    <div class="site-container relative z-10 grid items-center gap-14 lg:grid-cols-[minmax(0,1.08fr)_minmax(390px,.92fr)]">
       <div>
-        <p class="section-label">Command & object palette</p>
-        <h2>Everything is a few keys away.</h2>
-      </div>
-      <p>Search actions, tables, procedures, and recent SQL from one fuzzy command surface.</p>
-    </div>
-
-    <figure class="terminal-shot">
-      <div class="terminal-titlebar">
-        <div class="window-dots" aria-hidden="true"><i></i><i></i><i></i></div>
-        <span>dbterm · workspace</span>
-        <span class="live-pill"><i aria-hidden="true"></i> keyboard active</span>
-      </div>
-      <img
-        src={withBase("assets/command-palette.png")}
-        alt="dbterm command palette fuzzy-searching clear actions, tables, and procedures"
-        width="1306"
-        height="514"
-        loading="eager"
-      />
-      <figcaption>
-        <span><kbd>Ctrl</kbd><b>+</b><kbd>P</kbd></span>
-        Search by name or intent. Highlighted matches update as you type.
-      </figcaption>
-    </figure>
-  </section>
-
-  <section class="database-rail" aria-labelledby="database-heading">
-    <div class="rail-heading">
-      <p class="section-label">One workspace</p>
-      <h2 id="database-heading">Five database targets.</h2>
-    </div>
-    <div class="database-grid">
-      {databases.map((database) => (
-        <article class="database-card">
-          <span class={`database-mark ${database.tone}`}>{database.short}</span>
-          <div>
-            <h3>{database.name}</h3>
-            <p>{database.detail}</p>
-          </div>
-        </article>
-      ))}
-    </div>
-  </section>
-
-  <section class="feature-section" id="features">
-    <div class="section-heading centered">
-      <p class="section-label">Built for real work</p>
-      <h2>Less interface. More momentum.</h2>
-      <p>Every interaction is designed to keep your hands on the keyboard and your context intact.</p>
-    </div>
-
-    <div class="landing-feature-grid">
-      {features.map((feature) => (
-        <article class={`landing-feature ${feature.tone}`}>
-          <div class="feature-topline">
-            <span class="feature-marker" aria-hidden="true">{feature.marker}</span>
-            <code>{feature.key}</code>
-          </div>
-          <h3>{feature.title}</h3>
-          <p>{feature.body}</p>
-        </article>
-      ))}
-    </div>
-  </section>
-
-  <section class="workflow-section">
-    <div class="workflow-copy">
-      <p class="section-label">A complete data loop</p>
-      <h2>From connection to answer, without context switching.</h2>
-      <p>
-        dbterm brings connection management, schema exploration, querying, result navigation, and
-        operational tools into one coherent terminal workspace.
-      </p>
-      <a class="text-link" href={withBase("guide/")}>Explore the full workflow <span>→</span></a>
-    </div>
-
-    <ol class="workflow-list">
-      {workflow.map((item) => (
-        <li>
-          <span>{item.number}</span>
-          <div><h3>{item.title}</h3><p>{item.body}</p></div>
-        </li>
-      ))}
-    </ol>
-  </section>
-
-  <section class="install-section" id="install">
-    <div class="install-heading">
-      <p class="section-label">Get started</p>
-      <h2>One command. Then just <code>dbterm</code>.</h2>
-      <p>No runtime stack, account, or setup wizard required.</p>
-    </div>
-
-    <div class="install-grid">
-      <article class="install-card featured">
-        <div class="install-card-head">
-          <div><span class="platform-icon">$</span><h3>Linux / macOS</h3></div>
-          <span>Recommended</span>
+        <a
+          href="https://github.com/shreyam1008/dbterm/releases/tag/v0.5.0"
+          class="mb-7 inline-flex items-center gap-2 rounded-full border border-[var(--line)] bg-[color-mix(in_srgb,var(--surface)_84%,transparent)] px-3 py-1.5 font-mono text-[.68rem] font-semibold tracking-wide text-[var(--brand-strong)] no-underline backdrop-blur-md hover:border-[var(--brand)]"
+        >
+          <span class="size-1.5 rounded-full bg-[var(--brand)] shadow-[0_0_0_4px_color-mix(in_srgb,var(--brand)_12%,transparent)]"></span>
+          v0.5.0 · Brahmaputra
+          <span aria-hidden="true">↗</span>
+        </a>
+        <p class="mb-4 font-mono text-[.7rem] font-semibold tracking-[.15em] text-[var(--brand-strong)] uppercase">
+          Open-source terminal database client
+        </p>
+        <h1 class="max-w-[10.7ch] text-[clamp(3.2rem,8.4vw,7.7rem)] leading-[.88] font-[650] tracking-[-.07em] text-[var(--ink)]">
+          Your database,<br /><span class="text-[var(--brand)]">at terminal speed.</span>
+        </h1>
+        <p class="mt-7 max-w-[660px] text-[clamp(1.05rem,2vw,1.3rem)] leading-relaxed text-[var(--ink-soft)]">
+          Explore schemas, write SQL, follow foreign keys, filter cells, and export exactly what you
+          need—inside one coherent keyboard workflow.
+        </p>
+        <div class="mt-8 flex flex-wrap gap-3">
+          <a class={primaryButton} href="#playground">Run it in the browser <span aria-hidden="true">↓</span></a>
+          <a class={secondaryButton} href="#install">Install dbterm</a>
+          <a class={secondaryButton} href="https://github.com/shreyam1008/dbterm" aria-label="View dbterm source on GitHub">
+            <svg class="size-4 fill-current" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .7a11.5 11.5 0 0 0-3.64 22.41c.58.11.79-.25.79-.56v-2.24c-3.22.7-3.9-1.37-3.9-1.37-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.7.08-.7 1.17.08 1.78 1.2 1.78 1.2 1.04 1.77 2.72 1.26 3.38.96.1-.75.4-1.26.74-1.55-2.57-.29-5.27-1.28-5.27-5.69 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.16 1.18a10.98 10.98 0 0 1 5.76 0c2.19-1.49 3.15-1.18 3.15-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.42-2.71 5.39-5.29 5.68.42.36.78 1.06.78 2.14v3.17c0 .31.21.68.8.56A11.5 11.5 0 0 0 12 .7Z"></path></svg>
+            GitHub
+          </a>
         </div>
-        <pre><code id="install-unix">{installUnix}</code></pre>
-        <button class="install-copy copy-button" type="button" data-copy-target="install-unix" data-default-label="Copy">
-          Copy
-        </button>
-      </article>
+        <ul class="mt-9 flex flex-wrap gap-x-7 gap-y-2 p-0 font-mono text-[.7rem] text-[var(--ink-faint)]" aria-label="Product facts">
+          <li class="list-none"><b class="mr-2 text-[var(--brand)]">01</b>Single binary</li>
+          <li class="list-none"><b class="mr-2 text-[var(--brand)]">02</b>Five engines</li>
+          <li class="list-none"><b class="mr-2 text-[var(--brand)]">03</b>MIT licensed</li>
+        </ul>
+      </div>
 
-      <article class="install-card">
-        <div class="install-card-head">
-          <div><span class="platform-icon">›_</span><h3>Windows</h3></div>
-          <span>PowerShell</span>
+      <aside class="relative mx-auto w-full max-w-[560px]" aria-label="dbterm workflow at a glance">
+        <div class="absolute -inset-6 -z-10 rounded-[2rem] bg-[color-mix(in_srgb,var(--brand)_8%,transparent)] blur-2xl"></div>
+        <div class="overflow-hidden rounded-2xl border border-[var(--line-strong)] bg-[#10201b] text-[#def1e7] shadow-[var(--shadow-lg)]">
+          <div class="flex items-center justify-between border-b border-white/10 px-4 py-3 font-mono text-[.65rem] text-white/55">
+            <span class="flex gap-1.5" aria-hidden="true"><i class="size-2 rounded-full bg-[#ee8b7f]"></i><i class="size-2 rounded-full bg-[#e7b967]"></i><i class="size-2 rounded-full bg-[#6ecb9a]"></i></span>
+            <span>dbterm / atlas_prod</span>
+            <span class="text-[#75d7af]">● live</span>
+          </div>
+          <div class="grid min-h-[410px] grid-cols-[108px_1fr] sm:grid-cols-[138px_1fr]">
+            <div class="border-r border-white/10 p-3 font-mono text-[.66rem] text-white/48">
+              <p class="mb-3 tracking-widest uppercase">Tables</p>
+              <ul class="grid gap-1 p-0">
+                <li class="list-none rounded bg-[#75d7af]/12 px-2 py-1.5 text-[#91e2c1]">users</li>
+                <li class="list-none px-2 py-1.5">orders</li>
+                <li class="list-none px-2 py-1.5">payments</li>
+                <li class="list-none px-2 py-1.5">products</li>
+              </ul>
+            </div>
+            <div class="min-w-0 p-4 sm:p-5">
+              <div class="mb-5 flex items-center justify-between font-mono text-[.63rem] text-white/62"><span>QUERY 01</span><span>Ctrl P · / · Alt E</span></div>
+              <pre class="m-0 overflow-hidden font-mono text-[clamp(.66rem,1.35vw,.8rem)] leading-7 whitespace-pre-wrap"><code class="text-inherit"><span class="text-[#e6b477]">SELECT</span> u.name, o.total,
+       o.status
+<span class="text-[#e6b477]">FROM</span> users u
+<span class="text-[#e6b477]">JOIN</span> orders o <span class="text-[#e6b477]">ON</span> o.user_id = u.id
+<span class="text-[#e6b477]">WHERE</span> o.status = <span class="text-[#8ddcb9]">'paid'</span>;</code></pre>
+              <div class="mt-6 overflow-hidden rounded-lg border border-white/10">
+                <div class="grid grid-cols-[1.2fr_.8fr_.8fr] bg-white/6 px-3 py-2 font-mono text-[.58rem] tracking-wider text-white/62 uppercase"><span>name</span><span>total</span><span>status</span></div>
+                {[["Mira Chen", "$184.20", "paid"], ["Omar Aziz", "$76.00", "paid"], ["Lea Martin", "$249.50", "paid"]].map((row, index) => (
+                  <div class:list={["grid grid-cols-[1.2fr_.8fr_.8fr] border-t border-white/8 px-3 py-2.5 font-mono text-[.66rem]", index === 1 && "bg-[#75d7af]/8"]}>
+                    <span>{row[0]}</span><span class="text-white/60">{row[1]}</span><span class="text-[#8ddcb9]">{row[2]}</span>
+                  </div>
+                ))}
+              </div>
+              <p class="mt-3 font-mono text-[.58rem] tracking-wide text-white/62">3 rows · 4.2 ms · PostgreSQL 17</p>
+            </div>
+          </div>
         </div>
-        <pre><code id="install-windows">{installWindows}</code></pre>
-        <button class="install-copy copy-button" type="button" data-copy-target="install-windows" data-default-label="Copy">
-          Copy
-        </button>
-      </article>
-    </div>
-
-    <div class="install-links">
-      <a href="https://github.com/shreyam1008/dbterm/releases/tag/v0.5.0">Download binaries</a>
-      <span aria-hidden="true">·</span>
-      <a href={withBase("guide/")}>Read the guide</a>
-      <span aria-hidden="true">·</span>
-      <a href="https://github.com/shreyam1008/dbterm/blob/main/README.md#build-locally">Build from source</a>
+        <div class="absolute right-2 -bottom-4 rounded-lg border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2 font-mono text-[.62rem] text-[var(--ink-soft)] shadow-lg sm:-right-6">
+          <b class="text-[var(--brand)]">F</b> follow user_id → users.id
+        </div>
+      </aside>
     </div>
   </section>
 
-  <section class="faq-section" id="faq">
-    <div class="faq-heading">
-      <p class="section-label">Good to know</p>
-      <h2>Before you connect.</h2>
-      <p>Still looking for something? The <a href={withBase("guide/")}>complete guide</a> goes deeper.</p>
-    </div>
-    <div class="faq-list landing-faq">
-      {faqItems.map((item, index) => (
-        <details open={index === 0}>
-          <summary>{item.question}<span aria-hidden="true">+</span></summary>
-          <p>{item.answer}</p>
-        </details>
-      ))}
+  <div class="site-container">
+    <InteractiveDemo />
+  </div>
+
+  <div class="site-container">
+    <ProductShowcase />
+  </div>
+
+  <section class="border-y border-[var(--line)] bg-[color-mix(in_srgb,var(--surface)_70%,transparent)] py-20 sm:py-28" id="features">
+    <div class="site-container">
+      <header class="grid gap-6 border-b border-[var(--line)] pb-10 lg:grid-cols-[1.05fr_.95fr] lg:items-end">
+        <div>
+          <p class="mb-3 font-mono text-[.68rem] font-semibold tracking-[.14em] text-[var(--brand-strong)] uppercase">One interaction language</p>
+          <h2 class="max-w-[13ch] text-[clamp(2.5rem,6vw,5rem)] leading-[.98] tracking-[-.055em]">The shortest path from question to row.</h2>
+        </div>
+        <p class="max-w-[610px] text-lg leading-relaxed text-[var(--ink-soft)] lg:justify-self-end">
+          dbterm is not a dashboard squeezed into a terminal. Each shortcut composes with the next,
+          so exploration stays fast as the schema gets complicated.
+        </p>
+      </header>
+
+      <div class="grid md:grid-cols-2 lg:grid-cols-3">
+        {features.map((feature) => (
+          <article class="group min-h-[280px] border-b border-[var(--line)] p-6 transition hover:bg-[var(--brand-pale)] md:[&:nth-child(odd)]:border-r lg:border-r lg:[&:nth-child(3n)]:border-r-0">
+            <div class="mb-12 flex items-center justify-between font-mono text-[.68rem]">
+              <span class="text-[var(--ink-faint)]">{feature.index}</span>
+              <span class="rounded-md border border-[var(--line)] bg-[var(--surface-raised)] px-2 py-1 font-semibold text-[var(--brand-strong)]">{feature.key}</span>
+            </div>
+            <h3 class="mb-3 text-xl tracking-[-.035em]">{feature.title}</h3>
+            <p class="mb-0 text-sm leading-relaxed text-[var(--ink-soft)]">{feature.body}</p>
+          </article>
+        ))}
+      </div>
     </div>
   </section>
 
-  <section class="closing-cta">
-    <div>
-      <p class="section-label">Ready when you are</p>
-      <h2>Your next query belongs in the terminal.</h2>
+  <section class="site-container py-20 sm:py-28" aria-labelledby="engines-title">
+    <div class="grid gap-12 lg:grid-cols-[.72fr_1.28fr]">
+      <header>
+        <p class="mb-3 font-mono text-[.68rem] font-semibold tracking-[.14em] text-[var(--brand-strong)] uppercase">Deliberate scope</p>
+        <h2 id="engines-title" class="max-w-[10ch] text-[clamp(2.4rem,5vw,4.4rem)] leading-none tracking-[-.055em]">Five targets. One workspace.</h2>
+        <p class="mt-5 max-w-md text-[var(--ink-soft)]">
+          Broad enough for a modern stack; focused enough for every supported engine to feel intentional.
+        </p>
+      </header>
+      <div class="border-t border-[var(--line)]">
+        {engines.map(([name, detail, mark], index) => (
+          <article class="grid grid-cols-[auto_1fr] items-center gap-5 border-b border-[var(--line)] py-5 sm:grid-cols-[4rem_11rem_1fr]">
+            <span class="grid size-11 place-items-center rounded-lg border border-[var(--line)] bg-[var(--brand-soft)] font-mono text-[.68rem] font-semibold text-[var(--brand-strong)]">{mark}</span>
+            <h3 class="mb-0 text-base sm:text-lg">{name}</h3>
+            <p class="col-start-2 mb-0 text-sm text-[var(--ink-soft)] sm:col-start-3">{detail}</p>
+            <span class="hidden font-mono text-[.62rem] text-[var(--ink-faint)] sm:col-start-1 sm:row-start-1 sm:block">0{index + 1}</span>
+          </article>
+        ))}
+      </div>
     </div>
-    <div class="closing-actions">
-      <a class="button primary large" href="#install">Install dbterm</a>
-      <a class="button subtle large" href="https://github.com/shreyam1008/dbterm">Star on GitHub</a>
+  </section>
+
+  <section class="border-y border-[var(--line)] bg-[var(--brand-pale)] py-20 sm:py-28" aria-labelledby="compare-title">
+    <div class="site-container">
+      <header class="grid gap-6 lg:grid-cols-2 lg:items-end">
+        <div>
+          <p class="mb-3 font-mono text-[.68rem] font-semibold tracking-[.14em] text-[var(--brand-strong)] uppercase">Choose honestly</p>
+          <h2 id="compare-title" class="max-w-[13ch] text-[clamp(2.4rem,5vw,4.4rem)] leading-none tracking-[-.055em]">The right tool depends on the loop.</h2>
+        </div>
+        <div class="lg:justify-self-end">
+          <p class="max-w-[560px] text-[var(--ink-soft)]">We compared official docs, not marketing adjectives. dbterm is strongest when navigation, filtering, export, and selected operations need one consistent keyboard model.</p>
+          <a class="mt-4 inline-flex items-center gap-2 font-mono text-xs font-semibold text-[var(--brand-strong)]" href={withBase("/compare/")}>Read the sourced 2026 comparison <span aria-hidden="true">→</span></a>
+        </div>
+      </header>
+      <div class="mt-12 grid overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)] md:grid-cols-3">
+        <article class="p-6 md:border-r md:border-[var(--line)]">
+          <p class="mb-7 font-mono text-[.65rem] tracking-wider text-[var(--ink-faint)] uppercase">Choose dbterm for</p>
+          <h3 class="text-xl">A focused, single-binary data loop</h3>
+          <p class="mb-0 text-sm leading-relaxed text-[var(--ink-soft)]">Five engines, foreign-key traversal, typed filters, scoped exports, and PostgreSQL/MySQL operational workflows.</p>
+          <a class="mt-4 inline-flex font-mono text-[.68rem] font-semibold" href={withBase("/compare/#compare-dbterm")}>dbterm details →</a>
+        </article>
+        <article class="border-t border-[var(--line)] p-6 md:border-t-0 md:border-r">
+          <p class="mb-7 font-mono text-[.65rem] tracking-wider text-[var(--ink-faint)] uppercase">Choose Harlequin for</p>
+          <h3 class="text-xl">A terminal SQL IDE</h3>
+          <p class="mb-0 text-sm leading-relaxed text-[var(--ink-soft)]">Multiple editor buffers, a rich data catalog, and a plug-in adapter ecosystem are its center of gravity.</p>
+          <a class="mt-4 inline-flex font-mono text-[.68rem] font-semibold" href={withBase("/compare/#compare-harlequin")}>dbterm vs Harlequin →</a>
+        </article>
+        <article class="border-t border-[var(--line)] p-6 md:border-t-0">
+          <p class="mb-7 font-mono text-[.65rem] tracking-wider text-[var(--ink-faint)] uppercase">Choose DBeaver for</p>
+          <h3 class="text-xl">A full desktop workbench</h3>
+          <p class="mb-0 text-sm leading-relaxed text-[var(--ink-soft)]">A GUI, broad ecosystem, diagrams, and desktop-scale administration may be the more appropriate job.</p>
+          <a class="mt-4 inline-flex font-mono text-[.68rem] font-semibold" href={withBase("/compare/#compare-dbeaver-community")}>dbterm vs DBeaver →</a>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="site-container py-20 sm:py-28" id="install">
+    <div class="relative overflow-hidden rounded-[1.5rem] bg-[#0b2c25] p-6 text-[#eaf5ef] shadow-[var(--shadow-lg)] sm:p-10 lg:p-14">
+      <div class="absolute top-0 right-0 h-full w-2/5 opacity-30 [background-image:radial-gradient(circle,#7bd3b1_1px,transparent_1px)] [background-size:18px_18px] [mask-image:linear-gradient(90deg,transparent,#000)]"></div>
+      <div class="relative grid gap-10 lg:grid-cols-[.7fr_1.3fr]">
+        <div>
+          <p class="mb-3 font-mono text-[.68rem] font-semibold tracking-[.14em] text-[#8edbbb] uppercase">Install v0.5.0</p>
+          <h2 class="max-w-[8ch] text-[clamp(2.5rem,5vw,4.5rem)] leading-none tracking-[-.055em] text-white">One command. Then just dbterm.</h2>
+          <p class="mt-5 max-w-sm text-sm leading-relaxed text-white/62">No runtime stack, account, or setup wizard. Release binaries cover Linux, macOS, and Windows on AMD64 and ARM64.</p>
+        </div>
+        <div class="grid min-w-0 content-center gap-4">
+          <article class="min-w-0 rounded-xl border border-white/12 bg-black/18 p-4 backdrop-blur-sm">
+            <div class="mb-3 flex items-center justify-between"><h3 class="mb-0 text-sm text-white">Linux / macOS</h3><span class="font-mono text-[.6rem] tracking-wider text-[#8edbbb] uppercase">Recommended</span></div>
+            <div class="flex items-start gap-3">
+              <pre class="m-0 min-w-0 flex-1 overflow-x-auto text-[.7rem] leading-relaxed"><code id="install-unix" class="text-[#eaf5ef]">{installUnix}</code></pre>
+              <button class="button small border-white/16! bg-white/8! text-white! hover:bg-white/14!" type="button" data-copy-target="install-unix" data-default-label="Copy">Copy</button>
+            </div>
+          </article>
+          <article class="min-w-0 rounded-xl border border-white/12 bg-black/18 p-4 backdrop-blur-sm">
+            <div class="mb-3 flex items-center justify-between"><h3 class="mb-0 text-sm text-white">Windows</h3><span class="font-mono text-[.6rem] tracking-wider text-white/45 uppercase">PowerShell</span></div>
+            <div class="flex items-start gap-3">
+              <pre class="m-0 min-w-0 flex-1 overflow-x-auto text-[.7rem] leading-relaxed"><code id="install-windows" class="text-[#eaf5ef]">{installWindows}</code></pre>
+              <button class="button small border-white/16! bg-white/8! text-white! hover:bg-white/14!" type="button" data-copy-target="install-windows" data-default-label="Copy">Copy</button>
+            </div>
+          </article>
+          <div class="flex flex-wrap gap-x-5 gap-y-2 font-mono text-[.68rem]">
+            <a class="text-[#9ce1c5]" href="https://github.com/shreyam1008/dbterm/releases/tag/v0.5.0">Download binaries ↗</a>
+            <a class="text-[#9ce1c5]" href={withBase("/guide/")}>Read the guide →</a>
+            <a class="text-[#9ce1c5]" href="https://github.com/shreyam1008/dbterm/blob/main/README.md#build-locally">Build from source ↗</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="site-container pb-8" id="faq">
+    <div class="grid gap-10 border-t border-[var(--line)] pt-14 lg:grid-cols-[.65fr_1.35fr]">
+      <header>
+        <p class="mb-3 font-mono text-[.68rem] font-semibold tracking-[.14em] text-[var(--brand-strong)] uppercase">Before you connect</p>
+        <h2 class="text-[clamp(2.3rem,5vw,4rem)] leading-none tracking-[-.055em]">Good questions.</h2>
+        <p class="mt-4 text-sm text-[var(--ink-soft)]">The <a href={withBase("/guide/")}>complete guide</a> covers every panel and shortcut.</p>
+      </header>
+      <div class="border-t border-[var(--line)]">
+        {faqItems.map((item, index) => (
+          <details class="group border-b border-[var(--line)] py-5" open={index === 0}>
+            <summary class="flex cursor-pointer list-none items-center justify-between gap-4 font-semibold text-[var(--ink)] marker:hidden">
+              {item.question}
+              <span class="grid size-7 shrink-0 place-items-center rounded-full border border-[var(--line)] font-mono text-sm transition group-open:rotate-45" aria-hidden="true">+</span>
+            </summary>
+            <p class="mb-0 max-w-[760px] pt-3 pr-10 text-sm leading-relaxed text-[var(--ink-soft)]">{item.answer}</p>
+          </details>
+        ))}
+      </div>
     </div>
   </section>
 </BaseLayout>

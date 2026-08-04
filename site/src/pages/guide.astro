@@ -7,6 +7,13 @@ const description =
 const keywords =
   "dbterm guide, dbterm shortcuts, dbterm backup, dbterm services, postgresql mysql sqlite turso d1";
 
+const baseUrl = import.meta.env.BASE_URL;
+const withBase = (path: string) => {
+  const trimmedBase = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
+  const trimmedPath = path.startsWith("/") ? path.slice(1) : path;
+  return `${trimmedBase}/${trimmedPath}`.replace(/\/{2,}/g, "/");
+};
+
 const quickStartSteps = [
   {
     step: "Install dbterm",
@@ -205,7 +212,8 @@ const howToJsonLd = {
     <h2>2. Understand the workspace</h2>
     <p class="lead">dbterm is optimized around panel focus and keyboard flow.</p>
 
-    <div class="table-wrap">
+    <p class="table-hint">Scroll horizontally to inspect every column.</p>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="Workspace panels table; scroll horizontally for all columns">
       <table class="command-table">
         <thead>
           <tr>
@@ -231,7 +239,8 @@ const howToJsonLd = {
     <h2>3. Essential shortcuts</h2>
     <p class="lead">Use these to avoid context switching and keep query loops fast.</p>
 
-    <div class="table-wrap">
+    <p class="table-hint">Scroll horizontally to inspect every shortcut and action.</p>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="Essential shortcuts table; scroll horizontally for all columns">
       <table class="shortcut-table">
         <thead>
           <tr>
@@ -288,7 +297,8 @@ const howToJsonLd = {
       <pre><code id="guide-cli-cmds">{cliRows.map(([cmd]) => cmd).join("\n")}</code></pre>
     </article>
 
-    <div class="table-wrap">
+    <p class="table-hint">Scroll horizontally to inspect every command and purpose.</p>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="CLI commands table; scroll horizontally for all columns">
       <table class="command-table">
         <thead>
           <tr>
@@ -322,7 +332,7 @@ const howToJsonLd = {
     <p class="lead">Screenshot is placed at the end so the guide stays task-focused first.</p>
     <div class="preview-wrap">
       <img
-        src="main_ui.png"
+        src={withBase("/main_ui.png")}
         alt="dbterm main interface with tables and SQL query editor"
         loading="lazy"
       />
