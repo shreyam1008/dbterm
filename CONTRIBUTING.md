@@ -37,6 +37,17 @@ bun install
 bun run dev
 ```
 
+### Where changes belong
+
+- `cmd/dbterm/` contains the executable and CLI lifecycle commands.
+- `internal/ui/` contains terminal screens and interaction workflows.
+- `internal/config/` contains saved connections and user settings.
+- `internal/database/` contains database connection and introspection logic.
+- `internal/backup/` contains the backup, retention, inspection, and restore engine.
+- `site/` is the standalone Astro website.
+
+The complete map is in [docs/project-reference.md](docs/project-reference.md#file-map).
+
 ## 3. What to work on first
 
 Good first contribution types:
@@ -74,7 +85,7 @@ When applicable, update these together:
 
 ## 7. Release notes source
 
-The release workflow reads `releases/versions.txt` top entry:
+The release workflow reads `cmd/dbterm/releases.txt` top entry:
 
 ```text
 <version>|<release name>|<short description>

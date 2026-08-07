@@ -18,8 +18,8 @@ import (
 	"time"
 
 	"github.com/peterheb/cfd1"
-	"github.com/shreyam1008/dbterm/config"
-	"github.com/shreyam1008/dbterm/utils"
+	"github.com/shreyam1008/dbterm/internal/config"
+	"github.com/shreyam1008/dbterm/internal/database"
 )
 
 type NativePlan struct {
@@ -292,7 +292,7 @@ func runSQLiteSnapshot(ctx context.Context, cfg *config.ConnectionConfig, output
 	}
 	connection := *cfg
 	connection.FilePath = sqliteExistingFileDSN(sourcePath)
-	db, err := utils.ConnectDB(&connection)
+	db, err := database.Connect(&connection)
 	if err != nil {
 		return fmt.Errorf("connect to SQLite source: %w", err)
 	}
@@ -537,7 +537,7 @@ func cloudflareD1DownloadErrorMessage(downloadErr error, originalSignedURL strin
 }
 
 func runSQLiteCompatibleDump(ctx context.Context, cfg *config.ConnectionConfig, outputPath string) error {
-	db, err := utils.ConnectDB(cfg)
+	db, err := database.Connect(cfg)
 	if err != nil {
 		return fmt.Errorf("connect to backup source: %w", err)
 	}

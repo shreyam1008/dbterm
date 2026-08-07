@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/shreyam1008/dbterm/config"
+	"github.com/shreyam1008/dbterm/internal/config"
 )
 
 const restoreOutputTailBytes = 64 << 10

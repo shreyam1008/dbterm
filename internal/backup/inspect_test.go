@@ -21,7 +21,7 @@ import (
 	"filippo.io/age"
 	"filippo.io/age/armor"
 	"github.com/klauspost/compress/zstd"
-	"github.com/shreyam1008/dbterm/config"
+	"github.com/shreyam1008/dbterm/internal/config"
 )
 
 func TestInspectDetectsSupportedPayloads(t *testing.T) {

@@ -18,7 +18,7 @@ import (
 
 	"filippo.io/age"
 	"github.com/klauspost/compress/zstd"
-	"github.com/shreyam1008/dbterm/config"
+	"github.com/shreyam1008/dbterm/internal/config"
 )
 
 // ProgressEvent describes a bounded, low-overhead backup status update. A zero

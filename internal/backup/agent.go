@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/shreyam1008/dbterm/config"
 	"github.com/shreyam1008/dbterm/internal/appdirs"
+	"github.com/shreyam1008/dbterm/internal/config"
 )
 
 const (

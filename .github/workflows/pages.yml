@@ -32,10 +32,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          LINE="$(grep -Ev '^[[:space:]]*#|^[[:space:]]*$' releases/versions.txt | head -n1 || true)"
+          LINE="$(grep -Ev '^[[:space:]]*#|^[[:space:]]*$' cmd/dbterm/releases.txt | head -n1 || true)"
           VERSION="$(printf '%s' "$LINE" | cut -d'|' -f1 | xargs)"
           if [[ -z "$VERSION" ]]; then
-            echo "Could not resolve the advertised version from releases/versions.txt" >&2
+            echo "Could not resolve the advertised version from cmd/dbterm/releases.txt" >&2
             exit 1
           fi
           if ! git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}" >/dev/null; then

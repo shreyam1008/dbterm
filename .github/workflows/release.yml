@@ -38,7 +38,7 @@ jobs:
         id: meta
         run: |
           set -euo pipefail
-          FILE="releases/versions.txt"
+          FILE="cmd/dbterm/releases.txt"
 
           if [[ ! -f "$FILE" ]]; then
             echo "Missing release manifest: $FILE" >&2
@@ -127,12 +127,12 @@ jobs:
           LDFLAGS="-s -w -buildid= -X main.version=${VERSION} -X main.commit=${COMMIT}"
 
           mkdir -p dist
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags="$LDFLAGS" -o dist/dbterm-linux-amd64 .
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -buildvcs=false -ldflags="$LDFLAGS" -o dist/dbterm-linux-arm64 .
-          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags="$LDFLAGS" -o dist/dbterm-darwin-amd64 .
-          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -buildvcs=false -ldflags="$LDFLAGS" -o dist/dbterm-darwin-arm64 .
-          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags="$LDFLAGS" -o dist/dbterm-windows-amd64.exe .
-          CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -trimpath -buildvcs=false -ldflags="$LDFLAGS" -o dist/dbterm-windows-arm64.exe .
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags="$LDFLAGS" -o dist/dbterm-linux-amd64 ./cmd/dbterm
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -buildvcs=false -ldflags="$LDFLAGS" -o dist/dbterm-linux-arm64 ./cmd/dbterm
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags="$LDFLAGS" -o dist/dbterm-darwin-amd64 ./cmd/dbterm
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -buildvcs=false -ldflags="$LDFLAGS" -o dist/dbterm-darwin-arm64 ./cmd/dbterm
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags="$LDFLAGS" -o dist/dbterm-windows-amd64.exe ./cmd/dbterm
+          CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -trimpath -buildvcs=false -ldflags="$LDFLAGS" -o dist/dbterm-windows-arm64.exe ./cmd/dbterm
 
       - name: Upload Core Artifacts
         uses: actions/upload-artifact@v4

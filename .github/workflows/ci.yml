@@ -76,4 +76,4 @@ jobs:
           CGO_ENABLED: "0"
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-        run: go build -trimpath -o "$RUNNER_TEMP/${{ matrix.output }}" .
+        run: go build -trimpath -o "$RUNNER_TEMP/${{ matrix.output }}" ./cmd/dbterm

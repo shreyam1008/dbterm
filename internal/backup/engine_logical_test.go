@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/shreyam1008/dbterm/config"
+	"github.com/shreyam1008/dbterm/internal/config"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)

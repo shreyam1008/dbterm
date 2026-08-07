@@ -1,5 +1,5 @@
 BINARY_NAME=dbterm
-VERSION?=$(shell awk -F'|' '/^[[:space:]]*#/ {next} /^[[:space:]]*$$/ {next} {gsub(/^[[:space:]]+|[[:space:]]+$$/, "", $$1); print $$1; exit}' releases/versions.txt 2>/dev/null || echo dev)
+VERSION?=$(shell awk -F'|' '/^[[:space:]]*#/ {next} /^[[:space:]]*$$/ {next} {gsub(/^[[:space:]]+|[[:space:]]+$$/, "", $$1); print $$1; exit}' cmd/dbterm/releases.txt 2>/dev/null || echo dev)
 COMMIT?=$(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
 GO_BUILD_FLAGS=-trimpath -buildvcs=false -ldflags="-s -w -buildid= -X main.version=$(VERSION) -X main.commit=$(COMMIT)"
 
@@ -8,7 +8,7 @@ GO_BUILD_FLAGS=-trimpath -buildvcs=false -ldflags="-s -w -buildid= -X main.versi
 all: build
 
 build:
-	CGO_ENABLED=0 go build $(GO_BUILD_FLAGS) -o $(BINARY_NAME) .
+	CGO_ENABLED=0 go build $(GO_BUILD_FLAGS) -o $(BINARY_NAME) ./cmd/dbterm
 
 clean:
 	rm -f $(BINARY_NAME)
@@ -27,12 +27,12 @@ apt-repo: deb
 
 release-core:
 	mkdir -p dist
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(GO_BUILD_FLAGS) -o dist/$(BINARY_NAME)-linux-amd64 .
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build $(GO_BUILD_FLAGS) -o dist/$(BINARY_NAME)-linux-arm64 .
-	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build $(GO_BUILD_FLAGS) -o dist/$(BINARY_NAME)-darwin-amd64 .
-	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build $(GO_BUILD_FLAGS) -o dist/$(BINARY_NAME)-darwin-arm64 .
-	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build $(GO_BUILD_FLAGS) -o dist/$(BINARY_NAME)-windows-amd64.exe .
-	CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build $(GO_BUILD_FLAGS) -o dist/$(BINARY_NAME)-windows-arm64.exe .
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(GO_BUILD_FLAGS) -o dist/$(BINARY_NAME)-linux-amd64 ./cmd/dbterm
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build $(GO_BUILD_FLAGS) -o dist/$(BINARY_NAME)-linux-arm64 ./cmd/dbterm
+	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build $(GO_BUILD_FLAGS) -o dist/$(BINARY_NAME)-darwin-amd64 ./cmd/dbterm
+	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build $(GO_BUILD_FLAGS) -o dist/$(BINARY_NAME)-darwin-arm64 ./cmd/dbterm
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build $(GO_BUILD_FLAGS) -o dist/$(BINARY_NAME)-windows-amd64.exe ./cmd/dbterm
+	CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build $(GO_BUILD_FLAGS) -o dist/$(BINARY_NAME)-windows-arm64.exe ./cmd/dbterm
 
 release-ios:
 	mkdir -p dist
@@ -44,5 +44,5 @@ release-ios:
 		GOOS=ios GOARCH=arm64 CGO_ENABLED=1 CC="$$CC" SDKROOT="$$SDKROOT" \
 		CGO_CFLAGS="-isysroot $$SDKROOT -miphoneos-version-min=13.0" \
 		CGO_LDFLAGS="-isysroot $$SDKROOT -miphoneos-version-min=13.0" \
-		go build -trimpath -buildvcs=false -buildmode=c-archive -ldflags="-s -w -buildid=" -o dist/$(BINARY_NAME)-ios-arm64.a .; \
+		go build -trimpath -buildvcs=false -buildmode=c-archive -ldflags="-s -w -buildid=" -o dist/$(BINARY_NAME)-ios-arm64.a ./cmd/dbterm; \
 	fi

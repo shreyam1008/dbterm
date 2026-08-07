@@ -7,7 +7,7 @@ Open-source, keyboard-first terminal client for SQL workflows.
 
 `dbterm` is a single binary that lets you connect, query, and operate across multiple databases without heavyweight desktop tooling.
 
-![dbterm main interface](assets/main_ui.png)
+![dbterm main interface](docs/images/main_ui.png)
 
 ## Why dbterm
 
@@ -18,10 +18,10 @@ Open-source, keyboard-first terminal client for SQL workflows.
 - Low-overhead, serialized backup agent (roughly 12–13 MiB idle RSS in Linux amd64 smoke tests; platform allocators vary).
 
 ## Highlights
-![Connections and services](assets/1.png)
+![Connections and services](docs/images/1.png)
 *Connection management + service controls in one terminal workflow.*
 
-![Table browsing and editing](assets/2.png)
+![Table browsing and editing](docs/images/2.png)
 *SQL editing + result exploration with keyboard-first controls.*
 
 ## Quick install
@@ -36,6 +36,12 @@ curl -fsSL https://raw.githubusercontent.com/shreyam1008/dbterm/main/install.sh 
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/shreyam1008/dbterm/main/install.ps1 | iex"
+```
+
+### Go toolchain
+
+```bash
+go install github.com/shreyam1008/dbterm/cmd/dbterm@latest
 ```
 
 ## Documentation
@@ -253,12 +259,27 @@ Turso logical exports keep schema and data reads on one source transaction. Virt
 - `Alt + 0` switches preview to the largest safe page for the current result shape.
 - Scheduled work is serialized per agent/job; Zstandard uses one encoder worker and the agent sleeps between catalog checks.
 
+## Repository layout
+
+The project stays intentionally shallow:
+
+| Path | Owns |
+| --- | --- |
+| `cmd/dbterm/` | Executable entry point, CLI commands, update/uninstall, and release metadata |
+| `internal/` | All application-only Go modules, including backup, config, database access, and TUI |
+| `docs/` | Feature guides, maintainer reference, and README screenshots |
+| `site/` | Astro website, isolated from the Go application |
+| `packaging/` | AUR, Homebrew, Scoop, and WinGet definitions |
+| `scripts/` | Debian and APT release helpers |
+
+See [docs/project-reference.md](docs/project-reference.md#file-map) for the module-by-module map.
+
 ## Build locally
 
 Run the current checkout directly:
 
 ```bash
-go run .
+go run ./cmd/dbterm
 ```
 
 Or build the same optimized local binary used by the release setup, then launch it:
@@ -286,7 +307,7 @@ For a local preview, run `bun run dev` and open the URL Astro prints.
 
 ## Release automation
 
-GitHub Actions release workflow reads the first non-comment line in `releases/versions.txt`:
+GitHub Actions release workflow reads the first non-comment line in `cmd/dbterm/releases.txt`:
 
 ```text
 <version>|<release name>|<short description>

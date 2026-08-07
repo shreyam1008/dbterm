@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/shreyam1008/dbterm/config"
+	"github.com/shreyam1008/dbterm/internal/config"
 )
 
 func TestRunAgentReconcilesStaleRunsOnStartup(t *testing.T) {

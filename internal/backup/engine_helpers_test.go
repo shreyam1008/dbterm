@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shreyam1008/dbterm/config"
+	"github.com/shreyam1008/dbterm/internal/config"
 )
 
 func TestRedactConnectionErrorRemovesStoredSecrets(t *testing.T) {

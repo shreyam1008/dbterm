@@ -22,7 +22,7 @@ Date: 2026-02-20
 - Results title and status bar show selection count.
 
 ### Implementation
-- `ui/results.go`
+- `internal/ui/results.go`
   - Row selection state is stored on table cells via `TableCell.Reference`.
   - Added selection helpers:
     - `toggleCurrentResultRowSelection`
@@ -31,7 +31,7 @@ Date: 2026-02-20
     - `selectedResultRows`
     - `selectedResultRowCount`
   - Export path now uses selected rows first.
-- `ui/app.go`
+- `internal/ui/app.go`
   - `Space` in Results now toggles row selection (Enter still opens row details).
   - Keymap actions wired for select-all and clear-selection.
 
@@ -41,15 +41,15 @@ Date: 2026-02-20
 - `~/.config/dbterm/settings.json`
 
 ### Implementation
-- `config/settings.go`
+- `internal/config/settings.go`
   - Added settings model and defaults:
     - keymap action names
     - default bindings
   - Added load/save behavior with defaults fallback.
-- `ui/keymap.go`
+- `internal/ui/keymap.go`
   - Added binding normalization and event-to-action resolver.
   - Added duplicate/unknown binding validation.
-- `ui/app.go`
+- `internal/ui/app.go`
   - Loads settings on startup (warning-only fallback).
   - Builds runtime keymap resolver from settings.
   - Routes key actions through resolver.
@@ -80,8 +80,8 @@ Date: 2026-02-20
 - Saved settings are applied immediately in the running session.
 
 ### Implementation
-- `ui/settings.go` (new)
-- `ui/dashboard.go`
+- `internal/ui/settings.go` (new)
+- `internal/ui/dashboard.go`
   - Added dashboard `G` shortcut.
   - Added footer hints for Settings.
 
@@ -95,12 +95,12 @@ Date: 2026-02-20
 - On completion, attempts `refreshData()`.
 
 ### Implementation
-- `ui/import.go` (new)
+- `internal/ui/import.go` (new)
   - PostgreSQL import via `psql`.
   - MySQL import via `mysql`.
   - Path validation + readable file checks.
   - Timeout and streamed output handling.
-- `ui/app.go`
+- `internal/ui/app.go`
   - Added keymap action handling for import.
 
 ## 5) Query history kept, snippets UI removed
@@ -110,12 +110,12 @@ Date: 2026-02-20
 - Saved-query/snippet UI shortcuts and active flows removed.
 
 ### Implementation
-- `ui/query.go`
+- `internal/ui/query.go`
   - History append on successful read/write execution.
-- `ui/query_library.go`
+- `internal/ui/query_library.go`
   - Retained history modal flow.
   - Removed saved-query form/list flows.
-- `ui/app.go`, `ui/help.go`, `README.md`
+- `internal/ui/app.go`, `internal/ui/help.go`, `README.md`
   - Removed saved-query shortcut exposure.
 
 ## 6) Documentation and site updates

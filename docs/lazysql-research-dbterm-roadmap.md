@@ -65,8 +65,8 @@ This indicates the product is converging on power-user workflows and long-sessio
 - Multi-DB support including cloud targets:
   - PostgreSQL, MySQL, SQLite, Turso, Cloudflare D1.
 - Nice operator features not present in LazySQL:
-  - local service dashboard/control (`ui/services.go`)
-  - backup modal for PG/MySQL (`ui/backup.go`)
+  - local service dashboard/control (`internal/ui/services.go`)
+  - backup modal for PG/MySQL (`internal/ui/backup.go`)
 - Good UX polish:
   - responsive layout handling
   - preview row limits
@@ -157,7 +157,7 @@ These are suggested implementation anchors in your codebase.
 ### History + saved queries
 
 - Add `internal/history` and `internal/saved` managers (similar persistence pattern as LazySQL, but keep API minimal).
-- Add modal/page in `ui/` for:
+- Add modal/page in `internal/ui/` for:
   - Recent queries
   - Saved queries
   - insert query back into editor
@@ -165,24 +165,24 @@ These are suggested implementation anchors in your codebase.
 ### Read-only mode
 
 - Extend `config.ConnectionConfig` with `ReadOnly bool`.
-- In `ui/query.go`, detect mutation tokens and block when read-only.
+- In `internal/ui/query.go`, detect mutation tokens and block when read-only.
 - Show clear status indicator in status bar.
 
 ### CSV export
 
-- Add export modal in `ui/` with path + scope.
+- Add export modal in `internal/ui/` with path + scope.
 - Stream writes (not full in-memory build).
 - Reuse existing result rows first; later extend to "export all with pagination".
 
 ### Filter + pagination
 
 - Add a small filter input control near results.
-- Introduce offset/limit state in `ui/results.go`.
+- Introduce offset/limit state in `internal/ui/results.go`.
 - Generate DB-specific paged queries via helper functions.
 
 ### Metadata tabs
 
-- Extend `utils` with per-driver metadata SQL for:
+- Extend `internal/database` with per-driver metadata SQL for:
   - columns
   - constraints
   - foreign keys
@@ -226,13 +226,13 @@ This gives you most of LazySQL's high-value workflows while preserving `dbterm`'
 - LazySQL release v0.4.6 (Jan 2, 2026): https://github.com/jorgerojas26/lazysql/releases/tag/v0.4.6
 - Your local `dbterm` code inspected in:
   - `README.md`
-  - `ui/app.go`
-  - `ui/query.go`
-  - `ui/results.go`
-  - `ui/tables.go`
-  - `ui/connect.go`
-  - `ui/dashboard.go`
-  - `ui/services.go`
-  - `ui/backup.go`
-  - `config/config.go`
-  - `utils/db.go`
+  - `internal/ui/app.go`
+  - `internal/ui/query.go`
+  - `internal/ui/results.go`
+  - `internal/ui/tables.go`
+  - `internal/ui/connect.go`
+  - `internal/ui/dashboard.go`
+  - `internal/ui/services.go`
+  - `internal/ui/backup.go`
+  - `internal/config/config.go`
+  - `internal/database/queries.go`
