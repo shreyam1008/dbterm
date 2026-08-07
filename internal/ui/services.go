@@ -2,7 +2,9 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"sync/atomic"
@@ -24,8 +26,6 @@ type serviceInfo struct {
 	pid       string // from systemctl show
 	ram       string // from /proc/<pid>/status VmRSS
 	version   string // from mysql --version / psql --version
-	databases string // listed databases
-	dbSizes   string // database sizes (estimated)
 	user      string // default user
 	unit      string // systemd unit name
 }
@@ -59,9 +59,9 @@ func (a *App) showServiceDashboard() {
 	screenW, _ := a.getScreenSize()
 	switch {
 	case screenW < 95:
-		footer.SetText(fmt.Sprintf("  [yellow]1[-] MySQL  │  [yellow]2[-] PG  │  [yellow]R[-] %s  │  [yellow]Esc[-] Back %s", iconRefresh, iconBack))
+		footer.SetText(fmt.Sprintf(" [yellow]1[-] MySQL │ [yellow]2[-] PG │ [yellow]C[-] Connect │ [yellow]R[-] %s │ [yellow]Esc[-] %s", iconRefresh, iconBack))
 	default:
-		footer.SetText(fmt.Sprintf("  [yellow]1[-] Toggle MySQL  │  [yellow]2[-] Toggle PostgreSQL  │  [yellow]R[-] %s  │  [yellow]Esc[-] Back %s", iconRefresh, iconBack))
+		footer.SetText(fmt.Sprintf(" [yellow]1[-] Toggle MySQL  │  [yellow]2[-] Toggle PostgreSQL  │  [yellow]C/Enter[-] Connect  │  [yellow]R[-] %s  │  [yellow]Esc[-] Back %s", iconRefresh, iconBack))
 	}
 
 	// ── Layout ──
@@ -121,9 +121,15 @@ func (a *App) showServiceDashboard() {
 
 	// ── Fetch Data in Background ──
 	go func() {
-		// Gather info in background (can be slow)
-		mInfo := getServiceInfo("MySQL", "mysql", "mysqld", "mysql")
-		pInfo := getServiceInfo("PostgreSQL", "postgresql", "postgres", "postgresql")
+		// Probe both services concurrently so one missing or slow service cannot
+		// delay the other. Credentialed database discovery belongs in the
+		// connection form and is intentionally not part of this status refresh.
+		mysqlResult := make(chan *serviceInfo, 1)
+		postgresResult := make(chan *serviceInfo, 1)
+		go func() { mysqlResult <- getServiceInfo("MySQL", "mysql", "mysqld", "mysql") }()
+		go func() { postgresResult <- getServiceInfo("PostgreSQL", "postgresql", "postgres", "postgresql") }()
+		mInfo := <-mysqlResult
+		pInfo := <-postgresResult
 
 		// Update UI on main thread
 		a.app.QueueUpdateDraw(func() {
@@ -139,8 +145,7 @@ func (a *App) showServiceDashboard() {
 			// PostgreSQL section
 			writeServiceSection(&sb, pInfo)
 
-			sb.WriteString(fmt.Sprintf("\n\n[#6c7086]Press [yellow]1[-][#6c7086] to toggle MySQL  │  [yellow]2[-][#6c7086] to toggle PostgreSQL[-]"))
-			sb.WriteString(fmt.Sprintf("\n[#6c7086]Press [yellow]C[-][#6c7086] to Connect  │  [yellow]R[-][#6c7086] to Refresh  │  [yellow]Esc[-][#6c7086] Back %s[-]", iconBack))
+			sb.WriteString("\n  [#6c7086]Database names are loaded only when you choose Connect, using the credentials you enter.[-]")
 
 			content.SetText(sb.String())
 		})
@@ -173,7 +178,7 @@ func writeServiceSection(sb *strings.Builder, info *serviceInfo) {
 	sb.WriteString(fmt.Sprintf("\n  %s  [::b][%s]%s[-][-]  %s\n", statusIcon, nameColor, info.name, statusText))
 
 	if !info.installed {
-		sb.WriteString(fmt.Sprintf("     [#6c7086]Not found. Install with: sudo apt install %s[-]\n", strings.ToLower(info.name)+"-server"))
+		sb.WriteString(fmt.Sprintf("     [#6c7086]Not found. Install with: sudo apt install %s[-]\n", serviceInstallPackage(info.name)))
 		return
 	}
 
@@ -183,18 +188,22 @@ func writeServiceSection(sb *strings.Builder, info *serviceInfo) {
 	sb.WriteString(fmt.Sprintf("     [#a6adc8]PID:[-]        %s\n", info.pid))
 	sb.WriteString(fmt.Sprintf("     [#a6adc8]RAM:[-]        %s\n", info.ram))
 	sb.WriteString(fmt.Sprintf("     [#a6adc8]User:[-]       %s\n", info.user))
-	if info.databases != "" {
-		sb.WriteString(fmt.Sprintf("     [#a6adc8]Databases:[-]  %s\n", info.databases))
+	actionKey := "1"
+	if info.name == "PostgreSQL" {
+		actionKey = "2"
 	}
-	if info.dbSizes != "" {
-		sb.WriteString(fmt.Sprintf("     [#a6adc8]DB Sizes:[-]   %s\n", info.dbSizes))
-	}
-
 	if info.active {
-		sb.WriteString("     [#6c7086]Action: Press key to [red]stop[-][#6c7086] this service ■[-]\n")
+		sb.WriteString(fmt.Sprintf("     [yellow]%s[-] [red]Stop service[-]  [#6c7086]■[-]\n", actionKey))
 	} else {
-		sb.WriteString("     [#6c7086]Action: Press key to [green]start[-][#6c7086] this service ▶[-]\n")
+		sb.WriteString(fmt.Sprintf("     [yellow]%s[-] [green]Start service[-]  [#6c7086]▶[-]\n", actionKey))
 	}
+}
+
+func serviceInstallPackage(serviceName string) string {
+	if serviceName == "PostgreSQL" {
+		return "postgresql"
+	}
+	return "mysql-server"
 }
 
 // getServiceInfo gathers information about a database service
@@ -227,37 +236,25 @@ func getServiceInfo(displayName, cmdName, processName, unitName string) *service
 	}
 	info.installed = true
 
-	// Check version
-	info.version = runCmd(cmdName, "--version")
+	// Version and local process probes must stay quick. Service details are a
+	// dashboard aid, not a reason to block navigation for several seconds.
+	info.version = runServiceProbeCmd(cmdName, "--version")
 	if info.version == "" {
 		info.version = "unknown"
 	} else {
-		// Take first line only
-		if lines := strings.SplitN(info.version, "\n", 2); len(lines) > 0 {
-			info.version = strings.TrimSpace(lines[0])
-		}
+		info.version = compactServiceVersion(displayName, info.version)
 	}
 
-	// Check systemctl status
-	// Try multiple unit names
-	unitNames := getUnitNames(unitName)
-	for _, u := range unitNames {
-		out := runCmd("systemctl", "is-active", u)
-		out = strings.TrimSpace(out)
-		if out == "active" {
-			info.active = true
-			info.unit = u
-			break
-		}
-		// If we find a valid unit (even if inactive), use it
-		if out == "inactive" || out == "failed" {
-			info.unit = u
-		}
+	// Check candidate systemd units. A single probe returns load state, active
+	// state, and PID; the old implementation ran separate commands and retried
+	// inactive units until each three-second timeout expired.
+	selected := probeSystemdUnits(getUnitNames(unitName))
+	if selected.loaded {
+		info.unit = selected.unit
+		info.active = selected.active
 	}
 
-	// Get PID
-	pid := runCmd("systemctl", "show", "--property=MainPID", "--value", info.unit)
-	pid = strings.TrimSpace(pid)
+	pid := strings.TrimSpace(selected.pid)
 	if pid != "" && pid != "0" {
 		info.pid = pid
 		// Get RAM from /proc/<pid>/status
@@ -287,13 +284,91 @@ func getServiceInfo(displayName, cmdName, processName, unitName string) *service
 		info.user = "postgres (default)"
 	}
 
-	// Get databases (only if service is active)
-	if info.active {
-		info.databases = getServiceDatabases(displayName)
-		info.dbSizes = getServiceDatabaseSizes(displayName)
+	return info
+}
+
+func compactServiceVersion(serviceName, raw string) string {
+	line := strings.TrimSpace(strings.SplitN(raw, "\n", 2)[0])
+	fields := strings.Fields(line)
+	if serviceName == "MySQL" {
+		for index, field := range fields {
+			if field == "Distrib" && index+1 < len(fields) {
+				return "MariaDB " + strings.TrimRight(fields[index+1], ",")
+			}
+		}
+	}
+	for index, field := range fields {
+		switch {
+		case serviceName == "PostgreSQL" && field == "(PostgreSQL)" && index+1 < len(fields):
+			return "PostgreSQL " + strings.TrimRight(fields[index+1], ",")
+		case serviceName == "MySQL" && field == "Ver" && index+1 < len(fields):
+			return "MySQL " + strings.TrimRight(fields[index+1], ",")
+		}
+	}
+	if len(line) > 58 {
+		return line[:55] + "..."
+	}
+	return line
+}
+
+type systemdUnitProbe struct {
+	unit   string
+	loaded bool
+	active bool
+	pid    string
+}
+
+func probeSystemdUnit(unit string) systemdUnitProbe {
+	probe := systemdUnitProbe{unit: unit}
+	out := runServiceProbeCmd("systemctl", "show", unit, "--no-pager",
+		"--property=LoadState", "--property=ActiveState", "--property=MainPID")
+	for _, line := range strings.Split(out, "\n") {
+		key, value, ok := strings.Cut(strings.TrimSpace(line), "=")
+		if !ok {
+			continue
+		}
+		switch key {
+		case "LoadState":
+			probe.loaded = value == "loaded"
+		case "ActiveState":
+			probe.active = value == "active"
+		case "MainPID":
+			probe.pid = value
+		}
+	}
+	return probe
+}
+
+func probeSystemdUnits(units []string) systemdUnitProbe {
+	if len(units) == 0 {
+		return systemdUnitProbe{}
+	}
+	results := make(chan systemdUnitProbe, len(units))
+	for _, unit := range units {
+		unit := unit
+		go func() { results <- probeSystemdUnit(unit) }()
 	}
 
-	return info
+	byUnit := make(map[string]systemdUnitProbe, len(units))
+	for range units {
+		probe := <-results
+		byUnit[probe.unit] = probe
+	}
+
+	var selected systemdUnitProbe
+	for _, unit := range units {
+		probe := byUnit[unit]
+		if !probe.loaded {
+			continue
+		}
+		if !selected.loaded || probe.active {
+			selected = probe
+		}
+		if probe.active {
+			break
+		}
+	}
+	return selected
 }
 
 // getUnitNames returns possible systemd unit names for a service
@@ -315,7 +390,7 @@ func getUnitNames(base string) []string {
 
 // getServicePort tries to find the listening port for a service process
 func getServicePort(processName string) string {
-	out := runCmd("ss", "-tlnp")
+	out := runServiceProbeCmd("ss", "-tlnp")
 	if out == "" {
 		return ""
 	}
@@ -378,10 +453,11 @@ func getProcessRAM(pid string) string {
 
 // readVmRSS reads VmRSS in kB from /proc/<pid>/status.
 func readVmRSS(pid string) uint64 {
-	out := runCmd("cat", fmt.Sprintf("/proc/%s/status", pid))
-	if out == "" {
+	data, err := os.ReadFile(fmt.Sprintf("/proc/%s/status", pid))
+	if err != nil {
 		return 0
 	}
+	out := string(data)
 	for _, line := range strings.Split(out, "\n") {
 		if strings.HasPrefix(line, "VmRSS:") {
 			parts := strings.Fields(line)
@@ -395,117 +471,12 @@ func readVmRSS(pid string) uint64 {
 	return 0
 }
 
-// getServiceDatabases lists databases for a running service
-func getServiceDatabases(serviceName string) string {
-	switch serviceName {
-	case "MySQL":
-		out := runCmd("mysql", "-u", "root", "-e", "SHOW DATABASES;")
-		if out == "" {
-			out = runCmd("mysql", "--defaults-file=/etc/mysql/debian.cnf", "-e", "SHOW DATABASES;")
-		}
-		if out != "" {
-			lines := strings.Split(strings.TrimSpace(out), "\n")
-			var dbs []string
-			for _, l := range lines {
-				l = strings.TrimSpace(l)
-				if l != "" && l != "Database" && !strings.HasPrefix(l, "+") && !strings.HasPrefix(l, "|") {
-					dbs = append(dbs, l)
-				}
-			}
-			if len(dbs) > 8 {
-				return strings.Join(dbs[:8], ", ") + fmt.Sprintf(" (+%d more)", len(dbs)-8)
-			}
-			return strings.Join(dbs, ", ")
-		}
-		return "[#6c7086]auth required[-]"
-	case "PostgreSQL":
-		out := runCmd("sudo", "-u", "postgres", "psql", "-l", "-t", "-A")
-		if out != "" {
-			lines := strings.Split(strings.TrimSpace(out), "\n")
-			var dbs []string
-			for _, l := range lines {
-				parts := strings.SplitN(l, "|", 2)
-				if len(parts) > 0 {
-					name := strings.TrimSpace(parts[0])
-					if name != "" && name != "template0" && name != "template1" {
-						dbs = append(dbs, name)
-					}
-				}
-			}
-			if len(dbs) > 8 {
-				return strings.Join(dbs[:8], ", ") + fmt.Sprintf(" (+%d more)", len(dbs)-8)
-			}
-			return strings.Join(dbs, ", ")
-		}
-		return "[#6c7086]auth required[-]"
-	}
-	return ""
-}
-
-// getServiceDatabaseSizes returns a formatted string of database sizes.
-func getServiceDatabaseSizes(serviceName string) string {
-	switch serviceName {
-	case "MySQL":
-		out := runCmd("mysql", "-u", "root", "-N", "-e",
-			"SELECT table_schema, SUM(data_length + index_length) FROM information_schema.tables GROUP BY table_schema ORDER BY SUM(data_length + index_length) DESC;")
-		if out == "" {
-			out = runCmd("mysql", "--defaults-file=/etc/mysql/debian.cnf", "-N", "-e",
-				"SELECT table_schema, SUM(data_length + index_length) FROM information_schema.tables GROUP BY table_schema ORDER BY SUM(data_length + index_length) DESC;")
-		}
-		return parseDBSizeOutput(out)
-	case "PostgreSQL":
-		out := runCmd("sudo", "-u", "postgres", "psql", "-t", "-A", "-c",
-			"SELECT datname, pg_database_size(datname) FROM pg_database WHERE datistemplate = false ORDER BY pg_database_size(datname) DESC")
-		return parseDBSizeOutput(out)
-	}
-	return ""
-}
-
-func parseDBSizeOutput(out string) string {
-	if out == "" {
-		return ""
-	}
-	lines := strings.Split(strings.TrimSpace(out), "\n")
-	var entries []string
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		// Try pipe separator (psql) or tab separator (mysql)
-		var name, sizeStr string
-		if parts := strings.SplitN(line, "|", 2); len(parts) == 2 {
-			name = strings.TrimSpace(parts[0])
-			sizeStr = strings.TrimSpace(parts[1])
-		} else if parts := strings.SplitN(line, "\t", 2); len(parts) == 2 {
-			name = strings.TrimSpace(parts[0])
-			sizeStr = strings.TrimSpace(parts[1])
-		} else {
-			continue
-		}
-		if name == "" || name == "template0" || name == "template1" {
-			continue
-		}
-		var sizeBytes uint64
-		fmt.Sscanf(sizeStr, "%d", &sizeBytes)
-		if sizeBytes > 0 {
-			entries = append(entries, fmt.Sprintf("%s (%s)", name, format.FormatBytes(sizeBytes)))
-		} else {
-			entries = append(entries, name)
-		}
-	}
-	if len(entries) > 6 {
-		return strings.Join(entries[:6], ", ") + fmt.Sprintf(" (+%d more)", len(entries)-6)
-	}
-	return strings.Join(entries, ", ")
-}
-
 // toggleService starts or stops a database service
 func (a *App) toggleService(info *serviceInfo) {
 	if !info.installed {
-		a.ShowAlert(fmt.Sprintf("%s %s is not installed.\n\nInstall it first:\n  sudo apt install %s-server",
+		a.ShowAlert(fmt.Sprintf("%s %s is not installed.\n\nInstall it first:\n  sudo apt install %s",
 			iconWarn,
-			info.name, strings.ToLower(info.name)), "services")
+			info.name, serviceInstallPackage(info.name)), "services")
 		return
 	}
 
@@ -543,7 +514,9 @@ func (a *App) showSudoPasswordPrompt(action string, info *serviceInfo) {
 			a.ShowAlert(fmt.Sprintf("%s Could not read sudo password input.", iconWarn), "services")
 			return
 		}
-		password := strings.TrimSpace(passwordField.GetText())
+		// Passwords are exact values. Trimming here made valid passwords with
+		// leading or trailing spaces fail authentication.
+		password := passwordField.GetText()
 		if password == "" {
 			a.ShowAlert(fmt.Sprintf("%s Sudo password is required to continue.", iconInfo), "sudoPrompt")
 			return
@@ -840,97 +813,225 @@ func runCmd(name string, args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
+// runServiceProbeCmd is deliberately tighter than runCmd. The Services page
+// runs several local-only probes and should remain responsive even when
+// systemd is unavailable or a client command is unhealthy. Preserve stdout
+// from non-zero commands because systemctl reports useful inactive states that
+// way.
+func runServiceProbeCmd(name string, args ...string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 1200*time.Millisecond)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Env = append(cmd.Environ(), "LC_ALL=C")
+	out, _ := cmd.Output()
+	if ctx.Err() != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
 // getQuickStatus returns a short colored status string for the dashboard header
 func getQuickStatus(unitName string) string {
-	units := getUnitNames(unitName)
-	for _, u := range units {
-		out := runCmd("systemctl", "is-active", u)
-		out = strings.TrimSpace(out)
-		switch out {
-		case "active":
-			var color string
-			switch unitName {
-			case "mysql":
-				color = "#f9e2af"
-			case "postgresql":
-				color = "#89b4fa"
-			}
-			name := strings.ToUpper(unitName[:1]) + unitName[1:]
-			return fmt.Sprintf("[green]●[-] [%s]%s[-]", color, name)
-		case "inactive", "failed":
-			name := strings.ToUpper(unitName[:1]) + unitName[1:]
-			return fmt.Sprintf("[red]○[-] [#6c7086]%s[-]", name)
-		}
-	}
-	// Not installed
+	probe := probeSystemdUnits(getUnitNames(unitName))
 	name := strings.ToUpper(unitName[:1]) + unitName[1:]
+	if probe.active {
+		var color string
+		switch unitName {
+		case "mysql":
+			color = "#f9e2af"
+		case "postgresql":
+			color = "#89b4fa"
+		}
+		return fmt.Sprintf("[green]●[-] [%s]%s[-]", color, name)
+	}
+	if probe.loaded {
+		return fmt.Sprintf("[red]○[-] [#6c7086]%s[-]", name)
+	}
 	return fmt.Sprintf("[#6c7086]○ %s (n/a)[-]", name)
 }
 
-// showConnectServiceModal displays a modal to connect to a database service.
-// It includes a Browse button to discover databases in the running instance.
+const (
+	serviceConnectionPage  = "connectService"
+	serviceDatabasePicker  = "serviceDatabasePicker"
+	serviceLabelSavedLogin = "Saved login"
+	serviceLabelType       = "Service"
+)
+
+func localServiceLogins(store *config.Store) []config.ConnectionConfig {
+	if store == nil {
+		return nil
+	}
+	logins := make([]config.ConnectionConfig, 0, len(store.Connections))
+	for _, connection := range store.Connections {
+		if connection.Type != config.MySQL && connection.Type != config.PostgreSQL {
+			continue
+		}
+		if !isLocalDatabaseHost(connection.Host) {
+			continue
+		}
+		logins = append(logins, connection)
+	}
+	return logins
+}
+
+func isLocalDatabaseHost(host string) bool {
+	host = strings.ToLower(strings.Trim(strings.TrimSpace(host), "[]"))
+	return host == "" || host == "localhost" || host == "127.0.0.1" || host == "::1"
+}
+
+func serviceLoginLabel(connection config.ConnectionConfig) string {
+	host := strings.TrimSpace(connection.Host)
+	if host == "" {
+		host = "localhost"
+	}
+	databaseName := strings.TrimSpace(connection.Database)
+	if databaseName == "" {
+		databaseName = "server"
+	}
+	return fmt.Sprintf("%s · %s@%s/%s", connection.TypeLabel(), connection.User, host, databaseName)
+}
+
+func buildServiceConnectionConfig(form *tview.Form, requireDatabase bool) (*config.ConnectionConfig, error) {
+	if form == nil {
+		return nil, fmt.Errorf("connection form is unavailable")
+	}
+	dropdown, ok := form.GetFormItemByLabel(serviceLabelType).(*tview.DropDown)
+	if !ok {
+		return nil, fmt.Errorf("could not read the selected service")
+	}
+	_, serviceName := dropdown.GetCurrentOption()
+
+	cfg := &config.ConnectionConfig{
+		Host:     formInputValueByLabel(form, connLabelHost),
+		Port:     formInputValueByLabel(form, connLabelPort),
+		User:     formInputValueByLabel(form, connLabelUser),
+		Database: formInputValueByLabel(form, connLabelDatabase),
+	}
+	if passwordField, ok := form.GetFormItemByLabel(connLabelPassword).(*tview.InputField); ok {
+		// A password is not prose: preserve whitespace exactly as entered.
+		cfg.Password = passwordField.GetText()
+	}
+
+	if cfg.Host == "" {
+		cfg.Host = "localhost"
+	}
+	if cfg.User == "" {
+		return nil, fmt.Errorf("user is required")
+	}
+	switch serviceName {
+	case "PostgreSQL":
+		cfg.Type = config.PostgreSQL
+		cfg.SSLMode = "disable"
+		if cfg.Port == "" {
+			cfg.Port = "5432"
+		}
+	case "MySQL":
+		cfg.Type = config.MySQL
+		if cfg.Port == "" {
+			cfg.Port = "3306"
+		}
+	default:
+		return nil, fmt.Errorf("unsupported service %q", serviceName)
+	}
+
+	if requireDatabase && cfg.Database == "" {
+		return nil, fmt.Errorf("choose a database or use Find DBs first")
+	}
+	if cfg.Database == "" {
+		cfg.Name = "database discovery"
+		if cfg.Type == config.PostgreSQL {
+			cfg.Database = "postgres"
+		}
+	} else {
+		cfg.Name = cfg.Database
+	}
+	return cfg, nil
+}
+
+// showConnectServiceModal displays a focused local-service connection flow.
+// Discovery and connection both use the values visible in this form.
 func (a *App) showConnectServiceModal() {
 	form := tview.NewForm()
-	form.SetTitle(fmt.Sprintf(" %s Connect to Database Service ", iconConnect))
+	form.SetTitle(fmt.Sprintf(" %s Connect to a Local Service ", iconConnect))
 	form.SetTitleColor(blue)
 	form.SetBorder(true)
 	form.SetBorderColor(blue)
 
-	// Service Type
-	form.AddDropDown("Service", []string{"MySQL", "PostgreSQL"}, 0, nil)
+	savedLogins := localServiceLogins(a.store)
+	savedOptions := []string{"Manual credentials"}
+	selectedSavedLogin := 0
+	for index, connection := range savedLogins {
+		savedOptions = append(savedOptions, serviceLoginLabel(connection))
+		if connection.Active || (a.activeConn != nil && a.activeConn.ID != "" && connection.ID == a.activeConn.ID) {
+			selectedSavedLogin = index + 1
+		}
+	}
 
-	// Database Name
-	form.AddInputField("Database", "", 20, nil, nil)
+	form.AddDropDown(serviceLabelSavedLogin, savedOptions, 0, nil)
+	form.AddDropDown(serviceLabelType, []string{"MySQL", "PostgreSQL"}, 0, nil)
+	form.AddInputField(connLabelHost, "localhost", 30, nil, nil)
+	form.AddInputField(connLabelPort, "3306", 10, nil, nil)
+	form.AddInputField(connLabelDatabase, "", 30, nil, nil)
+	form.AddInputField(connLabelUser, "root", 30, nil, nil)
+	form.AddPasswordField(connLabelPassword, "", 30, '*', nil)
 
-	// User
-	form.AddInputField("User", "root", 20, nil, nil)
-
-	// Password
-	form.AddPasswordField("Password", "", 20, '*', nil)
-
-	// Update defaults when service changes
-	serviceDropDown := form.GetFormItemByLabel("Service").(*tview.DropDown)
-	serviceDropDown.SetSelectedFunc(func(text string, index int) {
-		userInput := form.GetFormItemByLabel("User").(*tview.InputField)
-		if text == "PostgreSQL" {
+	savedDropDown := form.GetFormItemByLabel(serviceLabelSavedLogin).(*tview.DropDown)
+	savedDropDown.SetUseStyleTags(false)
+	serviceDropDown := form.GetFormItemByLabel(serviceLabelType).(*tview.DropDown)
+	applyingSavedLogin := false
+	serviceDropDown.SetSelectedFunc(func(serviceName string, _ int) {
+		if !applyingSavedLogin {
+			savedDropDown.SetCurrentOption(0)
+		}
+		userInput := form.GetFormItemByLabel(connLabelUser).(*tview.InputField)
+		portInput := form.GetFormItemByLabel(connLabelPort).(*tview.InputField)
+		if serviceName == "PostgreSQL" {
 			userInput.SetText("postgres")
+			portInput.SetText("5432")
 		} else {
 			userInput.SetText("root")
+			portInput.SetText("3306")
 		}
 	})
+	savedDropDown.SetSelectedFunc(func(_ string, optionIndex int) {
+		if optionIndex <= 0 || optionIndex > len(savedLogins) {
+			return
+		}
+		connection := savedLogins[optionIndex-1]
+		applyingSavedLogin = true
+		if connection.Type == config.PostgreSQL {
+			serviceDropDown.SetCurrentOption(1)
+		} else {
+			serviceDropDown.SetCurrentOption(0)
+		}
+		setFormInputValueByLabel(form, connLabelHost, connection.Host)
+		setFormInputValueByLabel(form, connLabelPort, connection.Port)
+		setFormInputValueByLabel(form, connLabelDatabase, connection.Database)
+		setFormInputValueByLabel(form, connLabelUser, connection.User)
+		setFormInputValueByLabel(form, connLabelPassword, connection.Password)
+		applyingSavedLogin = false
+	})
+	if selectedSavedLogin > 0 {
+		savedDropDown.SetCurrentOption(selectedSavedLogin)
+	}
 
 	form.AddButton("Connect", func() {
-		_, service := serviceDropDown.GetCurrentOption()
-		dbName := strings.TrimSpace(form.GetFormItemByLabel("Database").(*tview.InputField).GetText())
-		user := strings.TrimSpace(form.GetFormItemByLabel("User").(*tview.InputField).GetText())
-		password := strings.TrimSpace(form.GetFormItemByLabel("Password").(*tview.InputField).GetText())
-
-		cfg := &config.ConnectionConfig{
-			Name:     dbName,
-			Host:     "localhost",
-			User:     user,
-			Password: password,
-			Database: dbName,
-		}
-		if service == "PostgreSQL" {
-			cfg.Type = config.PostgreSQL
-			cfg.Port = "5432"
-			cfg.SSLMode = "disable"
-		} else {
-			cfg.Type = config.MySQL
-			cfg.Port = "3306"
+		cfg, err := buildServiceConnectionConfig(form, true)
+		if err != nil {
+			a.ShowAlert(fmt.Sprintf("%s Cannot connect:\n\n%v", iconInfo, err), serviceConnectionPage)
+			return
 		}
 
-		a.pages.RemovePage("connectService")
-		loadingToken := a.showLoadingModal(fmt.Sprintf("Connecting to %s...", dbName))
+		loadingToken := a.showLoadingModal(fmt.Sprintf("Connecting to %s...", cfg.Database))
 		selectedTable := a.selectedTable
 		currentTableIndex := a.tables.GetCurrentItem()
 
 		go func() {
-			db, err := database.Connect(cfg)
+			db, connectErr := database.Connect(cfg)
 			var snapshot *tableListSnapshot
 			var tableLoadErr error
-			if err == nil {
+			if connectErr == nil {
 				snapshot, tableLoadErr = loadTableListSnapshot(db, cfg.Type, selectedTable, currentTableIndex)
 			}
 			a.app.QueueUpdateDraw(func() {
@@ -940,8 +1041,9 @@ func (a *App) showConnectServiceModal() {
 					}
 					return
 				}
-				if err != nil {
-					a.ShowAlert(fmt.Sprintf("Connection failed:\n\n%v", err), "services")
+				if connectErr != nil {
+					a.ShowAlert(fmt.Sprintf("%s Connection failed:\n\n%v\n\n%s",
+						iconFail, connectErr, connectionHint(connectErr, cfg)), serviceConnectionPage)
 					return
 				}
 
@@ -960,23 +1062,24 @@ func (a *App) showConnectServiceModal() {
 					a.loadDatabaseObjects()
 				}
 				a.results.SetTitle(fmt.Sprintf(" %s Results [yellow](Alt+R)[-] ", iconResults))
+				a.pages.RemovePage(serviceConnectionPage)
 				a.pages.RemovePage("services")
 				a.pages.ShowPage("main")
 				a.setFocusWithColor(a.tables)
-				a.updateStatusBar(fmt.Sprintf("[green]Connected to %s[-]", dbName), 0)
+				a.updateStatusBar(fmt.Sprintf("[green]Connected to %s[-]", cfg.Database), 0)
 			})
 		}()
 	})
 
-	form.AddButton("Browse DBs", func() {
-		_, service := serviceDropDown.GetCurrentOption()
-		a.showDatabasePicker(service, form)
+	form.AddButton("Find DBs", func() {
+		a.discoverServiceDatabases(form)
 	})
 
-	form.AddButton("Cancel", func() {
-		a.pages.RemovePage("connectService")
+	closeForm := func() {
+		a.pages.RemovePage(serviceConnectionPage)
 		a.pages.ShowPage("services")
-	})
+	}
+	form.AddButton("Cancel", closeForm)
 
 	form.SetBackgroundColor(bg)
 	form.SetFieldBackgroundColor(mantle)
@@ -985,63 +1088,73 @@ func (a *App) showConnectServiceModal() {
 	form.SetLabelColor(text)
 	form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEscape {
-			a.pages.RemovePage("connectService")
-			a.pages.ShowPage("services")
+			closeForm()
 			return nil
 		}
 		return event
 	})
 
-	modalW, modalH := a.modalSize(50, 80, 14, 18)
+	hint := tview.NewTextView().
+		SetDynamicColors(true).
+		SetTextAlign(tview.AlignCenter).
+		SetText(fmt.Sprintf(" [yellow]Find DBs[-] uses the selected login — never run dbterm itself with sudo  │  [yellow]Esc[-] Back %s", iconBack))
+	hint.SetBackgroundColor(crust)
+	formWithHint := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(form, 0, 1, true).
+		AddItem(hint, 1, 0, false)
+
+	modalW, modalH := a.modalSize(68, 92, 20, 24)
 	grid := tview.NewGrid().
 		SetColumns(0, modalW, 0).
 		SetRows(0, modalH, 0).
-		AddItem(form, 1, 1, 1, 1, 0, 0, true)
+		AddItem(formWithHint, 1, 1, 1, 1, 0, 0, true)
 
-	a.pages.AddPage("connectService", grid, true, true)
+	a.pages.AddPage(serviceConnectionPage, grid, true, true)
 	a.app.SetFocus(form)
 }
 
-// showDatabasePicker fetches the list of databases from a running service
-// and shows a selection list so the user can pick one.
-func (a *App) showDatabasePicker(serviceName string, parentForm *tview.Form) {
-	var dbs []string
-	switch serviceName {
-	case "MySQL":
-		out := runCmd("mysql", "-u", "root", "-N", "-e", "SHOW DATABASES;")
-		if out == "" {
-			out = runCmd("mysql", "--defaults-file=/etc/mysql/debian.cnf", "-N", "-e", "SHOW DATABASES;")
-		}
-		if out != "" {
-			for _, l := range strings.Split(strings.TrimSpace(out), "\n") {
-				l = strings.TrimSpace(l)
-				if l != "" {
-					dbs = append(dbs, l)
-				}
-			}
-		}
-	case "PostgreSQL":
-		out := runCmd("sudo", "-u", "postgres", "psql", "-t", "-A", "-c",
-			"SELECT datname FROM pg_database WHERE datistemplate = false ORDER BY datname")
-		if out != "" {
-			for _, l := range strings.Split(strings.TrimSpace(out), "\n") {
-				l = strings.TrimSpace(l)
-				if l != "" {
-					dbs = append(dbs, l)
-				}
-			}
-		}
-	}
-
-	if len(dbs) == 0 {
-		a.ShowAlert(fmt.Sprintf("%s Could not discover databases for %s.\n\nThe service may not be running, or authentication is required.", iconWarn, serviceName), "connectService")
+func (a *App) discoverServiceDatabases(form *tview.Form) {
+	cfg, err := buildServiceConnectionConfig(form, false)
+	if err != nil {
+		a.ShowAlert(fmt.Sprintf("%s Cannot find databases:\n\n%v", iconInfo, err), serviceConnectionPage)
 		return
 	}
 
-	// Show a picker list
+	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+	loadingToken := a.showLoadingModal(
+		fmt.Sprintf("Finding databases on %s:%s...", cfg.Host, cfg.Port),
+		withLoadingCancel("Press Esc to cancel database discovery.", cancel),
+	)
+
+	go func() {
+		defer cancel()
+		names, discoveryErr := discoverDatabaseNames(ctx, cfg)
+		a.app.QueueUpdateDraw(func() {
+			if !a.finishLoadingModal(loadingToken) {
+				return
+			}
+			if errors.Is(discoveryErr, context.Canceled) {
+				return
+			}
+			if discoveryErr != nil {
+				a.ShowAlert(fmt.Sprintf("%s Could not find databases on %s:%s:\n\n%v\n\n%s",
+					iconWarn, cfg.Host, cfg.Port, discoveryErr, connectionHint(discoveryErr, cfg)), serviceConnectionPage)
+				return
+			}
+			if len(names) == 0 {
+				a.ShowAlert(fmt.Sprintf("%s No user databases are visible to %q on %s:%s.",
+					iconInfo, cfg.User, cfg.Host, cfg.Port), serviceConnectionPage)
+				return
+			}
+			a.showServiceDatabasePicker(form, cfg, names)
+		})
+	}()
+}
+
+func (a *App) showServiceDatabasePicker(parentForm *tview.Form, cfg *config.ConnectionConfig, names []string) {
 	list := tview.NewList().ShowSecondaryText(false)
 	list.SetBorder(true).
-		SetTitle(fmt.Sprintf(" %s Select Database (%s) ", iconConnect, serviceName)).
+		SetTitle(fmt.Sprintf(" %s Select Database (%s) ", iconDatabase, cfg.TypeLabel())).
 		SetBorderColor(blue).
 		SetTitleColor(mauve).
 		SetBackgroundColor(bg)
@@ -1049,21 +1162,25 @@ func (a *App) showDatabasePicker(serviceName string, parentForm *tview.Form) {
 	list.SetSelectedBackgroundColor(surface0)
 	list.SetSelectedTextColor(green)
 
-	for _, db := range dbs {
-		dbName := db
-		list.AddItem(fmt.Sprintf("  %s  %s", iconConnect, dbName), "", 0, func() {
-			// Set the database field in the parent form
-			dbInput := parentForm.GetFormItemByLabel("Database").(*tview.InputField)
-			dbInput.SetText(dbName)
-			a.pages.RemovePage("dbPicker")
-			a.app.SetFocus(parentForm)
+	returnToForm := func() {
+		a.pages.RemovePage(serviceDatabasePicker)
+		if databaseIndex := parentForm.GetFormItemIndex(connLabelDatabase); databaseIndex >= 0 {
+			parentForm.SetFocus(databaseIndex)
+		}
+		a.app.SetFocus(parentForm)
+	}
+
+	for _, name := range names {
+		databaseName := name
+		list.AddItem(fmt.Sprintf("  %s  %s", iconDatabase, tview.Escape(databaseName)), "", 0, func() {
+			setFormInputValueByLabel(parentForm, connLabelDatabase, databaseName)
+			returnToForm()
 		})
 	}
 
 	list.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEscape {
-			a.pages.RemovePage("dbPicker")
-			a.app.SetFocus(parentForm)
+			returnToForm()
 			return nil
 		}
 		return event
@@ -1072,19 +1189,19 @@ func (a *App) showDatabasePicker(serviceName string, parentForm *tview.Form) {
 	footer := tview.NewTextView().
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignCenter).
-		SetText(fmt.Sprintf("  [yellow]Enter[-] Select  │  [yellow]Esc[-] Back %s  │  [#6c7086]%d databases found[-]", iconBack, len(dbs)))
+		SetText(fmt.Sprintf(" [yellow]↑/↓[-] Choose  │  [yellow]Enter[-] Select  │  [yellow]Esc[-] Back %s  │  [#6c7086]%d found[-]", iconBack, len(names)))
 	footer.SetBackgroundColor(crust)
 
-	pickerFlex := tview.NewFlex().SetDirection(tview.FlexRow).
+	picker := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(list, 0, 1, true).
 		AddItem(footer, 1, 0, false)
 
-	modalW, modalH := a.modalSize(40, 60, 10, 20)
+	modalW, modalH := a.modalSize(44, 68, 10, 24)
 	grid := tview.NewGrid().
 		SetColumns(0, modalW, 0).
 		SetRows(0, modalH, 0).
-		AddItem(pickerFlex, 1, 1, 1, 1, 0, 0, true)
+		AddItem(picker, 1, 1, 1, 1, 0, 0, true)
 
-	a.pages.AddPage("dbPicker", grid, true, true)
+	a.pages.AddPage(serviceDatabasePicker, grid, true, true)
 	a.app.SetFocus(list)
 }

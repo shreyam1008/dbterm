@@ -49,6 +49,16 @@ func main() {
 		}
 		return
 	}
+	if sudoUser := interactiveSudoInvoker(); sudoUser != "" {
+		fmt.Fprintln(os.Stderr, "\n  \033[31mdbterm should not run as the full sudo/root process.\033[0m")
+		fmt.Fprintf(os.Stderr, "  sudo opened root's separate profile, so %s's saved connections were hidden.\n\n", sudoUser)
+		fmt.Fprintln(os.Stderr, "  Run this instead:")
+		fmt.Fprintln(os.Stderr, "    dbterm")
+		fmt.Fprintln(os.Stderr, "\n  In Services, choose a saved database login for Find DBs.")
+		fmt.Fprintln(os.Stderr, "  dbterm will request sudo only for service start/stop commands.")
+		fmt.Fprintln(os.Stderr)
+		os.Exit(2)
+	}
 
 	// ── Startup Banner ──
 	fmt.Println()

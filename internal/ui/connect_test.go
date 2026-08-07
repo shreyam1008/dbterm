@@ -111,3 +111,12 @@ func TestFormInputValueAndSetFormInputValueUseStableFieldKeys(t *testing.T) {
 		t.Fatalf("auth token value = %q", got)
 	}
 }
+
+func TestFormInputValuePreservesPasswordWhitespace(t *testing.T) {
+	form := tview.NewForm()
+	form.AddPasswordField(connLabelPassword, "  exact password  ", 30, '*', nil)
+
+	if got := formInputValue(form, connFieldPassword); got != "  exact password  " {
+		t.Fatalf("password = %q, want exact value", got)
+	}
+}

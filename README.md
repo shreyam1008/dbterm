@@ -65,6 +65,8 @@ go install github.com/shreyam1008/dbterm/cmd/dbterm@latest
 
 For MySQL or PostgreSQL, a new connection does not require you to remember the database name. Enter the server credentials, choose **Find DBs**, and select from the databases visible to that account; dbterm fills the Database field and an empty connection Name automatically.
 
+Run the interactive TUI as your normal OS user, not with `sudo`. An elevated TUI uses root's separate profile and therefore cannot see your saved connections. In **Services → Connect**, choose a saved local database login before **Find DBs**; dbterm requests sudo separately only when a native service must be started or stopped. The Linux sudo password and the MySQL/PostgreSQL account password are different credentials.
+
 ## CLI reference
 
 | Command | Purpose |

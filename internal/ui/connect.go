@@ -635,6 +635,15 @@ func connectFooterText(width int, dbType config.DBType) string {
 }
 
 func formInputValue(form *tview.Form, key connectFieldKey) string {
+	if key == connFieldPassword {
+		item := form.GetFormItemByLabel(connectFieldLabel(key))
+		if input, ok := item.(*tview.InputField); ok {
+			// Passwords are opaque credentials; surrounding spaces may be part of
+			// the value and must not be normalized like ordinary form text.
+			return input.GetText()
+		}
+		return ""
+	}
 	return formInputValueByLabel(form, connectFieldLabel(key))
 }
 
@@ -956,7 +965,10 @@ func connectionHint(err error, cfg *config.ConnectionConfig) string {
 		return fmt.Sprintf("💡 Is %s running on %s:%s?", cfg.TypeLabel(), cfg.Host, cfg.Port)
 	case strings.Contains(errStr, "no such host") || strings.Contains(errStr, "lookup"):
 		return fmt.Sprintf("💡 Could not resolve hostname \"%s\". Check spelling.", cfg.Host)
-	case strings.Contains(errStr, "password") || strings.Contains(errStr, "authentication"):
+	case (strings.Contains(errStr, "password") || strings.Contains(errStr, "authentication") || strings.Contains(errStr, "access denied")) &&
+		(cfg.Type == config.MySQL || cfg.Type == config.PostgreSQL) && isLocalDatabaseHost(cfg.Host):
+		return "💡 Use a saved database login or enter its database username/password. Do not use sudo: your Linux password is only for starting or stopping the service."
+	case strings.Contains(errStr, "password") || strings.Contains(errStr, "authentication") || strings.Contains(errStr, "access denied"):
 		return "💡 Check your username and password."
 	case strings.Contains(errStr, "does not exist") || strings.Contains(errStr, "unknown database"):
 		return fmt.Sprintf("💡 Database \"%s\" not found. Check the name.", cfg.Database)

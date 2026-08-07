@@ -370,6 +370,20 @@ func TestBackupRetentionSummaryOnlyShowsActiveLimits(t *testing.T) {
 	}
 }
 
+func TestBackupPlanDefaultsSummaryMakesSafeDefaultsVisible(t *testing.T) {
+	got := backupPlanDefaultsSummary(backupcore.Job{
+		Compression:    backupcore.CompressionZstd,
+		Encryption:     backupcore.EncryptionNone,
+		Retention:      backupcore.Retention{KeepLast: 14, MaxAgeDays: 30},
+		TimeoutMinutes: 30,
+	})
+	for _, want := range []string{"zstd compression", "latest 14 / 30 days", "no encryption", "30 min timeout"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("defaults summary %q missing %q", got, want)
+		}
+	}
+}
+
 func TestBackupScheduleLabelIncludesWeeklyDays(t *testing.T) {
 	label := backupScheduleLabel(backupcore.Schedule{
 		Kind: backupcore.ScheduleWeekly, Weekdays: []int{int(time.Monday), int(time.Friday)}, TimeOfDay: "02:30", Timezone: "UTC",
@@ -399,6 +413,30 @@ func TestBackupConnectionPickerEscapeRestoresCenterFocus(t *testing.T) {
 	})
 	if pages.HasPage(pageBackupConnectionPicker) {
 		t.Fatal("connection picker page remained after Escape")
+	}
+	if application.GetFocus() != centerList {
+		t.Fatalf("focus = %T, want original Backup Center list", application.GetFocus())
+	}
+}
+
+func TestBackupPlanActionsEscapeRestoresCenterFocus(t *testing.T) {
+	application := tview.NewApplication()
+	pages := tview.NewPages()
+	centerList := tview.NewList()
+	pages.AddPage(pageBackupCenter, centerList, true, true)
+	application.SetRoot(pages, true).SetFocus(centerList)
+	app := &App{app: application, pages: pages, store: &config.Store{}}
+
+	app.showBackupPlanActions(backupcore.Job{Name: "Orders", Schedule: backupcore.Schedule{Kind: backupcore.ScheduleManual}})
+	actions, ok := application.GetFocus().(*tview.List)
+	if !ok || actions == centerList {
+		t.Fatalf("focus = %T, want backup action list", application.GetFocus())
+	}
+	actions.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), func(primitive tview.Primitive) {
+		application.SetFocus(primitive)
+	})
+	if pages.HasPage(pageBackupPlanActions) {
+		t.Fatal("backup action page remained after Escape")
 	}
 	if application.GetFocus() != centerList {
 		t.Fatalf("focus = %T, want original Backup Center list", application.GetFocus())
@@ -529,6 +567,35 @@ func TestBackupJobFormEscapeRestoresCenterFocus(t *testing.T) {
 	}
 	if application.GetFocus() != centerList {
 		t.Fatalf("focus = %T, want original Backup Center list", application.GetFocus())
+	}
+}
+
+func TestBackupJobFormStartsWithEssentialsOnly(t *testing.T) {
+	application := tview.NewApplication()
+	pages := tview.NewPages()
+	centerList := tview.NewList()
+	pages.AddPage(pageBackupCenter, centerList, true, true)
+	application.SetRoot(pages, true).SetFocus(centerList)
+	app := &App{
+		app: application, pages: pages,
+		store: &config.Store{Connections: []config.ConnectionConfig{{
+			ID: "orders", Name: "Orders", Type: config.SQLite, FilePath: filepath.Join(t.TempDir(), "orders.sqlite3"),
+		}}},
+	}
+
+	form := app.showBackupJobFormForConnection(nil, "orders")
+	if form == nil {
+		t.Fatal("backup form was not created")
+	}
+	for _, label := range []string{"Database", backupFormLabelDestination, "Schedule", "Run At (HH:MM)", "Enable Schedule", "Included", backupFormLabelAdvanced} {
+		if form.GetFormItemByLabel(label) == nil {
+			t.Errorf("essential form is missing %q", label)
+		}
+	}
+	for _, label := range []string{backupFormLabelConnection, "Backup Name", "Timezone", "Filename Template", "SMTP Host", "Disk Space"} {
+		if form.GetFormItemByLabel(label) != nil {
+			t.Errorf("advanced field %q is visible in the essential form", label)
+		}
 	}
 }
 
