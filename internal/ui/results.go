@@ -202,7 +202,6 @@ func (a *App) applyTableResultSnapshot(snapshot *tableResultSnapshot) bool {
 		return false
 	}
 
-	preserveWidths := resultHeadersMatch(a.results, snapshot.columnNames)
 	a.results.Clear()
 	for row := 0; row < snapshot.results.GetRowCount(); row++ {
 		for col := 0; col < snapshot.results.GetColumnCount(); col++ {
@@ -218,9 +217,7 @@ func (a *App) applyTableResultSnapshot(snapshot *tableResultSnapshot) bool {
 		a.sortMode = "server"
 		a.setSortHeaderIndicator()
 	}
-	if !preserveWidths {
-		a.clearColumnOverrides()
-	}
+	a.restoreColumnWidths(request.selectedTable)
 	a.applyColumnWidths()
 	a.restoreResultSelection(request.selection, snapshot.rowCount)
 
@@ -228,26 +225,6 @@ func (a *App) applyTableResultSnapshot(snapshot *tableResultSnapshot) bool {
 	go a.fetchTotalRowCount(request.db, request.selectedTable, request.quotedTable, request.dbType, snapshot.pageLimit, request.pageOffset, request.generation, request.countQuery, countArgs)
 	a.results.SetTitle(a.paginatedResultTitle(snapshot.rowCount, snapshot.elapsed))
 	a.updateStatusBar("", snapshot.rowCount)
-	return true
-}
-
-func resultHeadersMatch(table *tview.Table, columnNames []string) bool {
-	if table == nil || len(columnNames) == 0 || table.GetColumnCount() != len(columnNames) {
-		return false
-	}
-	for column, name := range columnNames {
-		cell := table.GetCell(0, column)
-		if cell == nil {
-			return false
-		}
-		current := stripSortIndicator(cell.Text)
-		if reference, ok := cell.GetReference().(string); ok && strings.TrimSpace(reference) != "" {
-			current = reference
-		}
-		if current != name {
-			return false
-		}
-	}
 	return true
 }
 

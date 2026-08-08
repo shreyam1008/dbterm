@@ -54,8 +54,9 @@ var defaultKeymapBindings = map[string][]string{
 
 // Settings stores user-adjustable runtime settings.
 type Settings struct {
-	Keymap                map[string][]string `json:"keymap"`
-	DashboardHealthChecks string              `json:"dashboard_health_checks"`
+	Keymap                map[string][]string                  `json:"keymap"`
+	DashboardHealthChecks string                               `json:"dashboard_health_checks"`
+	TableColumnWidths     map[string]map[string]map[string]int `json:"table_column_widths,omitempty"`
 }
 
 // DefaultSettings returns a deep-copied default settings value.
@@ -63,6 +64,7 @@ func DefaultSettings() *Settings {
 	return &Settings{
 		Keymap:                DefaultKeymapBindings(),
 		DashboardHealthChecks: "auto",
+		TableColumnWidths:     map[string]map[string]map[string]int{},
 	}
 }
 
@@ -147,11 +149,13 @@ func mergeSettings(defaults, loaded *Settings) *Settings {
 	merged := &Settings{
 		Keymap:                map[string][]string{},
 		DashboardHealthChecks: "auto",
+		TableColumnWidths:     map[string]map[string]map[string]int{},
 	}
 
 	if defaults != nil {
 		merged.Keymap = cloneKeymapBindings(defaults.Keymap)
 		merged.DashboardHealthChecks = normalizeDashboardHealthChecks(defaults.DashboardHealthChecks)
+		merged.TableColumnWidths = cloneTableColumnWidths(defaults.TableColumnWidths)
 	}
 
 	if loaded == nil {
@@ -161,6 +165,7 @@ func mergeSettings(defaults, loaded *Settings) *Settings {
 	if mode := normalizeDashboardHealthChecks(loaded.DashboardHealthChecks); mode != "" {
 		merged.DashboardHealthChecks = mode
 	}
+	merged.TableColumnWidths = cloneTableColumnWidths(loaded.TableColumnWidths)
 
 	for action, bindings := range loaded.Keymap {
 		name := strings.ToLower(strings.TrimSpace(action))
@@ -177,6 +182,20 @@ func mergeSettings(defaults, loaded *Settings) *Settings {
 	}
 
 	return merged
+}
+
+func cloneTableColumnWidths(in map[string]map[string]map[string]int) map[string]map[string]map[string]int {
+	out := make(map[string]map[string]map[string]int, len(in))
+	for connection, tables := range in {
+		out[connection] = make(map[string]map[string]int, len(tables))
+		for table, columns := range tables {
+			out[connection][table] = make(map[string]int, len(columns))
+			for column, width := range columns {
+				out[connection][table][column] = width
+			}
+		}
+	}
+	return out
 }
 
 func cloneKeymapBindings(in map[string][]string) map[string][]string {

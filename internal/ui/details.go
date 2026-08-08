@@ -46,12 +46,7 @@ func (a *App) showRowDetail(row int) {
 
 	// Populate data
 	for i := 0; i < colCount; i++ {
-		colName := ""
-		headerCell := a.results.GetCell(0, i)
-		if headerCell != nil {
-			// Strip sort indicators
-			colName = strings.TrimSuffix(strings.TrimSuffix(headerCell.Text, " ▲"), " ▼")
-		}
+		colName := a.resultColumnName(i)
 
 		val := ""
 		cell := a.results.GetCell(row, i)

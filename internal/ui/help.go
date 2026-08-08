@@ -37,10 +37,10 @@ func keyboardHelpText() string {
   [yellow]Alt+E[-]            Export selected, current-page, or all matching rows to CSV
 
 [#a6e3a1]RESULTS — SIZE, SORT & PAGES[-]
-  [yellow]+ / -[-]            Widen / narrow only the selected column
-  [yellow]Ctrl++ / Ctrl+-[-]  Zoom all result columns in / out
-  [yellow]> / <[-]            Same all-column zoom (fallback when a terminal drops Ctrl)
-  [yellow]0 / Ctrl+0[-]       Reset all column widths
+  [yellow]+ / -[-]            Widen / narrow selected column (remembered per table)
+  [yellow]Ctrl++ / Ctrl+-[-]  Widen / narrow all columns (remembered per table)
+  [yellow]> / <[-]            Same all-column resize (fallback when a terminal drops Ctrl)
+  [yellow]0 / Ctrl+0[-]       Reset this table's column widths
   [#6c7086]Keyboard note[-]    The + character is already Shift+=, so Shift+plus is not a separate terminal key
   [yellow]S[-]                Sort by the selected column
   [yellow]PgDn / ][-]         Next page        [yellow]PgUp / Left bracket[-] Previous page

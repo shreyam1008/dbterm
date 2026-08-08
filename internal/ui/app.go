@@ -122,9 +122,8 @@ type App struct {
 	importCancel          func()
 	importCancelNotify    func()
 
-	// Column width / zoom state
-	tableZoom         int         // global zoom offset in steps (range: -5 to +10)
-	colWidthOverrides map[int]int // per-column max-width overrides (col index → width)
+	// Column width state
+	colWidthOverrides map[string]int // per-column widths (column name → width)
 }
 
 // NewApp creates a new dbterm application instance
@@ -286,7 +285,7 @@ func (a *App) setupUI() {
 		}
 
 		// Plain +/- adjusts one column. >/< and 0 remain terminal-safe
-		// fallbacks for all-column zoom/reset.
+		// fallbacks for resizing/resetting all columns.
 		switch resultSizeShortcutFor(event) {
 		case resultSizeSelectedIncrease:
 			_, col := a.results.GetSelection()
@@ -297,13 +296,13 @@ func (a *App) setupUI() {
 			a.adjustColumnWidth(col, -colWidthStep)
 			return nil
 		case resultSizeAllIncrease:
-			a.zoomTable(1)
+			a.resizeAllColumns(1)
 			return nil
 		case resultSizeAllDecrease:
-			a.zoomTable(-1)
+			a.resizeAllColumns(-1)
 			return nil
 		case resultSizeAllReset:
-			a.resetTableZoom()
+			a.resetColumnWidths()
 			return nil
 		}
 
@@ -839,6 +838,9 @@ func (a *App) setSortHeaderIndicator() {
 		} else {
 			headerCell.Text = name
 		}
+		if width := tview.TaggedStringWidth(headerCell.Text); headerCell.MaxWidth > width {
+			headerCell.Text += strings.Repeat(" ", headerCell.MaxWidth-width)
+		}
 	}
 }
 
@@ -1017,17 +1019,17 @@ func (a *App) setupKeyBindings() {
 		switch resultSizeShortcutFor(event) {
 		case resultSizeAllIncrease:
 			if resultSizeHasControlModifier(event) {
-				a.zoomTable(1)
+				a.resizeAllColumns(1)
 				return nil
 			}
 		case resultSizeAllDecrease:
 			if resultSizeHasControlModifier(event) {
-				a.zoomTable(-1)
+				a.resizeAllColumns(-1)
 				return nil
 			}
 		case resultSizeAllReset:
 			if resultSizeHasControlModifier(event) {
-				a.resetTableZoom()
+				a.resetColumnWidths()
 				return nil
 			}
 		case resultSizeRowsIncrease:
@@ -1202,18 +1204,19 @@ func resultSizeShortcutFor(event *tcell.EventKey) resultSizeShortcut {
 	}
 }
 
-// ── Column width / zoom helpers ──
+// ── Column width helpers ──
 
 const (
 	colWidthStep   = 4
 	minColWidth    = 8
-	minZoom        = -5
-	maxZoom        = 10
-	defaultColBase = 30 // initial base width when first adjusting a column
+	defaultColBase = 30
 )
 
-// applyColumnWidths sets MaxWidth on every cell based on zoom + per-column overrides.
+// applyColumnWidths gives every result column the same bounded default width.
 func (a *App) applyColumnWidths() {
+	if a == nil || a.results == nil {
+		return
+	}
 	rowCount := a.results.GetRowCount()
 	colCount := a.results.GetColumnCount()
 	if rowCount == 0 || colCount == 0 {
@@ -1224,22 +1227,21 @@ func (a *App) applyColumnWidths() {
 	maxW := max(minColWidth, screenW)
 
 	for c := 0; c < colCount; c++ {
-		w := 0 // 0 = auto / unlimited
-		if override, ok := a.colWidthOverrides[c]; ok {
+		name := a.resultColumnName(c)
+		w := defaultColBase
+		if override, ok := a.colWidthOverrides[name]; ok {
 			w = override
 		}
-		if a.tableZoom != 0 && w == 0 {
-			// Apply zoom from a reasonable base
-			w = defaultColBase + a.tableZoom*colWidthStep
-		} else if a.tableZoom != 0 {
-			w += a.tableZoom * colWidthStep
-		}
-		if w > 0 {
-			w = clamp(w, minColWidth, maxW)
-		}
+		w = clamp(w, minColWidth, maxW)
 		for r := 0; r < rowCount; r++ {
 			if cell := a.results.GetCell(r, c); cell != nil {
-				cell.SetMaxWidth(w)
+				cell.SetMaxWidth(w).SetExpansion(0)
+			}
+		}
+		if header := a.results.GetCell(0, c); header != nil {
+			label := strings.TrimSpace(header.Text)
+			if width := tview.TaggedStringWidth(label); width < w {
+				header.Text = label + strings.Repeat(" ", w-width)
 			}
 		}
 	}
@@ -1247,52 +1249,136 @@ func (a *App) applyColumnWidths() {
 
 // adjustColumnWidth changes the width of a single column by delta characters.
 func (a *App) adjustColumnWidth(col, delta int) {
+	name := a.resultColumnName(col)
+	if name == "" {
+		return
+	}
 	if a.colWidthOverrides == nil {
-		a.colWidthOverrides = make(map[int]int)
+		a.colWidthOverrides = make(map[string]int)
 	}
 	screenW, _ := a.getScreenSize()
 	maxW := max(minColWidth, screenW)
 
-	current, ok := a.colWidthOverrides[col]
+	current, ok := a.colWidthOverrides[name]
 	if !ok {
 		current = defaultColBase
 	}
 	newW := clamp(current+delta, minColWidth, maxW)
-	a.colWidthOverrides[col] = newW
+	a.colWidthOverrides[name] = newW
 	a.applyColumnWidths()
 
-	a.flashStatus(fmt.Sprintf("[teal]col %d width → %d[-]", col+1, newW), a.currentResultRowCount(), 1200*time.Millisecond)
+	message := fmt.Sprintf("[teal]%s width → %d[-]", tview.Escape(name), newW)
+	if err := a.persistColumnWidths(); err != nil {
+		message = "[yellow]Width changed for this session, but could not be saved[-]"
+	}
+	a.flashStatus(message, a.currentResultRowCount(), 1200*time.Millisecond)
 }
 
-// zoomTable adjusts the global zoom level for all columns.
-func (a *App) zoomTable(delta int) {
-	newZoom := clamp(a.tableZoom+delta, minZoom, maxZoom)
-	if newZoom == a.tableZoom {
+// resizeAllColumns adjusts every visible column by one step.
+func (a *App) resizeAllColumns(delta int) {
+	if a == nil || a.results == nil || delta == 0 {
 		return
 	}
-	a.tableZoom = newZoom
+	if a.colWidthOverrides == nil {
+		a.colWidthOverrides = make(map[string]int)
+	}
+	screenW, _ := a.getScreenSize()
+	maxW := max(minColWidth, screenW)
+	changed := false
+	for col := 0; col < a.results.GetColumnCount(); col++ {
+		name := a.resultColumnName(col)
+		if name == "" {
+			continue
+		}
+		current := defaultColBase
+		if override, ok := a.colWidthOverrides[name]; ok {
+			current = override
+		}
+		width := clamp(current+delta*colWidthStep, minColWidth, maxW)
+		if width != current {
+			changed = true
+		}
+		a.colWidthOverrides[name] = width
+	}
+	if !changed {
+		return
+	}
 	a.applyColumnWidths()
 
-	label := "default"
-	if a.tableZoom > 0 {
-		label = fmt.Sprintf("+%d", a.tableZoom)
-	} else if a.tableZoom < 0 {
-		label = fmt.Sprintf("%d", a.tableZoom)
+	message := "[teal]All columns narrowed[-]"
+	if delta > 0 {
+		message = "[teal]All columns widened[-]"
 	}
-	a.flashStatus(fmt.Sprintf("[teal]zoom %s[-]", label), a.currentResultRowCount(), 1200*time.Millisecond)
+	if err := a.persistColumnWidths(); err != nil {
+		message = "[yellow]Widths changed for this session, but could not be saved[-]"
+	}
+	a.flashStatus(message, a.currentResultRowCount(), 1200*time.Millisecond)
 }
 
-// resetTableZoom resets zoom and per-column overrides to defaults.
-func (a *App) resetTableZoom() {
-	a.tableZoom = 0
+// resetColumnWidths resets all columns to the uniform default.
+func (a *App) resetColumnWidths() {
 	a.colWidthOverrides = nil
 	a.applyColumnWidths()
-	a.flashStatus("[green]zoom reset[-]", a.currentResultRowCount(), 1200*time.Millisecond)
+	message := "[green]Column widths reset[-]"
+	if err := a.persistColumnWidths(); err != nil {
+		message = "[yellow]Widths reset for this session, but could not be saved[-]"
+	}
+	a.flashStatus(message, a.currentResultRowCount(), 1200*time.Millisecond)
 }
 
-// clearColumnOverrides resets per-column width overrides (called on table/query change).
+// clearColumnOverrides resets widths for non-table query results.
 func (a *App) clearColumnOverrides() {
 	a.colWidthOverrides = nil
+}
+
+func (a *App) restoreColumnWidths(table string) {
+	a.colWidthOverrides = nil
+	if a == nil || a.settings == nil {
+		return
+	}
+	connection, ok := a.activeConnectionKey()
+	if !ok {
+		return
+	}
+	columns := a.settings.TableColumnWidths[connection][table]
+	if len(columns) == 0 {
+		return
+	}
+	a.colWidthOverrides = make(map[string]int, len(columns))
+	for column, width := range columns {
+		a.colWidthOverrides[column] = width
+	}
+}
+
+func (a *App) persistColumnWidths() error {
+	if a == nil || a.settings == nil || !a.isTableResultActive() {
+		return nil
+	}
+	connection, ok := a.activeConnectionKey()
+	if !ok {
+		return nil
+	}
+	if a.settings.TableColumnWidths == nil {
+		a.settings.TableColumnWidths = make(map[string]map[string]map[string]int)
+	}
+	if len(a.colWidthOverrides) == 0 {
+		if tables := a.settings.TableColumnWidths[connection]; tables != nil {
+			delete(tables, a.selectedTable)
+			if len(tables) == 0 {
+				delete(a.settings.TableColumnWidths, connection)
+			}
+		}
+	} else {
+		if a.settings.TableColumnWidths[connection] == nil {
+			a.settings.TableColumnWidths[connection] = make(map[string]map[string]int)
+		}
+		columns := make(map[string]int, len(a.colWidthOverrides))
+		for column, width := range a.colWidthOverrides {
+			columns[column] = width
+		}
+		a.settings.TableColumnWidths[connection][a.selectedTable] = columns
+	}
+	return config.SaveSettings(a.settings)
 }
 
 // cleanup gracefully closes the database connection

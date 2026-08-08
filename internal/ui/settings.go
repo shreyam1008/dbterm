@@ -86,12 +86,22 @@ func cloneSettings(settings *config.Settings) *config.Settings {
 	cloned := &config.Settings{
 		Keymap:                make(map[string][]string, len(settings.Keymap)),
 		DashboardHealthChecks: settings.DashboardHealthChecks,
+		TableColumnWidths:     make(map[string]map[string]map[string]int, len(settings.TableColumnWidths)),
 	}
 
 	for action, bindings := range settings.Keymap {
 		copied := make([]string, len(bindings))
 		copy(copied, bindings)
 		cloned.Keymap[action] = copied
+	}
+	for connection, tables := range settings.TableColumnWidths {
+		cloned.TableColumnWidths[connection] = make(map[string]map[string]int, len(tables))
+		for table, columns := range tables {
+			cloned.TableColumnWidths[connection][table] = make(map[string]int, len(columns))
+			for column, width := range columns {
+				cloned.TableColumnWidths[connection][table][column] = width
+			}
+		}
 	}
 
 	return cloned

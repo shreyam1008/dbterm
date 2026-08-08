@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"database/sql"
+	"path/filepath"
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
@@ -174,18 +175,71 @@ func TestManualQueryResultOwnershipRejectsNewerTableIntent(t *testing.T) {
 	}
 }
 
-func TestResultHeadersMatchPreservesWidthsOnlyForSameShape(t *testing.T) {
+func TestApplyColumnWidthsUsesUniformFixedDefault(t *testing.T) {
 	table := newResultTable()
-	table.SetCell(0, 0, tview.NewTableCell("ID ▲").SetReference("id"))
-	table.SetCell(0, 1, tview.NewTableCell("NAME").SetReference("name"))
-	if !resultHeadersMatch(table, []string{"id", "name"}) {
-		t.Fatal("same referenced headers should match despite a sort indicator")
+	table.SetCell(0, 0, tview.NewTableCell("ID").SetReference("id").SetExpansion(1))
+	table.SetCell(0, 1, tview.NewTableCell("VERY_LONG_PROFILE_COLUMN").SetReference("profile").SetExpansion(1))
+	table.SetCell(1, 0, tview.NewTableCell("1").SetExpansion(1))
+	table.SetCell(1, 1, tview.NewTableCell("a value").SetExpansion(1))
+
+	app := &App{results: table, lastScreenW: 120, lastScreenH: 40}
+	app.applyColumnWidths()
+
+	for col := 0; col < table.GetColumnCount(); col++ {
+		for row := 0; row < table.GetRowCount(); row++ {
+			cell := table.GetCell(row, col)
+			if cell.MaxWidth != defaultColBase || cell.Expansion != 0 {
+				t.Fatalf("cell (%d,%d) width/expansion = %d/%d, want %d/0", row, col, cell.MaxWidth, cell.Expansion, defaultColBase)
+			}
+		}
+		if got := tview.TaggedStringWidth(table.GetCell(0, col).Text); got != defaultColBase {
+			t.Fatalf("header %d rendered width = %d, want %d", col, got, defaultColBase)
+		}
 	}
-	if resultHeadersMatch(table, []string{"id", "email"}) {
-		t.Fatal("different headers unexpectedly matched")
+	app.sortColumn = 0
+	app.sortAsc = true
+	app.setSortHeaderIndicator()
+	if got := tview.TaggedStringWidth(table.GetCell(0, 0).Text); got != defaultColBase {
+		t.Fatalf("sorted header width = %d, want %d", got, defaultColBase)
 	}
-	if resultHeadersMatch(table, []string{"id"}) {
-		t.Fatal("different column count unexpectedly matched")
+}
+
+func TestColumnWidthsPersistPerConnectionAndTable(t *testing.T) {
+	t.Setenv("DBTERM_CONFIG_DIR", t.TempDir())
+	connection := &config.ConnectionConfig{Type: config.SQLite, FilePath: filepath.Join(t.TempDir(), "test.db")}
+	settings := config.DefaultSettings()
+	app := &App{
+		activeConn:         connection,
+		settings:           settings,
+		selectedTable:      "users",
+		tableResultsActive: true,
+		colWidthOverrides:  map[string]int{"id": 18, "profile": 42},
+	}
+
+	if err := app.persistColumnWidths(); err != nil {
+		t.Fatalf("persistColumnWidths() error = %v", err)
+	}
+	app.selectedTable = "orders"
+	app.colWidthOverrides = map[string]int{"total": 22}
+	if err := app.persistColumnWidths(); err != nil {
+		t.Fatalf("persist orders widths: %v", err)
+	}
+	reloaded, err := config.LoadSettings()
+	if err != nil {
+		t.Fatalf("LoadSettings() error = %v", err)
+	}
+	restarted := &App{activeConn: connection, settings: reloaded}
+	restarted.restoreColumnWidths("users")
+	if got := restarted.colWidthOverrides["profile"]; got != 42 {
+		t.Fatalf("restored users.profile width = %d, want 42", got)
+	}
+
+	restarted.restoreColumnWidths("orders")
+	if got := restarted.colWidthOverrides["total"]; got != 22 {
+		t.Fatalf("restored orders.total width = %d, want 22", got)
+	}
+	if _, inherited := restarted.colWidthOverrides["profile"]; inherited {
+		t.Fatalf("orders inherited users widths: %#v", restarted.colWidthOverrides)
 	}
 }
 

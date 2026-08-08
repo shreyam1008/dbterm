@@ -121,3 +121,22 @@ func TestLoadSettingsMergesDashboardHealthCheckOverride(t *testing.T) {
 		t.Fatalf("expected disabled alias to normalize to manual, got %q", settings.DashboardHealthChecks)
 	}
 }
+
+func TestSaveSettingsPreservesTableColumnWidths(t *testing.T) {
+	useTestConfigDir(t)
+	settings := DefaultSettings()
+	settings.TableColumnWidths["connection"] = map[string]map[string]int{
+		"users": {"id": 18, "profile": 42},
+	}
+
+	if err := SaveSettings(settings); err != nil {
+		t.Fatalf("SaveSettings() error = %v", err)
+	}
+	reloaded, err := LoadSettings()
+	if err != nil {
+		t.Fatalf("LoadSettings() error = %v", err)
+	}
+	if got := reloaded.TableColumnWidths["connection"]["users"]["profile"]; got != 42 {
+		t.Fatalf("reloaded profile width = %d, want 42", got)
+	}
+}

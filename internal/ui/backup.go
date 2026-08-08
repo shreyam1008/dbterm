@@ -371,8 +371,14 @@ func backupPlanFor(cfg *config.ConnectionConfig) (backupPlan, error) {
 }
 
 func (a *App) currentConnectionConfig() *config.ConnectionConfig {
+	if a == nil {
+		return nil
+	}
 	if a.activeConn != nil {
 		return cloneConnectionConfig(a.activeConn)
+	}
+	if a.store == nil {
+		return nil
 	}
 
 	for i := range a.store.Connections {

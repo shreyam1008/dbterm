@@ -137,6 +137,7 @@ func (a *App) executeQueryWorker(ctx context.Context, finish func(), db *sql.DB,
 			a.tableResultsActive = false
 			a.clearResultNavigation()
 			a.resetSort()
+			a.clearColumnOverrides()
 			a.results.Clear()
 			for r := 0; r < newResults.GetRowCount(); r++ {
 				for c := 0; c < newResults.GetColumnCount(); c++ {

@@ -122,9 +122,9 @@ Run the interactive TUI as your normal OS user, not with `sudo`. An elevated TUI
 | `F` / `Backspace` (Results) | Follow a declared foreign key / return to the previous table |
 | `Esc` (filtered Results) | Clear the active filter; press again to return to Dashboard |
 | `Alt++ / Alt+- / Alt+0` | Increase / decrease / toggle preview rows per page (`100` ↔ safe max) |
-| `+` / `-` (Results) | Widen / narrow the selected column |
-| `Ctrl++ / Ctrl+- / Ctrl+0` (Results) | Zoom all columns in / out / reset widths (`Ctrl+=` also zooms in) |
-| `>` / `<` / `0` (Results) | Terminal-safe all-column zoom / reset fallback |
+| `+` / `-` (Results) | Widen / narrow the selected column (remembered per table) |
+| `Ctrl++ / Ctrl+- / Ctrl+0` (Results) | Resize all columns / reset widths (remembered per table; `Ctrl+=` also widens) |
+| `>` / `<` / `0` (Results) | Terminal-safe all-column resize / reset fallback |
 | `F5 / Ctrl + F5` | Refresh table / full refresh |
 | `Ctrl + C` | Cancel an active query/import/export; otherwise quit |
 

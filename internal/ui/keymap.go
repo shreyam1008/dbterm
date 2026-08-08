@@ -156,9 +156,9 @@ func validateGlobalActionBinding(binding string) error {
 		return fmt.Errorf("Ctrl/Alt sizing aliases are reserved for result columns and preview rows")
 	}
 	reserved := map[string]string{
-		"ctrl++": "result-column zoom",
-		"ctrl+-": "result-column zoom",
-		"ctrl+0": "result-column zoom reset",
+		"ctrl++": "result-column resizing",
+		"ctrl+-": "result-column resizing",
+		"ctrl+0": "result-column width reset",
 		"alt++":  "preview row sizing",
 		"alt+-":  "preview row sizing",
 		"alt+0":  "preview row sizing reset",
