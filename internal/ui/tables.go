@@ -149,6 +149,7 @@ func (a *App) applyTableListSnapshot(snapshot *tableListSnapshot) {
 		a.tables.SetCurrentItem(snapshot.selectedIndex)
 		a.selectedTable = snapshot.selectedTable
 	}
+	a.refreshTableSidebarState()
 
 	a.tables.SetSelectedFunc(func(index int, _ string, _ string, _ rune) {
 		if obj, ok := a.databaseObjects[index]; ok {
@@ -239,7 +240,13 @@ func isSelectableTableListItem(list interface {
 }
 
 func isSelectableTableLabel(label string) bool {
-	return !strings.HasPrefix(strings.TrimSpace(label), "[")
+	trimmed := strings.TrimSpace(label)
+	if strings.HasPrefix(trimmed, "[#a6e3a1]▶[-]") ||
+		strings.HasPrefix(trimmed, "[#6c7086]•[-]") ||
+		strings.HasPrefix(trimmed, "[#cba6f7]/[-]") {
+		return true
+	}
+	return !strings.HasPrefix(trimmed, "[")
 }
 
 func (a *App) handleTableListInput(event *tcell.EventKey) *tcell.EventKey {
@@ -305,22 +312,58 @@ func (a *App) applyTableSearch() {
 			continue
 		}
 
-		label := identifier
+		identifierLabel := tview.Escape(identifier)
 		if a.tableSearch != "" {
 			if highlighted, matched := highlightTableSearchMatch(identifier, a.tableSearch); matched {
-				label = highlighted
+				identifierLabel = highlighted
 				if firstMatch < 0 {
 					firstMatch = index
 				}
 			}
 		}
-		a.tables.SetItemText(index, label, "")
+		a.tables.SetItemText(index, a.tableSidebarLabel(identifier, identifierLabel), "")
 	}
 
 	if firstMatch >= 0 {
 		a.tables.SetCurrentItem(firstMatch)
 	}
 	a.updateTableListTitle()
+}
+
+// refreshTableSidebarState redraws table-only rows without disturbing schema
+// headers or discovered database objects. The markers work without color:
+// ▶ is the table currently shown, • means opened this connection, and / means
+// that table has a remembered filter.
+func (a *App) refreshTableSidebarState() {
+	if a == nil || a.tables == nil {
+		return
+	}
+	a.applyTableSearch()
+}
+
+func (a *App) tableSidebarLabel(identifier, identifierLabel string) string {
+	stateMarker := " "
+	if identifier != "" && identifier == a.activeTable && a.tableResultsActive {
+		stateMarker = "[#a6e3a1]▶[-]"
+	} else if a.visitedTables != nil && a.visitedTables[identifier] {
+		stateMarker = "[#6c7086]•[-]"
+	}
+
+	filterMarker := " "
+	if a.tableHasRememberedFilter(identifier) {
+		filterMarker = "[#cba6f7]/[-]"
+	}
+	return fmt.Sprintf("%s%s %s", stateMarker, filterMarker, identifierLabel)
+}
+
+func (a *App) tableHasRememberedFilter(identifier string) bool {
+	if a == nil || identifier == "" {
+		return false
+	}
+	if filter := a.resultFilters[identifier]; filter != nil && len(filter.orderedPredicates()) > 0 {
+		return true
+	}
+	return identifier == a.selectedTable && a.activeResultFilter(identifier) != nil
 }
 
 func (a *App) firstTableSearchMatch(query string) int {
@@ -384,5 +427,6 @@ func (a *App) updateTableListTitle() {
 	if a.tableSearch != "" {
 		search = fmt.Sprintf(" [#a6adc8]find:[-] [#f9e2af]%s[-]", tview.Escape(a.tableSearch))
 	}
-	a.tables.SetTitle(fmt.Sprintf(" %s %s%s [yellow](Alt+T)[-] ", iconTables, count, search))
+	legend := " [#6c7086]▶ now • used / filter[-]"
+	a.tables.SetTitle(fmt.Sprintf(" %s %s%s%s [yellow](Alt+T)[-] ", iconTables, count, search, legend))
 }

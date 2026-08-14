@@ -135,6 +135,8 @@ func (a *App) executeQueryWorker(ctx context.Context, finish func(), db *sql.DB,
 		finishOnReturn = false
 		a.queueManualQueryCompletion(db, resultGeneration, finish, func() {
 			a.tableResultsActive = false
+			a.activeTable = ""
+			a.refreshTableSidebarState()
 			a.clearResultNavigation()
 			a.resetSort()
 			a.clearColumnOverrides()

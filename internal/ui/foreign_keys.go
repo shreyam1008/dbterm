@@ -451,10 +451,11 @@ func (a *App) followForeignKeyReference(ref foreignKeyReference, rowValues map[s
 	origin := a.captureResultNavigationState()
 	stackDepth := len(a.resultNavStack)
 	a.resultNavStack = append(a.resultNavStack, origin)
+	a.rememberCurrentResultFilter()
 	a.selectedTable = ref.targetTable
 	a.resetSort()
 	a.resetPagination()
-	a.resultFilter = newResultValueFilter(ref.targetTable, predicates)
+	a.setCurrentResultFilter(newResultValueFilter(ref.targetTable, predicates))
 	a.selectTableListIdentifier(ref.targetTable)
 	a.setFocusWithColor(a.results)
 
@@ -548,7 +549,7 @@ func (a *App) captureResultNavigationState() resultNavigationState {
 
 func (a *App) restoreResultNavigationState(state resultNavigationState) {
 	a.selectedTable = state.table
-	a.resultFilter = cloneResultValueFilter(state.filter)
+	a.setCurrentResultFilter(state.filter)
 	a.pageOffset = state.pageOffset
 	a.pageSize = state.pageSize
 	a.totalRowCount = state.totalRowCount

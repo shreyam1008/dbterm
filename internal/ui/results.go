@@ -211,6 +211,12 @@ func (a *App) applyTableResultSnapshot(snapshot *tableResultSnapshot) bool {
 	}
 	a.pageSize = snapshot.pageLimit
 	a.tableResultsActive = true
+	a.activeTable = request.selectedTable
+	if a.visitedTables == nil {
+		a.visitedTables = make(map[string]bool)
+	}
+	a.visitedTables[request.selectedTable] = true
+	a.refreshTableSidebarState()
 	a.queryStart = request.startedAt
 	if a.sortColumn >= len(snapshot.columnNames) {
 		a.resetSort()

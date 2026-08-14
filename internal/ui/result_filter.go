@@ -592,18 +592,21 @@ func (a *App) setCurrentResultFilter(filter *resultValueFilter) {
 		a.resultFilter.table = table
 	}
 	if table == "" {
+		a.refreshTableSidebarState()
 		return
 	}
 	if a.resultFilter == nil || len(a.resultFilter.orderedPredicates()) == 0 {
 		if a.resultFilters != nil {
 			delete(a.resultFilters, table)
 		}
+		a.refreshTableSidebarState()
 		return
 	}
 	if a.resultFilters == nil {
 		a.resultFilters = make(map[string]*resultValueFilter)
 	}
 	a.resultFilters[table] = cloneResultValueFilter(a.resultFilter)
+	a.refreshTableSidebarState()
 }
 
 func (a *App) rememberCurrentResultFilter() {
@@ -634,12 +637,14 @@ func (a *App) restoreRememberedResultFilter(table string) {
 	table = strings.TrimSpace(table)
 	a.resultFilter = nil
 	if table == "" || a.resultFilters == nil {
+		a.refreshTableSidebarState()
 		return
 	}
 	if filter := a.resultFilters[table]; filter != nil {
 		a.resultFilter = cloneResultValueFilter(filter)
 		a.resultFilter.table = table
 	}
+	a.refreshTableSidebarState()
 }
 
 func (a *App) selectTableWithRememberedFilter(table string) {
@@ -924,7 +929,7 @@ func (a *App) resultFilterBadge() string {
 	if len(predicates) > len(previews) {
 		summary += fmt.Sprintf(" +%d", len(predicates)-len(previews))
 	}
-	return fmt.Sprintf(" [#cba6f7](filters %d: %s • Esc clear all)[-]", len(predicates), tview.Escape(summary))
+	return fmt.Sprintf(" [#cba6f7]FILTERED %d: %s • Esc clears[-]", len(predicates), tview.Escape(summary))
 }
 
 func resultValuePreview(value string, maxRunes int) string {

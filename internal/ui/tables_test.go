@@ -15,6 +15,9 @@ func TestIsSelectableTableLabelIgnoresDecorativeRows(t *testing.T) {
 		want  bool
 	}{
 		{name: "plain table", label: "public.users", want: true},
+		{name: "active table", label: "[#a6e3a1]▶[-][#cba6f7]/[-] public.users", want: true},
+		{name: "visited table", label: "[#6c7086]•[-]  public.orders", want: true},
+		{name: "filtered unvisited table", label: "[#cba6f7]/[-] public.logs", want: true},
 		{name: "section header", label: "[#6c7086]── Views (2) ──[-]", want: false},
 		{name: "indented styled object", label: "  [#a6adc8]◈[-] reporting_view", want: false},
 		{name: "empty decorative", label: "   [gray]No tables found[-]", want: false},
@@ -79,8 +82,86 @@ func TestTableTypeAheadSelectsFirstMatchAndClearsOnEnter(t *testing.T) {
 		t.Fatalf("search was not cleared: %q", app.tableSearch)
 	}
 	label, _ = list.GetItemText(1)
-	if label != "audit_users" {
+	if label != "   audit_users" {
 		t.Fatalf("highlight was not cleared: %q", label)
+	}
+}
+
+func TestTableSidebarShowsActiveVisitedAndFilteredStates(t *testing.T) {
+	list := tview.NewList().ShowSecondaryText(false)
+	for _, table := range []string{"users", "orders", "logs"} {
+		list.AddItem(table, "", 0, nil)
+	}
+	app := &App{
+		tables:             list,
+		tableIdentifiers:   map[int]string{0: "users", 1: "orders", 2: "logs"},
+		tableCount:         3,
+		selectedTable:      "users",
+		activeTable:        "users",
+		tableResultsActive: true,
+		visitedTables:      map[string]bool{"users": true, "orders": true},
+		resultFilter: newResultValueFilter("users", []resultFilterPredicate{
+			{column: "status", operator: resultFilterEqual, value: "active"},
+		}),
+		resultFilters: map[string]*resultValueFilter{
+			"users": newResultValueFilter("users", []resultFilterPredicate{
+				{column: "status", operator: resultFilterEqual, value: "active"},
+			}),
+		},
+	}
+
+	app.refreshTableSidebarState()
+	users, _ := list.GetItemText(0)
+	orders, _ := list.GetItemText(1)
+	logs, _ := list.GetItemText(2)
+	if !strings.Contains(users, "▶") || !strings.Contains(users, "/") {
+		t.Fatalf("active filtered table markers missing: %q", users)
+	}
+	if !strings.Contains(orders, "•") || strings.Contains(orders, "/") {
+		t.Fatalf("visited table marker is wrong: %q", orders)
+	}
+	if strings.ContainsAny(logs, "▶•/") {
+		t.Fatalf("untouched table has a state marker: %q", logs)
+	}
+	if !strings.Contains(list.GetTitle(), "▶ now • used / filter") {
+		t.Fatalf("sidebar marker legend missing: %q", list.GetTitle())
+	}
+
+	app.tableSearch = "SER"
+	app.applyTableSearch()
+	users, _ = list.GetItemText(0)
+	if !strings.Contains(users, "▶") || !strings.Contains(users, "/") || !strings.Contains(users, "[black:#f9e2af:b]ser[-:-:-]") {
+		t.Fatalf("search did not preserve sidebar state markers: %q", users)
+	}
+}
+
+func TestClearTableSessionStateDropsConnectionScopedMarkers(t *testing.T) {
+	list := tview.NewList().ShowSecondaryText(false)
+	list.AddItem("users", "", 0, nil)
+	app := &App{
+		tables:             list,
+		tableIdentifiers:   map[int]string{0: "users"},
+		tableCount:         1,
+		selectedTable:      "users",
+		tableSearch:        "user",
+		activeTable:        "users",
+		tableResultsActive: true,
+		visitedTables:      map[string]bool{"users": true},
+		resultFilters: map[string]*resultValueFilter{
+			"users": newResultValueFilter("users", []resultFilterPredicate{
+				{column: "id", operator: resultFilterEqual, value: "42"},
+			}),
+		},
+	}
+	app.resultFilter = cloneResultValueFilter(app.resultFilters["users"])
+
+	app.clearTableSessionState()
+	if app.activeTable != "" || app.selectedTable != "" || app.tableSearch != "" || app.tableResultsActive || app.visitedTables != nil || app.resultFilter != nil || app.resultFilters != nil {
+		t.Fatalf("connection-scoped table state was not cleared: %#v", app)
+	}
+	label, _ := list.GetItemText(0)
+	if strings.ContainsAny(label, "▶•/") {
+		t.Fatalf("sidebar retained a connection marker after cleanup: %q", label)
 	}
 }
 

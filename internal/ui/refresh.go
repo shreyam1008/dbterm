@@ -97,7 +97,10 @@ func (a *App) refreshDataAsyncWithCallbacks(callbacks refreshDataCallbacks) {
 			a.loadDatabaseObjects()
 			if snapshot == nil || snapshot.tableCount == 0 || a.selectedTable == "" {
 				a.clearResultNavigation()
+				a.activeTable = ""
+				a.tableResultsActive = false
 				a.resultFilter = nil
+				a.refreshTableSidebarState()
 				a.results.Clear()
 				a.results.SetTitle(fmt.Sprintf(" %s Results [yellow](Alt+R)[-] ", iconResults))
 				a.updateStatusBar(fmt.Sprintf("[green]%s Database refreshed[-]", iconRefresh), 0)
@@ -142,6 +145,8 @@ func (a *App) refreshDataAsyncWithCallbacks(callbacks refreshDataCallbacks) {
 					a.restoreResultNavigationState(fallback)
 					a.clearResultNavigation()
 					a.tableResultsActive = false
+					a.activeTable = ""
+					a.refreshTableSidebarState()
 					a.results.Clear()
 					a.results.SetTitle(fmt.Sprintf(" %s Results — [yellow]%s not loaded[-] ", iconResults, a.selectedTable))
 					a.updateStatusBar("[yellow]Previous table no longer exists[-]", 0)

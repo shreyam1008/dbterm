@@ -378,3 +378,16 @@ func TestResultValuePreviewKeepsStatusOnOneLine(t *testing.T) {
 		t.Fatalf("resultValuePreview() = %q", got)
 	}
 }
+
+func TestResultFilterBadgeExplicitlyShowsFilteredState(t *testing.T) {
+	app := &App{
+		selectedTable: "users",
+		resultFilter: newResultValueFilter("users", []resultFilterPredicate{
+			{column: "status", operator: resultFilterEqual, value: "active"},
+		}),
+	}
+	badge := app.resultFilterBadge()
+	if !strings.Contains(badge, "FILTERED 1") || !strings.Contains(badge, "Esc clears") {
+		t.Fatalf("filter badge is not explicit enough: %q", badge)
+	}
+}

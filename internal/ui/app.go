@@ -66,6 +66,8 @@ type App struct {
 	tableSearch         string
 	databaseObjectCount int
 	selectedTable       string
+	activeTable         string          // table whose rows are currently visible
+	visitedTables       map[string]bool // tables opened during the active connection
 	tableResultsActive  bool
 	resultFilter        *resultValueFilter
 	resultFilters       map[string]*resultValueFilter // remembered per table for the active connection
@@ -1410,14 +1412,30 @@ func (a *App) cleanup() {
 	a.objectGeneration.Add(1)
 	a.requestActiveQueryCancel()
 	a.cancelActiveResultExport()
-	a.resultFilter = nil
-	a.resultFilters = nil
+	a.clearTableSessionState()
 	a.resultNavStack = nil
 	if a.db != nil {
 		a.db.Close()
 		a.db = nil
 	}
 	a.activeConn = nil
+}
+
+// clearTableSessionState drops visual browsing history and remembered filters.
+// These hints describe only the active database connection and must never leak
+// into the next connection.
+func (a *App) clearTableSessionState() {
+	if a == nil {
+		return
+	}
+	a.activeTable = ""
+	a.visitedTables = nil
+	a.selectedTable = ""
+	a.tableSearch = ""
+	a.tableResultsActive = false
+	a.resultFilter = nil
+	a.resultFilters = nil
+	a.refreshTableSidebarState()
 }
 
 func (a *App) advanceResultGeneration() uint64 {
