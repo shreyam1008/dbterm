@@ -319,6 +319,11 @@ func protectConfiguredBackupArtifacts(paths uninstallDataPaths, purgeRoots []str
 	_ = runRows.Close()
 
 	for _, candidate := range protected {
+		if backupcore.IsRemoteBackupDestination(candidate.path) {
+			// Remote rclone objects cannot be contained by a local configuration,
+			// state, or log purge root and are never touched by uninstall.
+			continue
+		}
 		resolved, exists, err := resolveExistingProtectedPath(candidate.path)
 		if err != nil {
 			return fmt.Errorf("resolve %s: %w", candidate.label, err)

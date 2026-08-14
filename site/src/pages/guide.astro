@@ -326,7 +326,7 @@ dbterm backup restore --connection production --identity ./age-identity.txt --ye
     </div>
 
     <p class="notice">
-      Scheduled destinations are local folders or mounted volumes. PostgreSQL/MySQL require their official clients; SQLite SQL restore requires <code>sqlite3</code>. Restore supports PostgreSQL, MySQL/MariaDB, and local SQLite. Merge is the restore default; clean restore is explicit and destructive.
+      Scheduled destinations can be absolute local/mounted folders or <code>rclone://remote/path</code> locations. Configure rclone under the backup agent’s OS account. PostgreSQL/MySQL require their official clients; SQLite SQL restore requires <code>sqlite3</code>. Restore supports PostgreSQL, MySQL/MariaDB, and local SQLite. Merge is the restore default; clean restore is explicit and destructive.
     </p>
     <p class="notice">Retention can combine newest-count, maximum-age, and total-size ceilings. Backup Center previews capacity and can apply the policy immediately; cleanup is restricted to verified artifacts recorded for that exact job, and always preserves its newest successful backup.</p>
     <p class="notice">Per-job email can report failures, successes, both, or neither. Gmail defaults to STARTTLS on port 587; custom SMTP and implicit TLS are available. Test delivery before relying on it, and protect the locally stored app password.</p>

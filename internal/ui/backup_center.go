@@ -574,7 +574,7 @@ func backupPlanDefaultsSummary(job backupcore.Job) string {
 
 const (
 	backupFormLabelConnection  = "Database Connection"
-	backupFormLabelDestination = "Save To [F2 choose]"
+	backupFormLabelDestination = "Save To (folder or rclone://remote/path)"
 	backupFormLabelAdvanced    = "More Settings (Enter)"
 )
 
@@ -812,22 +812,28 @@ func (a *App) showBackupJobFormForConnection(existing *backupcore.Job, preferred
 		}
 		candidate.NextRunAt = time.Time{}
 		if candidate.Destination == "" {
-			a.ShowAlert(fmt.Sprintf("%s Destination folder is required.", iconInfo), pageBackupForm)
+			a.ShowAlert(fmt.Sprintf("%s Backup destination is required.", iconInfo), pageBackupForm)
 			return
 		}
-		expandedDestination, pathErr := expandHomePath(candidate.Destination)
+		destinationInput := candidate.Destination
+		if !backupcore.IsRemoteBackupDestination(destinationInput) {
+			expandedDestination, pathErr := expandHomePath(destinationInput)
+			if pathErr != nil {
+				a.ShowAlert(fmt.Sprintf("%s Invalid destination:\n\n%v", iconWarn, pathErr), pageBackupForm)
+				return
+			}
+			destinationInput = expandedDestination
+		}
+		destination, pathErr := backupcore.NormalizeBackupDestination(destinationInput)
 		if pathErr != nil {
 			a.ShowAlert(fmt.Sprintf("%s Invalid destination:\n\n%v", iconWarn, pathErr), pageBackupForm)
 			return
 		}
-		destination, pathErr := filepath.Abs(filepath.Clean(expandedDestination))
-		if pathErr != nil {
-			a.ShowAlert(fmt.Sprintf("%s Invalid destination:\n\n%v", iconWarn, pathErr), pageBackupForm)
-			return
-		}
-		if mkdirErr := os.MkdirAll(destination, 0o700); mkdirErr != nil {
-			a.ShowAlert(fmt.Sprintf("%s Could not create destination:\n\n%v", iconWarn, mkdirErr), pageBackupForm)
-			return
+		if !backupcore.IsRemoteBackupDestination(destination) {
+			if mkdirErr := os.MkdirAll(destination, 0o700); mkdirErr != nil {
+				a.ShowAlert(fmt.Sprintf("%s Could not create destination:\n\n%v", iconWarn, mkdirErr), pageBackupForm)
+				return
+			}
 		}
 		candidate.Destination = destination
 		if err := a.backupStore.UpsertJob(context.Background(), &candidate); err != nil {
@@ -858,7 +864,7 @@ func (a *App) showBackupJobFormForConnection(existing *backupcore.Job, preferred
 		form.SetItemPadding(0)
 		form.SetFieldBackgroundColor(mantle).SetFieldTextColor(text).SetLabelColor(text).
 			SetButtonBackgroundColor(surface1).SetButtonTextColor(green)
-		addBackupFormSection(form, "ESSENTIALS", "Database, destination, and timing")
+		addBackupFormSection(form, "ESSENTIALS", "Database, local/rclone destination, and timing")
 		connectionIndex := backupConnectionIndex(a.store.Connections, draft.job.ConnectionID)
 		connectionText := "[#f9e2af]Missing saved connection — choose a replacement in More Settings.[-]"
 		if connectionIndex >= 0 {
@@ -873,6 +879,7 @@ func (a *App) showBackupJobFormForConnection(existing *backupcore.Job, preferred
 		form.AddInputField(backupFormLabelDestination, draft.job.Destination, 40, nil, func(value string) {
 			draft.job.Destination = value
 		})
+		form.AddTextView("Destination Help", "[#a6adc8]Absolute/mounted folder, or rclone://remote/path after `rclone config`.[-]", 0, 1, true, false)
 		form.AddDropDown("Schedule", scheduleOptions, backupScheduleIndex(draft.job.Schedule.Kind), func(_ string, index int) {
 			if index >= 0 && index < 4 {
 				kind := []backupcore.ScheduleKind{backupcore.ScheduleManual, backupcore.ScheduleInterval, backupcore.ScheduleDaily, backupcore.ScheduleWeekly}[index]

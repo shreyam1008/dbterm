@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -196,10 +195,14 @@ func (j Job) Validate() error {
 		return fmt.Errorf("saved connection is required")
 	}
 	if strings.TrimSpace(j.Destination) == "" {
-		return fmt.Errorf("destination folder is required")
+		return fmt.Errorf("backup destination is required")
 	}
-	if !filepath.IsAbs(filepath.Clean(j.Destination)) {
-		return fmt.Errorf("destination folder must be an absolute path so the TUI and background agent resolve the same location")
+	normalizedDestination, err := NormalizeBackupDestination(j.Destination)
+	if err != nil {
+		return err
+	}
+	if normalizedDestination != j.Destination {
+		return fmt.Errorf("backup destination must be normalized as %q", normalizedDestination)
 	}
 	if strings.ContainsAny(j.FilenameTemplate, `/\\`) {
 		return fmt.Errorf("filename template must not contain path separators")

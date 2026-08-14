@@ -132,6 +132,19 @@ func TestPrepareInstantBackupOutputExpandsHomeAndDefaultsFilename(t *testing.T) 
 	}
 }
 
+func TestPrepareInstantBackupOutputSupportsRcloneDestination(t *testing.T) {
+	output, err := prepareInstantBackupOutput("rclone://offsite/team/backups", "orders", "fallback.dump", ".dump")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if output.directory != "rclone://offsite/team/backups" || output.filename != "orders.dump" {
+		t.Fatalf("remote output = %#v", output)
+	}
+	if output.path != "rclone://offsite/team/backups/orders.dump" {
+		t.Fatalf("remote output path = %q", output.path)
+	}
+}
+
 func TestPrepareInstantBackupOutputRequiresBasename(t *testing.T) {
 	for _, filename := range []string{"../orders.dump", "nested/orders.dump", `nested\orders.dump`, ".", ".."} {
 		t.Run(strings.ReplaceAll(filename, "/", "_"), func(t *testing.T) {

@@ -113,7 +113,7 @@ Run the interactive TUI as your normal OS user, not with `sudo`. An elevated TUI
 | `Alt + K` / `B` on Dashboard | Open Backup Center |
 | `Ctrl + B` (Dashboard) | Create a backup job with the highlighted saved connection preselected |
 | `Alt + B` | Open instant backup from any workspace panel |
-| `F2 / F3` (backup forms) | Choose a destination folder / refresh destination and staging-disk capacity |
+| `F2 / F3` (backup forms) | Choose a local destination folder / refresh destination and staging capacity |
 | `Alt + F / Alt + I` | Toggle fullscreen results / open import modal (active connection) |
 | `I` (Dashboard) | Import SQL dump into selected saved PostgreSQL/MySQL connection |
 | `Alt + E` | Export selected rows, current page, or all matching table rows to CSV |
@@ -130,9 +130,9 @@ Run the interactive TUI as your normal OS user, not with `sudo`. An elevated TUI
 
 ## Backup Center
 
-For a one-off copy, press `Alt+B` from Tables, Query, or Results; use `F2` for the native folder chooser or type a path, and `F3` to refresh destination and private-staging capacity. For durable jobs, press `B` on Dashboard or `Alt+K` anywhere. `N` then chooses an existing saved database or lets you add one; `Ctrl+N` adds another database from the plan form. `Ctrl+B` on a highlighted Dashboard connection starts with it preselected. A job binds one saved local or remote connection to:
+For a one-off copy, press `Alt+B` from Tables, Query, or Results; use `F2` for the native folder chooser, type a path, or enter `rclone://remote/path`. `F3` refreshes local destination and private-staging capacity. For durable jobs, press `B` on Dashboard or `Alt+K` anywhere. `N` then chooses an existing saved database or lets you add one; `Ctrl+N` adds another database from the plan form. `Ctrl+B` on a highlighted Dashboard connection starts with it preselected. A job binds one saved local or remote connection to:
 
-- a typed destination folder or mounted volume, with an optional native GUI folder chooser and live volume/free-space details;
+- an absolute local/mounted folder or an rclone-backed remote destination, with an optional native GUI folder chooser and local volume/free-space details;
 - manual, interval, daily, or weekly timing with an IANA timezone;
 - a safe filename template using `{job}`, `{connection}`, `{database}`, `{engine}`, `{date}`, `{time}`, `{timestamp}`, and `{run}`;
 - no compression, gzip, ZIP, or single-worker Zstandard with a chosen level;
@@ -237,7 +237,7 @@ PostgreSQL/MySQL backup and restore use their official clients; bounded-memory S
 - macOS: `brew install libpq mysql-client sqlite`
 - Windows: install PostgreSQL/MySQL clients as needed and `sqlite3` from the [official SQLite downloads](https://sqlite.org/download.html)
 
-Remote sources work through saved connections, including reachable cloud databases. Destinations in this release are local folders or OS-mounted volumes; native S3/object-storage upload is not claimed.
+Remote sources work through saved connections, including reachable cloud databases. Destinations can be absolute local/OS-mounted folders or configured rclone remotes such as `rclone://offsite/dbterm`, so local→local, local→remote, remote→local, and remote→remote backups all use the same verified pipeline. Install rclone, run `rclone config` as the backup-agent OS account, and verify the remote with `rclone lsd offsite:`. Remote credentials stay in rclone rather than dbterm's catalog.
 
 Turso logical exports keep schema and data reads on one source transaction. Virtual/FTS tables are rejected before publication because exporting their shadow tables independently can produce an unrestorable dump. Cloudflare D1 uses Cloudflare's native export API and streams its short-lived signed HTTPS result into dbterm's private staging area; Cloudflare can temporarily make the database unavailable while that export runs. Restore in this release targets PostgreSQL, MySQL/MariaDB, and local SQLite; Turso/D1 SQL backups remain inspectable artifacts.
 

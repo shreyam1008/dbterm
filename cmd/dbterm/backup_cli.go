@@ -100,7 +100,7 @@ func backupListCommand(args []string) error {
 func backupCreateCommand(args []string) error {
 	fs := flag.NewFlagSet("backup create", flag.ContinueOnError)
 	connection := fs.String("connection", "", "saved connection ID or unique name")
-	destination := fs.String("destination", "", "output directory")
+	destination := fs.String("destination", "", "absolute folder or rclone://remote/path")
 	name := fs.String("name", "instant", "artifact label")
 	template := fs.String("filename", backupcore.DefaultFilenameTemplate, "filename template")
 	compression := fs.String("compression", "zstd", "none, gzip, zip, or zstd")
@@ -129,8 +129,10 @@ func backupCreateCommand(args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(output, 0o700); err != nil {
-		return fmt.Errorf("create backup destination: %w", err)
+	if !backupcore.IsRemoteBackupDestination(output) {
+		if err := os.MkdirAll(output, 0o700); err != nil {
+			return fmt.Errorf("create backup destination: %w", err)
+		}
 	}
 	job := backupcore.Job{
 		Name: *name, ConnectionID: cfg.ID, Destination: output,
@@ -995,6 +997,9 @@ func parseCompression(value string) (backupcore.Compression, error) {
 
 func resolveBackupCLIPath(value string) (string, error) {
 	value = strings.TrimSpace(value)
+	if backupcore.IsRemoteBackupDestination(value) {
+		return backupcore.NormalizeBackupDestination(value)
+	}
 	if value == "~" || strings.HasPrefix(value, "~/") || strings.HasPrefix(value, `~\`) {
 		home, err := os.UserHomeDir()
 		if err != nil {
@@ -1010,7 +1015,7 @@ func resolveBackupCLIPath(value string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("resolve path %q: %w", value, err)
 	}
-	return abs, nil
+	return backupcore.NormalizeBackupDestination(abs)
 }
 
 func printJSON(value any) error {
@@ -1071,7 +1076,9 @@ func printBackupHelp() {
   Scheduled jobs are configured in the TUI: Dashboard → Ctrl+B on a saved
   connection, or Dashboard → B → N.
   Sources may be local or remote PostgreSQL/MySQL plus SQLite, Turso, and D1.
-  Destinations are local folders or mounted volumes. Encryption uses age X25519.
+  Destinations may be absolute local/mounted folders or rclone://remote/path.
+  Configure remote storage with "rclone config"; credentials remain in rclone.
+  Encryption uses age X25519.
   Restore always inspects content first and requires --yes. Clean mode also requires
   --confirm-clean with the exact target database name (or absolute SQLite path).
   Inspection and restore unwrap at most three compression/encryption layers into

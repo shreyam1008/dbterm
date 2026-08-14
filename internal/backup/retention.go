@@ -33,7 +33,7 @@ func ApplyRetention(ctx context.Context, store *Store, job Job, now time.Time) (
 		}
 		return successes[i].FinishedAt.After(successes[j].FinishedAt)
 	})
-	root, err := resolveDestination(job.Destination)
+	root, err := parseDestination(job.Destination)
 	if err != nil {
 		return nil, err
 	}
@@ -78,27 +78,50 @@ func ApplyRetention(ctx context.Context, store *Store, job Job, now time.Time) (
 			continue
 		}
 		run := successes[index]
-		path, err := filepath.Abs(filepath.Clean(run.Artifact.Path))
-		if err != nil || !pathWithin(root, path) {
-			return removed, fmt.Errorf("retention refused path outside destination: %s", run.Artifact.Path)
-		}
-		exists, err := verifyRecordedArtifactForPrune(ctx, path, run.Artifact)
-		if err != nil {
-			return removed, err
-		}
-		if !exists {
-			if err := store.MarkArtifactPruned(ctx, run.ID, "missing", now); err != nil {
+		artifactPath := run.Artifact.Path
+		if root.kind == destinationRclone {
+			object, pathErr := parseRemoteArtifactWithin(root, artifactPath)
+			if pathErr != nil {
+				return removed, pathErr
+			}
+			exists, verifyErr := verifyRcloneArtifactForPrune(ctx, object, run.Artifact)
+			if verifyErr != nil {
+				return removed, verifyErr
+			}
+			if !exists {
+				if err := store.MarkArtifactPruned(ctx, run.ID, "missing", now); err != nil {
+					return removed, err
+				}
+				continue
+			}
+			if err := deleteRcloneArtifact(ctx, object); err != nil {
 				return removed, err
 			}
-			continue
-		}
-		if err := os.Remove(path); err != nil {
-			return removed, fmt.Errorf("remove expired backup %s: %w", path, err)
+			artifactPath = object.String()
+		} else {
+			localPath, pathErr := filepath.Abs(filepath.Clean(artifactPath))
+			if pathErr != nil || !pathWithin(root.localPath, localPath) {
+				return removed, fmt.Errorf("retention refused path outside destination: %s", run.Artifact.Path)
+			}
+			exists, verifyErr := verifyRecordedArtifactForPrune(ctx, localPath, run.Artifact)
+			if verifyErr != nil {
+				return removed, verifyErr
+			}
+			if !exists {
+				if err := store.MarkArtifactPruned(ctx, run.ID, "missing", now); err != nil {
+					return removed, err
+				}
+				continue
+			}
+			if err := os.Remove(localPath); err != nil {
+				return removed, fmt.Errorf("remove expired backup %s: %w", localPath, err)
+			}
+			artifactPath = localPath
 		}
 		if err := store.MarkArtifactPruned(ctx, run.ID, "retention", now); err != nil {
 			return removed, err
 		}
-		removed = append(removed, path)
+		removed = append(removed, artifactPath)
 	}
 	return removed, nil
 }

@@ -19,8 +19,8 @@ const safeguards = [
   },
   {
     marker: "02",
-    title: "Capacity-aware storage",
-    body: "Type a path or press F2 for the native chooser; F3 refreshes both destination and private-staging capacity before a large job starts. Local and mounted destinations stay under your control."
+    title: "Local or remote storage",
+    body: "Use an absolute folder, mounted volume, or rclone://remote/path. Local capacity remains visible; one configured rclone remote opens S3, SFTP, Drive, Azure and other backends."
   },
   {
     marker: "03",
@@ -47,7 +47,7 @@ const safeguards = [
 const faq = [
   {
     q: "Can I back up an AWS or other remote database to my machine?",
-    a: "Yes. Save a reachable PostgreSQL, MySQL, Turso, or Cloudflare D1 connection and select a local folder or mounted volume as the destination. Native S3 upload is not claimed yet."
+    a: "Yes. Save a reachable PostgreSQL, MySQL, Turso, or Cloudflare D1 connection, then choose a local/mounted folder or a configured rclone destination. Local-to-local, local-to-remote, remote-to-local and remote-to-remote combinations are supported."
   },
   {
     q: "Does the TUI have to stay open?",

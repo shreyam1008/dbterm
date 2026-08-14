@@ -415,3 +415,13 @@ func TestResolveBackupCLIPathExpandsHome(t *testing.T) {
 		t.Fatalf("resolveBackupCLIPath() = %q, want %q", got, want)
 	}
 }
+
+func TestResolveBackupCLIPathPreservesRcloneDestination(t *testing.T) {
+	got, err := resolveBackupCLIPath("rclone://offsite/team//nightly/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "rclone://offsite/team/nightly" {
+		t.Fatalf("resolveBackupCLIPath() = %q", got)
+	}
+}

@@ -73,27 +73,44 @@ func (r Runner) Run(ctx context.Context, job Job, cfg *config.ConnectionConfig, 
 	if err != nil {
 		return Artifact{}, err
 	}
-	destination, err := resolveDestination(job.Destination)
+	destination, err := parseDestination(job.Destination)
 	if err != nil {
 		return Artifact{}, err
 	}
-	if err := ensureDestination(destination); err != nil {
+	if err := ensureDestinationContext(ctx, destination); err != nil {
 		return Artifact{}, err
 	}
-	if removed, cleanupErr := cleanupStalePartials(destination, now.Add(-48*time.Hour)); cleanupErr != nil {
-		progress(ProgressEvent{Phase: "preflight", Message: "stale partial cleanup warning: " + cleanupErr.Error()})
-	} else if removed > 0 {
-		progress(ProgressEvent{Phase: "preflight", Message: fmt.Sprintf("removed %d stale dbterm partial artifact(s)", removed)})
+	if destination.kind == destinationLocal {
+		if removed, cleanupErr := cleanupStalePartials(destination.localPath, now.Add(-48*time.Hour)); cleanupErr != nil {
+			progress(ProgressEvent{Phase: "preflight", Message: "stale partial cleanup warning: " + cleanupErr.Error()})
+		} else if removed > 0 {
+			progress(ProgressEvent{Phase: "preflight", Message: fmt.Sprintf("removed %d stale dbterm partial artifact(s)", removed)})
+		}
 	}
 	fileName, err := buildArtifactFilename(job, cfg, plan, runID, now)
 	if err != nil {
 		return Artifact{}, err
 	}
-	finalPath := filepath.Join(destination, fileName)
-	if _, err := os.Lstat(finalPath); err == nil {
-		return Artifact{}, fmt.Errorf("backup file already exists: %s", finalPath)
-	} else if !os.IsNotExist(err) {
-		return Artifact{}, fmt.Errorf("check backup destination: %w", err)
+	finalPath, err := destination.join(fileName)
+	if err != nil {
+		return Artifact{}, err
+	}
+	if destination.kind == destinationLocal {
+		if _, err := os.Lstat(finalPath); err == nil {
+			return Artifact{}, fmt.Errorf("backup file already exists: %s", finalPath)
+		} else if !os.IsNotExist(err) {
+			return Artifact{}, fmt.Errorf("check backup destination: %w", err)
+		}
+	} else {
+		remoteObject, parseErr := parseDestination(finalPath)
+		if parseErr != nil {
+			return Artifact{}, parseErr
+		}
+		if _, exists, inspectErr := inspectRcloneObject(ctx, remoteObject); inspectErr != nil {
+			return Artifact{}, fmt.Errorf("check remote backup destination: %w", inspectErr)
+		} else if exists {
+			return Artifact{}, fmt.Errorf("backup file already exists: %s", finalPath)
+		}
 	}
 
 	progress(ProgressEvent{Phase: "preflight", Message: "destination and backup settings validated"})
@@ -116,7 +133,11 @@ func (r Runner) Run(ctx context.Context, job Job, cfg *config.ConnectionConfig, 
 	}
 	progress(ProgressEvent{Phase: "verify", Message: "engine-native backup passed basic validation"})
 
-	artifactOutput, err := os.CreateTemp(destination, ".dbterm-artifact-*.partial")
+	artifactDirectory := privateStage
+	if destination.kind == destinationLocal {
+		artifactDirectory = destination.localPath
+	}
+	artifactOutput, err := os.CreateTemp(artifactDirectory, ".dbterm-artifact-*.partial")
 	if err != nil {
 		return Artifact{}, fmt.Errorf("create private artifact staging file: %w", err)
 	}
@@ -139,9 +160,20 @@ func (r Runner) Run(ctx context.Context, job Job, cfg *config.ConnectionConfig, 
 	if err := ctx.Err(); err != nil {
 		return Artifact{}, fmt.Errorf("backup stopped before publication: %w", err)
 	}
-	progress(ProgressEvent{Phase: "publish", Message: "publishing completed artifact without replacing existing files"})
-	if err := publishNoReplace(ctx, artifactStage, finalPath, progress); err != nil {
-		return Artifact{}, err
+	if destination.kind == destinationRclone {
+		progress(ProgressEvent{Phase: "publish", Message: "publishing completed artifact to remote storage without replacing existing files"})
+		remoteObject, parseErr := parseDestination(finalPath)
+		if parseErr != nil {
+			return Artifact{}, parseErr
+		}
+		if err := publishRcloneNoReplace(ctx, artifactStage, remoteObject, size, progress); err != nil {
+			return Artifact{}, err
+		}
+	} else {
+		progress(ProgressEvent{Phase: "publish", Message: "publishing completed artifact without replacing existing files"})
+		if err := publishNoReplace(ctx, artifactStage, finalPath, progress); err != nil {
+			return Artifact{}, err
+		}
 	}
 	progress(ProgressEvent{Phase: "publish", Message: "backup artifact published", CurrentBytes: size, TotalBytes: size})
 	return Artifact{

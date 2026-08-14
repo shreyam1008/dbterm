@@ -76,18 +76,37 @@ func CreateNativeBackup(ctx context.Context, cfg *config.ConnectionConfig, outpu
 	if err != nil {
 		return err
 	}
-	outputPath = filepath.Clean(strings.TrimSpace(outputPath))
-	if outputPath == "." || outputPath == "" {
+	outputPath = strings.TrimSpace(outputPath)
+	if outputPath == "" {
 		return fmt.Errorf("backup output path is required")
 	}
-	if _, err := os.Stat(outputPath); err == nil {
-		return fmt.Errorf("backup file already exists: %s", outputPath)
-	} else if !os.IsNotExist(err) {
-		return fmt.Errorf("check backup output %s: %w", outputPath, err)
+	output, err := parseDestination(outputPath)
+	if err != nil {
+		return err
 	}
-	dir := filepath.Dir(outputPath)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("create backup output directory: %w", err)
+	outputDirectory, _, err := output.parentAndName()
+	if err != nil {
+		return err
+	}
+	outputPath = output.String()
+	if output.kind == destinationRclone {
+		if err := ensureRcloneDestination(ctx, outputDirectory); err != nil {
+			return err
+		}
+		if _, exists, err := inspectRcloneObject(ctx, output); err != nil {
+			return fmt.Errorf("check remote backup output %s: %w", outputPath, err)
+		} else if exists {
+			return fmt.Errorf("backup file already exists: %s", outputPath)
+		}
+	} else {
+		if _, err := os.Stat(output.localPath); err == nil {
+			return fmt.Errorf("backup file already exists: %s", output.localPath)
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("check backup output %s: %w", output.localPath, err)
+		}
+		if err := os.MkdirAll(outputDirectory.localPath, 0o700); err != nil {
+			return fmt.Errorf("create backup output directory: %w", err)
+		}
 	}
 	stageDir, err := newPrivateNativeStage(time.Now())
 	if err != nil {
@@ -112,7 +131,15 @@ func CreateNativeBackup(ctx context.Context, cfg *config.ConnectionConfig, outpu
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("backup stopped before publication: %w", err)
 	}
-	if err := publishNoReplace(ctx, tempPath, outputPath, options.Progress); err != nil {
+	if output.kind == destinationRclone {
+		info, statErr := os.Stat(tempPath)
+		if statErr != nil {
+			return fmt.Errorf("inspect completed native backup: %w", statErr)
+		}
+		if err := publishRcloneNoReplace(ctx, tempPath, output, info.Size(), options.Progress); err != nil {
+			return err
+		}
+	} else if err := publishNoReplace(ctx, tempPath, output.localPath, options.Progress); err != nil {
 		return err
 	}
 	return nil

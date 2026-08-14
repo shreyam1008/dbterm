@@ -18,6 +18,9 @@ type DiskUsage struct {
 // path. The destination itself need not exist yet; its nearest existing parent
 // is used for the operating-system query.
 func DestinationDiskUsage(path string) (DiskUsage, error) {
+	if IsRemoteBackupDestination(path) {
+		return DiskUsage{}, fmt.Errorf("remote capacity is managed by rclone; use `rclone about <remote>:` when the storage provider supports quota reporting")
+	}
 	resolved, err := resolveDestination(path)
 	if err != nil {
 		return DiskUsage{}, err

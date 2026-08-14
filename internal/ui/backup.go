@@ -22,7 +22,7 @@ const backupTimestampLayout = "20060102_150405"
 
 const (
 	instantBackupPage             = "backupModal"
-	instantBackupDestinationLabel = "Destination Folder [F2 choose]"
+	instantBackupDestinationLabel = "Destination (folder or rclone://remote/path)"
 	instantBackupFilenameLabel    = "File Name"
 )
 
@@ -87,7 +87,7 @@ func (a *App) showBackupModal() {
 	addBackupFormSection(form, "SOURCE", "Current workspace; no connection details are changed")
 	form.AddTextView("Connection", tview.Escape(backupTargetLabel(cfg)), 0, 1, true, false)
 	form.AddTextView("Format", fmt.Sprintf("[green]%s[-]  [#a6adc8]%s[-]", tview.Escape(plan.formatLabel), tview.Escape(plan.toolLabel)), 0, 1, true, false)
-	addBackupFormSection(form, "DESTINATION", "Type a folder or use the native chooser")
+	addBackupFormSection(form, "DESTINATION", "Use a folder, mounted volume, or configured rclone remote")
 	form.AddInputField(instantBackupDestinationLabel, defaultDir, 72, nil, nil)
 	form.AddInputField(instantBackupFilenameLabel, defaultFile, 56, nil, nil)
 	form.AddTextView("Storage", backupDestinationStorageText(defaultDir), 0, 2, true, false)
@@ -211,7 +211,7 @@ func (a *App) showBackupModal() {
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignCenter)
 	footer.SetBackgroundColor(crust)
-	footer.SetText(" [yellow]Tab / Shift+Tab[-] Move  │  [yellow]F2[-] Choose folder  │  [yellow]F3[-] Refresh disk space  │  [yellow]Esc[-] Cancel\n [#a6adc8]Typed paths remain editable; canceling this form never creates a folder or backup.[-] ")
+	footer.SetText(" [yellow]Tab / Shift+Tab[-] Move  │  [yellow]F2[-] Choose folder  │  [yellow]F3[-] Storage info  │  [yellow]Esc[-] Cancel\n [#a6adc8]Use an absolute path or rclone://remote/path; canceling never creates a folder or backup.[-] ")
 
 	container := tview.NewFlex().
 		SetDirection(tview.FlexRow).
@@ -240,22 +240,27 @@ type instantBackupOutput struct {
 func prepareInstantBackupOutput(rawDirectory, rawFilename, defaultFilename, extension string) (instantBackupOutput, error) {
 	directory := strings.TrimSpace(rawDirectory)
 	if directory == "" {
-		return instantBackupOutput{}, fmt.Errorf("destination folder is required")
+		return instantBackupOutput{}, fmt.Errorf("backup destination is required")
 	}
-	expanded, err := expandHomePath(directory)
-	if err != nil {
-		return instantBackupOutput{}, fmt.Errorf("invalid destination folder: %w", err)
-	}
-	directory, err = filepath.Abs(filepath.Clean(expanded))
-	if err != nil {
-		return instantBackupOutput{}, fmt.Errorf("resolve destination folder: %w", err)
-	}
-	if info, statErr := os.Stat(directory); statErr == nil {
-		if !info.IsDir() {
-			return instantBackupOutput{}, fmt.Errorf("destination is not a folder: %s", directory)
+	if !backupcore.IsRemoteBackupDestination(directory) {
+		expanded, err := expandHomePath(directory)
+		if err != nil {
+			return instantBackupOutput{}, fmt.Errorf("invalid destination folder: %w", err)
 		}
-	} else if !os.IsNotExist(statErr) {
-		return instantBackupOutput{}, fmt.Errorf("inspect destination folder: %w", statErr)
+		directory = expanded
+	}
+	directory, err := backupcore.NormalizeBackupDestination(directory)
+	if err != nil {
+		return instantBackupOutput{}, fmt.Errorf("resolve backup destination: %w", err)
+	}
+	if !backupcore.IsRemoteBackupDestination(directory) {
+		if info, statErr := os.Stat(directory); statErr == nil {
+			if !info.IsDir() {
+				return instantBackupOutput{}, fmt.Errorf("destination is not a folder: %s", directory)
+			}
+		} else if !os.IsNotExist(statErr) {
+			return instantBackupOutput{}, fmt.Errorf("inspect destination folder: %w", statErr)
+		}
 	}
 
 	filename := strings.TrimSpace(rawFilename)
@@ -271,11 +276,16 @@ func prepareInstantBackupOutput(rawDirectory, rawFilename, defaultFilename, exte
 	if filepath.Ext(strings.ToLower(filename)) == "" {
 		filename += extension
 	}
-	outputPath := filepath.Join(directory, filename)
-	if _, statErr := os.Lstat(outputPath); statErr == nil {
-		return instantBackupOutput{}, fmt.Errorf("backup file already exists; choose another name: %s", outputPath)
-	} else if !os.IsNotExist(statErr) {
-		return instantBackupOutput{}, fmt.Errorf("inspect backup output: %w", statErr)
+	outputPath, err := backupcore.JoinBackupDestination(directory, filename)
+	if err != nil {
+		return instantBackupOutput{}, err
+	}
+	if !backupcore.IsRemoteBackupDestination(outputPath) {
+		if _, statErr := os.Lstat(outputPath); statErr == nil {
+			return instantBackupOutput{}, fmt.Errorf("backup file already exists; choose another name: %s", outputPath)
+		} else if !os.IsNotExist(statErr) {
+			return instantBackupOutput{}, fmt.Errorf("inspect backup output: %w", statErr)
+		}
 	}
 	return instantBackupOutput{directory: directory, filename: filename, path: outputPath}, nil
 }
@@ -313,7 +323,7 @@ func (a *App) runDatabaseBackup(cfg *config.ConnectionConfig, outputPath, return
 		})
 		var infoErr error
 		var fileSize string
-		if dumpErr == nil && !canceled.Load() {
+		if dumpErr == nil && !canceled.Load() && !backupcore.IsRemoteBackupDestination(outputPath) {
 			var stat os.FileInfo
 			stat, infoErr = os.Stat(outputPath)
 			if infoErr == nil {

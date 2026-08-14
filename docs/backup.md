@@ -15,9 +15,10 @@ retention, notifications, inspection, and restore.
 | Cloudflare D1 | Cloudflare native SQL export API | Inspectable; automatic restore is not enabled yet |
 
 The source can be local or remote. For example, a saved PostgreSQL connection
-to an AWS-hosted database can write backups to a local disk or an OS-mounted
-network/object-storage volume. Native S3 uploads are not claimed in this
-release.
+to an AWS-hosted database can write backups to a local disk, an OS-mounted
+volume, or any configured rclone remote. The four source/destination pairings
+are supported: local-to-local, local-to-remote, remote-to-local, and
+remote-to-remote.
 
 Turso schema and data reads stay on one source transaction. dbterm rejects
 virtual/FTS tables before publication because separately exporting their shadow
@@ -42,8 +43,9 @@ the D1 database temporarily unavailable while its native export runs.
 
 Instant backup remains available with `Alt+B` from any active workspace panel.
 It uses the same engine-aware native dump and verification pipeline but does not
-create a durable schedule. Press `F2` to choose a folder or type the path; `F3`
-refreshes both destination and private-staging volume capacity.
+create a durable schedule. Press `F2` to choose a folder, type an absolute path,
+or enter `rclone://remote/path`; `F3` refreshes local destination and
+private-staging capacity.
 
 ### Backup Center controls
 
@@ -74,8 +76,9 @@ The form is ordered by operational importance and uses progressive disclosure.
 - **Saved connection:** stable connection identity; renaming or reordering the
   Dashboard cannot silently redirect a job.
 - **Job name:** used in history, logs, notifications, and optional filenames.
-- **Destination:** an absolute local or mounted path. It can be typed or chosen
-  with the native folder dialog when a desktop session is available.
+- **Destination:** an absolute local/mounted path, or a configured rclone path
+  such as `rclone://offsite/dbterm`. Local paths can be typed or chosen with the
+  native folder dialog when a desktop session is available.
 - **Schedule and enabled state:** manual, interval, daily, or weekly.
 
 The default policy uses Zstandard compression, a daily 02:00 local schedule,
@@ -98,17 +101,32 @@ the schedule advances to its next future time.
 
 ### Destination and capacity
 
-Backup Center shows the selected volume and its available/capacity values when
-the OS exposes them. The progress view reports the destination and live bytes
-written. dbterm still needs temporary space in two places:
+Backup Center shows local volume capacity when the OS exposes it. Remote quota
+is provider-specific; use `rclone about remote:` when that backend supports
+quota reporting. The progress view reports the destination and bytes written.
+dbterm still needs private temporary space for the native dump and, for a
+remote destination, the completed wrapped artifact before upload.
 
-- private state storage for one native, usually uncompressed dump; and
-- the selected destination for one in-progress wrapped artifact.
+Configure a remote once under the same OS account that runs the backup agent:
+
+```bash
+rclone config
+rclone lsd offsite:
+dbterm backup create --connection production \
+  --destination rclone://offsite/dbterm --name offsite
+```
+
+The text before the first slash is the rclone remote name; the remainder is its
+folder/object prefix. dbterm does not store remote credentials. It invokes
+rclone non-interactively, creates the prefix when needed, uploads with immutable
+semantics, verifies the reported remote size, and records the canonical
+`rclone://...` artifact path. Make the rclone config available to a desktop or
+server agent exactly as it is to an interactive `rclone` command.
 
 The folder chooser is a convenience, not a requirement. On a headless server,
 over SSH, or when no supported desktop chooser is installed, type or paste the
-absolute path. dbterm validates and creates the destination when the job is
-saved.
+absolute path or rclone URI. dbterm creates local folders when the job is saved;
+the first run validates rclone and prepares its remote prefix.
 
 ### File names
 
@@ -160,9 +178,11 @@ Retention can combine three ceilings:
 
 The newest successful artifact is always retained. Cleanup only considers
 successful artifacts recorded for that exact job and still contained by that
-job's destination. Before deletion, dbterm verifies regular-file identity,
-size, and the recorded SHA-256 when available. A changed file, symlink, or path
-outside the destination is refused rather than deleted.
+job's destination. Before deletion, dbterm verifies size and the recorded
+SHA-256 when available. Remote checksum verification streams the object back
+through `rclone cat`, which can incur provider download/egress usage. A changed
+file, symlink, remote name, or path outside the destination is refused rather
+than deleted.
 
 Deleting a job, stopping the service, updating dbterm, or uninstalling dbterm
 does not delete chosen backup artifacts.
@@ -345,6 +365,14 @@ Inspection identifies gzip, Zstandard, single-entry ZIP, and age wrappers,
 then detects PostgreSQL custom/tar/plain SQL, MySQL SQL, SQLite databases, or
 SQLite SQL from bytes rather than trusting the extension. Misleading names
 produce warnings.
+
+Inspection and restore currently accept a local file. Download an rclone-backed
+artifact first, then inspect the downloaded copy:
+
+```bash
+rclone copyto offsite:dbterm/orders.dump.zst ./orders.dump.zst
+dbterm backup inspect ./orders.dump.zst
+```
 
 ```bash
 dbterm backup inspect ./backup-file
