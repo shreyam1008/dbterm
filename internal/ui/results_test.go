@@ -4,12 +4,94 @@ import (
 	"context"
 	"database/sql"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
+	"unicode/utf8"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	"github.com/shreyam1008/dbterm/internal/config"
 )
+
+func TestDateDatabaseValuesRemainDateOnly(t *testing.T) {
+	value := time.Date(2021, time.October, 23, 15, 4, 5, 123400000, time.FixedZone("test", 5*60*60+30*60))
+
+	display, _ := formatCellValueForDatabaseType(value, "DATE")
+	if display != "2021-10-23" {
+		t.Fatalf("DATE display = %q, want date only", display)
+	}
+
+	reference := newResultCellReferenceForDatabaseType(value, display, "DATE")
+	if reference.value != "2021-10-23" {
+		t.Fatalf("DATE complete value = %q, want date only", reference.value)
+	}
+	if exported := resultExportReferenceText(reference); exported != "2021-10-23" {
+		t.Fatalf("DATE export = %q, want date only", exported)
+	}
+
+	temporalCases := map[string]string{
+		"TIME":        "15:04:05.1234",
+		"TIMETZ":      "15:04:05.1234+05:30",
+		"TIMESTAMP":   "2021-10-23 15:04:05.1234",
+		"DATETIME":    "2021-10-23 15:04:05.1234",
+		"TIMESTAMPTZ": "2021-10-23 15:04:05.1234+05:30",
+	}
+	for databaseType, want := range temporalCases {
+		got, _ := formatCellValueForDatabaseType(value, databaseType)
+		if got != want {
+			t.Errorf("%s display = %q, want %q", databaseType, got, want)
+		}
+	}
+}
+
+func TestPopulateTableEscapesLiteralTViewTags(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	defer db.Close()
+
+	const literal = "[red]literal[-]"
+	rows, err := db.Query(`SELECT '` + literal + `' AS "[value]"`)
+	if err != nil {
+		t.Fatalf("query literal: %v", err)
+	}
+	defer rows.Close()
+
+	table := newResultTable()
+	if _, err := populateTable(table, rows); err != nil {
+		t.Fatalf("populate table: %v", err)
+	}
+	if got, want := table.GetCell(0, 0).Text, tview.Escape("[VALUE]"); got != want {
+		t.Fatalf("header text = %q, want escaped %q", got, want)
+	}
+	if got, want := table.GetCell(1, 0).Text, tview.Escape(literal); got != want {
+		t.Fatalf("cell text = %q, want escaped %q", got, want)
+	}
+	reference, ok := table.GetCell(1, 0).GetReference().(resultCellReference)
+	if !ok || reference.value != literal {
+		t.Fatalf("raw reference = %#v, want literal value", table.GetCell(1, 0).GetReference())
+	}
+}
+
+func TestTextByteValuesUseRuneSafePreview(t *testing.T) {
+	value := []byte(strings.Repeat("界", maxCellPreviewRunes+1))
+	display, _ := formatCellValueForDatabaseType(value, "VARCHAR")
+	if !utf8.ValidString(display) {
+		t.Fatalf("VARCHAR preview is invalid UTF-8: %q", display)
+	}
+	if got := utf8.RuneCountInString(display); got != maxCellPreviewRunes {
+		t.Fatalf("VARCHAR preview rune count = %d, want %d", got, maxCellPreviewRunes)
+	}
+	if !strings.HasSuffix(display, "...") {
+		t.Fatalf("VARCHAR preview = %q, want ellipsis", display)
+	}
+	reference := newResultCellReferenceForDatabaseType(value, display, "VARCHAR")
+	if !reference.truncated || reference.value != string(value) {
+		t.Fatalf("VARCHAR reference lost full value: %#v", reference)
+	}
+}
 
 func TestResolvedResultLimitGuardsWideTables(t *testing.T) {
 	t.Run("requested limit respected when below guard", func(t *testing.T) {
@@ -201,6 +283,33 @@ func TestApplyColumnWidthsUsesUniformFixedDefault(t *testing.T) {
 	app.setSortHeaderIndicator()
 	if got := tview.TaggedStringWidth(table.GetCell(0, 0).Text); got != defaultColBase {
 		t.Fatalf("sorted header width = %d, want %d", got, defaultColBase)
+	}
+}
+
+func TestLocalSortUsesCompleteValuesInsteadOfRoundedPreview(t *testing.T) {
+	table := newResultTable()
+	table.SetCell(0, 0, tview.NewTableCell("AMOUNT").SetReference("amount"))
+	table.SetCell(1, 0, tview.NewTableCell("1.235").SetReference(newResultCellReference(1.2349, "1.235")))
+	table.SetCell(2, 0, tview.NewTableCell("1.235").SetReference(newResultCellReference(1.2341, "1.235")))
+
+	app := &App{results: table, sortColumn: 0, sortAsc: true}
+	app.applySort()
+
+	first, ok := table.GetCell(1, 0).GetReference().(resultCellReference)
+	if !ok || first.rawValue != 1.2341 {
+		t.Fatalf("first sorted value = %#v, want complete value 1.2341", table.GetCell(1, 0).GetReference())
+	}
+}
+
+func TestRowSignatureUsesCompleteValuesInsteadOfTruncatedPreview(t *testing.T) {
+	table := newResultTable()
+	table.SetCell(0, 0, tview.NewTableCell("VALUE").SetReference("value"))
+	table.SetCell(1, 0, tview.NewTableCell("same preview...").SetReference(newResultCellReference("first complete value", "same preview...")))
+	table.SetCell(2, 0, tview.NewTableCell("same preview...").SetReference(newResultCellReference("second complete value", "same preview...")))
+
+	signature := tableRowSignature(table, 2, 1)
+	if got := findMatchingRow(table, signature, 2, 1); got != 2 {
+		t.Fatalf("matching row = %d, want the row with the same complete value", got)
 	}
 }
 

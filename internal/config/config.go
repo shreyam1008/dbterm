@@ -350,7 +350,10 @@ func (c *ConnectionConfig) BuildConnString() string {
 		cfg.Net = "tcp"
 		cfg.Addr = net.JoinHostPort(c.Host, c.Port)
 		cfg.DBName = c.Database
-		cfg.ParseTime = true
+		// Keep temporal values in their database text form. This preserves
+		// MySQL's zero dates and declared fractional precision instead of
+		// coercing them into a lossy time.Time value.
+		cfg.ParseTime = false
 		cfg.Timeout = 5 * time.Second
 		cfg.ReadTimeout = 30 * time.Second
 		cfg.WriteTimeout = 30 * time.Second

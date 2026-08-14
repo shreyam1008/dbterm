@@ -36,6 +36,7 @@ type resultCellReference struct {
 	// value, so isNull is the authoritative SQL NULL marker.
 	rawValue     any
 	isNull       bool
+	databaseType string
 	displayValue string
 	truncated    bool
 	rowSelected  bool
@@ -513,9 +514,22 @@ func tableRowSignature(table *tview.Table, row, colCount int) []string {
 			signature[c] = ""
 			continue
 		}
-		signature[c] = cell.Text
+		signature[c] = resultCellIdentity(cell)
 	}
 	return signature
+}
+
+func resultCellIdentity(cell *tview.TableCell) string {
+	if cell == nil {
+		return "missing:"
+	}
+	if reference, ok := cell.GetReference().(resultCellReference); ok {
+		if reference.isNull {
+			return "null:"
+		}
+		return "value:" + reference.value
+	}
+	return "legacy:" + tview.Unescape(cell.Text)
 }
 
 func findMatchingRow(table *tview.Table, signature []string, rowCount, colCount int) int {

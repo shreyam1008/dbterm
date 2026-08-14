@@ -58,13 +58,13 @@ func (a *App) showRowDetail(row int) {
 		}
 
 		// Field name column
-		table.SetCell(i+1, 0, tview.NewTableCell(fmt.Sprintf(" %s ", colName)).
+		table.SetCell(i+1, 0, tview.NewTableCell(fmt.Sprintf(" %s ", tview.Escape(colName))).
 			SetTextColor(blue).
 			SetAlign(tview.AlignRight).
 			SetReference(colName))
 
 		// Value column
-		table.SetCell(i+1, 1, tview.NewTableCell(fmt.Sprintf(" %s ", val)).
+		table.SetCell(i+1, 1, tview.NewTableCell(fmt.Sprintf(" %s ", tview.Escape(val))).
 			SetTextColor(text).
 			SetExpansion(1).
 			SetReference(val))

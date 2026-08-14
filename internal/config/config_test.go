@@ -7,7 +7,22 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	mysql "github.com/go-sql-driver/mysql"
 )
+
+func TestBuildMySQLConnStringPreservesTemporalLexemes(t *testing.T) {
+	cfg := ConnectionConfig{
+		Type: MySQL, Host: "localhost", Port: "3306", User: "dbterm", Database: "app",
+	}
+	parsed, err := mysql.ParseDSN(cfg.BuildConnString())
+	if err != nil {
+		t.Fatalf("parse MySQL DSN: %v", err)
+	}
+	if parsed.ParseTime {
+		t.Fatal("MySQL DSN enables parseTime; zero dates and fractional precision would be lost")
+	}
+}
 
 func TestBuildConnStringCloudflareD1UsesDriverDSN(t *testing.T) {
 	cfg := ConnectionConfig{

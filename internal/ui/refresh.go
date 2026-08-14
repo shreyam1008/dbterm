@@ -35,6 +35,7 @@ func (a *App) refreshDataAsyncWithCallbacks(callbacks refreshDataCallbacks) {
 
 	db := a.db
 	dbType := a.dbType
+	a.rememberCurrentResultFilter()
 	previous := a.captureResultNavigationState()
 	previousStack := append([]resultNavigationState(nil), a.resultNavStack...)
 	currentIndex := a.tables.GetCurrentItem()
@@ -113,7 +114,7 @@ func (a *App) refreshDataAsyncWithCallbacks(callbacks refreshDataCallbacks) {
 				a.resultNavStack = previousStack
 			} else {
 				a.clearResultNavigation()
-				a.resultFilter = nil
+				a.restoreRememberedResultFilter(a.selectedTable)
 				a.resetSort()
 				a.resetPagination()
 			}

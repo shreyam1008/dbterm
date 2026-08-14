@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/gdamore/tcell/v2"
@@ -41,6 +42,7 @@ func populateTableWithLimit(results *tview.Table, rows *sql.Rows, maxRows int) (
 	}
 
 	results.Clear()
+	databaseTypes := resultDatabaseTypes(rows, len(columnNames))
 
 	hasMultipleColumns := len(columnNames) > 1
 	compactFirstCol := hasMultipleColumns && isLikelyCompactColumn(columnNames[0])
@@ -50,7 +52,7 @@ func populateTableWithLimit(results *tview.Table, rows *sql.Rows, maxRows int) (
 			expansion = 1
 		}
 
-		cell := tview.NewTableCell(strings.ToUpper(name)).
+		cell := tview.NewTableCell(tview.Escape(strings.ToUpper(name))).
 			SetReference(name).
 			SetTextColor(peach).
 			SetSelectable(false).
@@ -82,15 +84,15 @@ func populateTableWithLimit(results *tview.Table, rows *sql.Rows, maxRows int) (
 		}
 
 		for c, val := range values {
-			cellValue, cellColor := formatCellValue(val)
+			cellValue, cellColor := formatCellValueForDatabaseType(val, databaseTypes[c])
 			expansion := 0
 			if !hasMultipleColumns || c > 0 {
 				expansion = 1
 			}
 
-			cell := tview.NewTableCell(cellValue).
+			cell := tview.NewTableCell(tview.Escape(cellValue)).
 				SetTextColor(cellColor).
-				SetReference(newResultCellReference(val, cellValue)).
+				SetReference(newResultCellReferenceForDatabaseType(val, cellValue, databaseTypes[c])).
 				SetExpansion(expansion)
 			if compactFirstCol && c == 0 {
 				cell.SetMaxWidth(18)
@@ -117,17 +119,36 @@ func populateTableWithLimit(results *tview.Table, rows *sql.Rows, maxRows int) (
 	return rowIndex, truncated, nil
 }
 
+func resultDatabaseTypes(rows *sql.Rows, columnCount int) []string {
+	databaseTypes := make([]string, columnCount)
+	columnTypes, err := rows.ColumnTypes()
+	if err != nil {
+		return databaseTypes
+	}
+	for index := 0; index < len(columnTypes) && index < len(databaseTypes); index++ {
+		if columnTypes[index] != nil {
+			databaseTypes[index] = columnTypes[index].DatabaseTypeName()
+		}
+	}
+	return databaseTypes
+}
+
 // newResultCellReference keeps rendering concerns out of the underlying cell
 // value. In particular, SQL NULL is distinct from the string "NULL", and
 // binary values are copied because some database drivers reuse scan buffers.
 func newResultCellReference(rawValue any, displayValue string) resultCellReference {
+	return newResultCellReferenceForDatabaseType(rawValue, displayValue, "")
+}
+
+func newResultCellReferenceForDatabaseType(rawValue any, displayValue, databaseType string) resultCellReference {
 	cloned := cloneResultRawValue(rawValue)
 	return resultCellReference{
-		value:        fullCellValue(cloned),
+		value:        fullCellValueForDatabaseType(cloned, databaseType),
 		rawValue:     cloned,
 		isNull:       rawValue == nil,
+		databaseType: databaseType,
 		displayValue: displayValue,
-		truncated:    resultCellDisplayIsTruncated(rawValue),
+		truncated:    resultCellDisplayIsTruncated(rawValue, databaseType),
 	}
 }
 
@@ -140,9 +161,12 @@ func cloneResultRawValue(value any) any {
 	return value
 }
 
-func resultCellDisplayIsTruncated(value any) bool {
+func resultCellDisplayIsTruncated(value any, databaseType string) bool {
 	switch typed := value.(type) {
 	case []byte:
+		if databaseByteValueIsText(databaseType) {
+			return utf8.RuneCount(typed) > maxCellPreviewRunes
+		}
 		return len(typed) > maxBinaryPreviewLen
 	case string:
 		return utf8.RuneCountInString(typed) > maxCellPreviewRunes
@@ -152,8 +176,17 @@ func resultCellDisplayIsTruncated(value any) bool {
 }
 
 func fullCellValue(val any) string {
+	return fullCellValueForDatabaseType(val, "")
+}
+
+func fullCellValueForDatabaseType(val any, databaseType string) string {
 	if val == nil {
 		return "NULL"
+	}
+	if value, ok := val.(time.Time); ok {
+		if formatted, recognized := formatDatabaseTime(value, databaseType); recognized {
+			return formatted
+		}
 	}
 	switch value := val.(type) {
 	case []byte:
@@ -171,14 +204,119 @@ func fullCellValue(val any) string {
 	}
 }
 
+func formatDatabaseTime(value time.Time, databaseType string) (string, bool) {
+	switch normalizedDatabaseType(databaseType) {
+	case "DATE":
+		return formatDatabaseDate(value), true
+	case "TIME", "TIME WITHOUT TIME ZONE":
+		return formatDatabaseTimeOfDay(value, false), true
+	case "TIMETZ", "TIME WITH TIME ZONE":
+		return formatDatabaseTimeOfDay(value, true), true
+	case "TIMESTAMP", "TIMESTAMP WITHOUT TIME ZONE", "DATETIME":
+		return formatDatabaseTimestamp(value, false), true
+	case "TIMESTAMPTZ", "TIMESTAMP WITH TIME ZONE":
+		return formatDatabaseTimestamp(value, true), true
+	default:
+		return "", false
+	}
+}
+
+func normalizedDatabaseType(databaseType string) string {
+	return strings.ToUpper(strings.TrimSpace(databaseType))
+}
+
+func databaseByteValueIsText(databaseType string) bool {
+	databaseType = normalizedDatabaseType(databaseType)
+	if databaseType == "" {
+		return false
+	}
+	switch databaseType {
+	case "BYTEA", "BLOB", "TINYBLOB", "MEDIUMBLOB", "LONGBLOB", "BINARY", "VARBINARY", "BIT", "GEOMETRY", "VECTOR":
+		return false
+	default:
+		return true
+	}
+}
+
+func formatDatabaseDate(value time.Time) string {
+	date, bc := formatDatabaseDatePart(value)
+	if bc {
+		return date + " BC"
+	}
+	return date
+}
+
+func formatDatabaseTimestamp(value time.Time, withTimezone bool) string {
+	date, bc := formatDatabaseDatePart(value)
+	formatted := date + " " + value.Format("15:04:05.999999999")
+	if withTimezone {
+		formatted += formatDatabaseTimezoneOffset(value)
+	}
+	if bc {
+		formatted += " BC"
+	}
+	return formatted
+}
+
+func formatDatabaseDatePart(value time.Time) (string, bool) {
+	year := value.Year()
+	bc := year <= 0
+	if bc {
+		year = 1 - year
+	}
+	return fmt.Sprintf("%04d-%02d-%02d", year, int(value.Month()), value.Day()), bc
+}
+
+func formatDatabaseTimeOfDay(value time.Time, withTimezone bool) string {
+	// lib/pq represents PostgreSQL's special 24:00:00 value as midnight on
+	// day two of its zero-date time.Time container.
+	hour := value.Hour()
+	if value.Year() == 0 && value.Month() == time.January && value.Day() == 2 && hour == 0 {
+		hour = 24
+	}
+	formatted := fmt.Sprintf("%02d:%02d:%02d", hour, value.Minute(), value.Second())
+	if nanoseconds := value.Nanosecond(); nanoseconds != 0 {
+		fraction := strings.TrimRight(fmt.Sprintf("%09d", nanoseconds), "0")
+		formatted += "." + fraction
+	}
+	if withTimezone {
+		formatted += formatDatabaseTimezoneOffset(value)
+	}
+	return formatted
+}
+
+func formatDatabaseTimezoneOffset(value time.Time) string {
+	_, offsetSeconds := value.Zone()
+	sign := "+"
+	if offsetSeconds < 0 {
+		sign = "-"
+		offsetSeconds = -offsetSeconds
+	}
+	hours := offsetSeconds / 3600
+	minutes := (offsetSeconds % 3600) / 60
+	seconds := offsetSeconds % 60
+	formatted := fmt.Sprintf("%s%02d:%02d", sign, hours, minutes)
+	if seconds != 0 {
+		formatted += fmt.Sprintf(":%02d", seconds)
+	}
+	return formatted
+}
+
 // formatCellValue converts a database value to a display string and color
 func formatCellValue(val any) (string, tcell.Color) {
+	return formatCellValueForDatabaseType(val, "")
+}
+
+func formatCellValueForDatabaseType(val any, databaseType string) (string, tcell.Color) {
 	if val == nil {
 		return "NULL", overlay0
 	}
 
 	switch v := val.(type) {
 	case []byte:
+		if databaseByteValueIsText(databaseType) {
+			return truncateForDisplay(string(v), maxCellPreviewRunes), text
+		}
 		if len(v) > maxBinaryPreviewLen {
 			return string(v[:maxBinaryPreviewLen-3]) + "...", text
 		}
@@ -195,7 +333,7 @@ func formatCellValue(val any) (string, tcell.Color) {
 	case float64:
 		return fmt.Sprintf("%.4g", v), teal
 	default:
-		return truncateForDisplay(fmt.Sprintf("%v", v), maxCellPreviewRunes), text
+		return truncateForDisplay(fullCellValueForDatabaseType(v, databaseType), maxCellPreviewRunes), text
 	}
 }
 

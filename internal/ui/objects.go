@@ -122,8 +122,7 @@ func (a *App) onDatabaseObjectSelected(objType database.DBObjectType, name strin
 		previous := a.captureResultNavigationState()
 		previousStack := append([]resultNavigationState(nil), a.resultNavStack...)
 		a.clearResultNavigation()
-		a.selectedTable = name
-		a.resultFilter = nil
+		a.selectTableWithRememberedFilter(name)
 		a.resetSort()
 		a.resetPagination()
 		a.loadCurrentTableAsync(tableLoadOptions{
@@ -241,6 +240,7 @@ func loadDatabaseObjectInfo(ctx context.Context, db *sql.DB, query string, objTy
 	if len(cols) == 0 {
 		return "", fmt.Errorf("no definition is available")
 	}
+	databaseTypes := resultDatabaseTypes(rows, len(cols))
 
 	var summary strings.Builder
 	summary.WriteString(fmt.Sprintf("[::b]%s %s: %s[-]\n\n", objectTypeIcon(objType), tview.Escape(string(objType)), tview.Escape(name)))
@@ -256,7 +256,7 @@ func loadDatabaseObjectInfo(ctx context.Context, db *sql.DB, query string, objTy
 		}
 		rowCount++
 		for index, column := range cols {
-			summary.WriteString(fmt.Sprintf("[#a6adc8]%s:[-] %s\n", tview.Escape(column), tview.Escape(fullCellValue(values[index]))))
+			summary.WriteString(fmt.Sprintf("[#a6adc8]%s:[-] %s\n", tview.Escape(column), tview.Escape(fullCellValueForDatabaseType(values[index], databaseTypes[index]))))
 		}
 	}
 	if err := rows.Err(); err != nil {

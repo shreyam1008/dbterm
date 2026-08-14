@@ -68,6 +68,7 @@ type App struct {
 	selectedTable       string
 	tableResultsActive  bool
 	resultFilter        *resultValueFilter
+	resultFilters       map[string]*resultValueFilter // remembered per table for the active connection
 	copiedCellValue     string
 	hasCopiedCellValue  bool
 	copiedCellSystem    bool
@@ -787,8 +788,17 @@ func (a *App) applySort() {
 	// Sort by the selected column
 	asc := a.sortAsc
 	sort.SliceStable(rows, func(i, j int) bool {
-		textI := rows[i].cells[col].Text
-		textJ := rows[j].cells[col].Text
+		textI, nullI := resultCellSortText(rows[i].cells[col])
+		textJ, nullJ := resultCellSortText(rows[j].cells[col])
+		if nullI || nullJ {
+			if nullI == nullJ {
+				return false
+			}
+			if asc {
+				return nullI
+			}
+			return nullJ
+		}
 
 		// Try numeric sort first
 		numI, errI := strconv.ParseFloat(strings.TrimSpace(textI), 64)
@@ -816,6 +826,19 @@ func (a *App) applySort() {
 
 	a.sortMode = "page"
 	a.setSortHeaderIndicator()
+}
+
+func resultCellSortText(cell *tview.TableCell) (string, bool) {
+	if cell == nil {
+		return "", true
+	}
+	if reference, ok := cell.GetReference().(resultCellReference); ok {
+		if reference.isNull {
+			return "", true
+		}
+		return reference.value, false
+	}
+	return tview.Unescape(cell.Text), false
 }
 
 func (a *App) setSortHeaderIndicator() {
@@ -1388,6 +1411,7 @@ func (a *App) cleanup() {
 	a.requestActiveQueryCancel()
 	a.cancelActiveResultExport()
 	a.resultFilter = nil
+	a.resultFilters = nil
 	a.resultNavStack = nil
 	if a.db != nil {
 		a.db.Close()

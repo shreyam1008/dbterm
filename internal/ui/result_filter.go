@@ -374,7 +374,7 @@ func (a *App) changeResultPredicate(column string, operator resultFilterOperator
 		predicates = active.orderedPredicates()
 	}
 	predicates, changedIndex := changedResultFilterPredicates(predicates, predicate, addAND)
-	a.resultFilter = newResultValueFilter(a.selectedTable, predicates)
+	a.setCurrentResultFilter(newResultValueFilter(a.selectedTable, predicates))
 	a.resetPagination()
 	predicateText := resultFilterPredicateText(predicate, 34)
 	action := "Applying"
@@ -447,7 +447,7 @@ func (a *App) removeLastResultFilterAndReload() {
 	removed := predicates[len(predicates)-1]
 	previous := a.captureResultFilterViewState()
 	predicates = predicates[:len(predicates)-1]
-	a.resultFilter = newResultValueFilter(a.selectedTable, predicates)
+	a.setCurrentResultFilter(newResultValueFilter(a.selectedTable, predicates))
 	a.resetPagination()
 	a.reloadResultFilterAsync(
 		previous,
@@ -466,7 +466,7 @@ func (a *App) clearResultFilterAndReload() {
 		return
 	}
 	previous := a.captureResultFilterViewState()
-	a.resultFilter = nil
+	a.setCurrentResultFilter(nil)
 	a.resetPagination()
 	a.reloadResultFilterAsync(
 		previous,
@@ -489,10 +489,7 @@ func (a *App) captureResultFilterViewState() resultFilterViewState {
 }
 
 func (a *App) restoreResultFilterViewState(state resultFilterViewState) {
-	a.resultFilter = nil
-	if state.filter != nil {
-		a.resultFilter = cloneResultValueFilter(state.filter)
-	}
+	a.setCurrentResultFilter(state.filter)
 	a.pageOffset = state.pageOffset
 	a.pageSize = state.pageSize
 	a.totalRowCount = state.totalRowCount
@@ -580,6 +577,78 @@ func (a *App) activeResultFilter(table string) *resultValueFilter {
 		return nil
 	}
 	return filter
+}
+
+// setCurrentResultFilter changes the visible filter and keeps the session
+// cache for the selected table in sync. The cache is connection-scoped and is
+// discarded by cleanup when the user disconnects or opens another database.
+func (a *App) setCurrentResultFilter(filter *resultValueFilter) {
+	if a == nil {
+		return
+	}
+	table := strings.TrimSpace(a.selectedTable)
+	a.resultFilter = cloneResultValueFilter(filter)
+	if a.resultFilter != nil && table != "" {
+		a.resultFilter.table = table
+	}
+	if table == "" {
+		return
+	}
+	if a.resultFilter == nil || len(a.resultFilter.orderedPredicates()) == 0 {
+		if a.resultFilters != nil {
+			delete(a.resultFilters, table)
+		}
+		return
+	}
+	if a.resultFilters == nil {
+		a.resultFilters = make(map[string]*resultValueFilter)
+	}
+	a.resultFilters[table] = cloneResultValueFilter(a.resultFilter)
+}
+
+func (a *App) rememberCurrentResultFilter() {
+	if a == nil {
+		return
+	}
+	table := strings.TrimSpace(a.selectedTable)
+	if table == "" {
+		return
+	}
+	filter := a.activeResultFilter(table)
+	if filter == nil {
+		if a.resultFilters != nil {
+			delete(a.resultFilters, table)
+		}
+		return
+	}
+	if a.resultFilters == nil {
+		a.resultFilters = make(map[string]*resultValueFilter)
+	}
+	a.resultFilters[table] = filter
+}
+
+func (a *App) restoreRememberedResultFilter(table string) {
+	if a == nil {
+		return
+	}
+	table = strings.TrimSpace(table)
+	a.resultFilter = nil
+	if table == "" || a.resultFilters == nil {
+		return
+	}
+	if filter := a.resultFilters[table]; filter != nil {
+		a.resultFilter = cloneResultValueFilter(filter)
+		a.resultFilter.table = table
+	}
+}
+
+func (a *App) selectTableWithRememberedFilter(table string) {
+	if a == nil {
+		return
+	}
+	a.rememberCurrentResultFilter()
+	a.selectedTable = table
+	a.restoreRememberedResultFilter(table)
 }
 
 func resultFilterPlaceholder(dbType config.DBType) string {

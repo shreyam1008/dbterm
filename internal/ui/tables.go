@@ -162,9 +162,8 @@ func (a *App) applyTableListSnapshot(snapshot *tableListSnapshot) {
 		}
 		previous := a.captureResultNavigationState()
 		previousStack := append([]resultNavigationState(nil), a.resultNavStack...)
-		a.selectedTable = selectedTable
+		a.selectTableWithRememberedFilter(selectedTable)
 		a.clearResultNavigation()
-		a.resultFilter = nil
 		a.resetSort()
 		a.resetPagination()
 		a.loadCurrentTableAsync(tableLoadOptions{

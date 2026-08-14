@@ -27,7 +27,7 @@ func keyboardHelpText() string {
 [#a6e3a1]RESULTS — CELLS & FILTERS[-]
   [yellow]C[-]                Copy only the selected cell (full value, even if preview is shortened)
   [yellow]V[-]                Apply/update equality from the clipboard (real NULL uses IS NULL)
-  [yellow]/[-]                Open filters; Enter applies, Add AND composes, Tab / Shift+Tab moves
+  [yellow]/[-]                Open filters; Enter applies, Add AND composes, Tab / Shift+Tab moves; remembered per table
   [yellow]F[-]                Follow the selected column's declared foreign key
   [yellow]Backspace[-]        Return after following a foreign key
   [yellow]Esc[-]              Clear all filters first; press again to return to the Dashboard

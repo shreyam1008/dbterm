@@ -303,6 +303,7 @@ func TestReadFromClipboardHonorsCanceledContextBeforeRunningCommand(t *testing.T
 
 func TestResultFilterViewStateRestore(t *testing.T) {
 	app := &App{
+		selectedTable: "orders",
 		resultFilter:  &resultValueFilter{table: "orders", column: "user_id", value: "42"},
 		pageOffset:    200,
 		pageSize:      100,
@@ -321,6 +322,48 @@ func TestResultFilterViewStateRestore(t *testing.T) {
 	}
 	if app.pageOffset != 200 || app.pageSize != 100 || app.totalRowCount != 325 {
 		t.Fatalf("restored pagination = (%d,%d,%d), want (200,100,325)", app.pageOffset, app.pageSize, app.totalRowCount)
+	}
+	app.selectTableWithRememberedFilter("users")
+	app.selectTableWithRememberedFilter("orders")
+	if app.resultFilter == nil || app.resultFilter.value != "42" {
+		t.Fatalf("remembered rollback filter = %#v, want original value", app.resultFilter)
+	}
+}
+
+func TestResultFiltersAreRememberedPerTable(t *testing.T) {
+	app := &App{
+		selectedTable: "users",
+		resultFilter: newResultValueFilter("users", []resultFilterPredicate{
+			{column: "status", operator: resultFilterEqual, value: "active"},
+		}),
+	}
+
+	app.selectTableWithRememberedFilter("orders")
+	if app.resultFilter != nil {
+		t.Fatalf("orders inherited users filter: %#v", app.resultFilter)
+	}
+	app.setCurrentResultFilter(newResultValueFilter("orders", []resultFilterPredicate{
+		{column: "total", operator: resultFilterGreaterEqual, value: "100"},
+	}))
+
+	app.selectTableWithRememberedFilter("users")
+	users := app.activeResultFilter("users")
+	if users == nil || latestResultFilterValueForColumn(users, "status") != "active" {
+		t.Fatalf("restored users filter = %#v, want status=active", users)
+	}
+
+	app.selectTableWithRememberedFilter("orders")
+	orders := app.activeResultFilter("orders")
+	orderPredicate, hasOrderPredicate := latestResultFilterPredicateForColumn(orders, "total")
+	if !hasOrderPredicate || orderPredicate.operator != resultFilterGreaterEqual || orderPredicate.value != "100" {
+		t.Fatalf("restored orders filter = %#v, want total>=100", orders)
+	}
+
+	app.setCurrentResultFilter(nil)
+	app.selectTableWithRememberedFilter("users")
+	app.selectTableWithRememberedFilter("orders")
+	if app.activeResultFilter("orders") != nil {
+		t.Fatalf("cleared orders filter was restored: %#v", app.resultFilter)
 	}
 }
 

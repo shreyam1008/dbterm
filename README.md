@@ -118,7 +118,7 @@ Run the interactive TUI as your normal OS user, not with `sudo`. An elevated TUI
 | `I` (Dashboard) | Import SQL dump into selected saved PostgreSQL/MySQL connection |
 | `Alt + E` | Export selected rows, current page, or all matching table rows to CSV |
 | `C` (Results) | Copy only the selected cell |
-| `/` / `V` (Results) | Build typed filters with optional `AND` conditions / apply clipboard equality (`Enter` applies, `Tab` changes controls) |
+| `/` / `V` (Results) | Build typed filters with optional `AND` conditions / apply clipboard equality (`Enter` applies, `Tab` changes controls); remembered per table for the current connection |
 | `F` / `Backspace` (Results) | Follow a declared foreign key / return to the previous table |
 | `Esc` (filtered Results) | Clear the active filter; press again to return to Dashboard |
 | `Alt++ / Alt+- / Alt+0` | Increase / decrease / toggle preview rows per page (`100` ↔ safe max) |

@@ -320,7 +320,7 @@ func resultExportReferenceText(reference resultCellReference) string {
 		return fullCellValue(nil)
 	}
 	if reference.rawValue != nil {
-		return fullCellValue(reference.rawValue)
+		return fullCellValueForDatabaseType(reference.rawValue, reference.databaseType)
 	}
 	return reference.value
 }
@@ -541,6 +541,7 @@ func streamAllMatchingResultCSV(ctx context.Context, writer *csv.Writer, db *sql
 	if len(headers) == 0 {
 		return 0, fmt.Errorf("result columns are unavailable")
 	}
+	databaseTypes := resultDatabaseTypes(rows, len(headers))
 	if err := writer.Write(headers); err != nil {
 		return 0, fmt.Errorf("write CSV header: %w", err)
 	}
@@ -561,7 +562,7 @@ func streamAllMatchingResultCSV(ctx context.Context, writer *csv.Writer, db *sql
 		}
 		record := make([]string, len(values))
 		for index, value := range values {
-			record[index] = fullCellValue(value)
+			record[index] = fullCellValueForDatabaseType(value, databaseTypes[index])
 		}
 		if err := writer.Write(record); err != nil {
 			return rowCount, fmt.Errorf("write CSV row %d: %w", rowCount+1, err)

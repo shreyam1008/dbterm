@@ -904,9 +904,8 @@ func (a *App) openCommandPaletteTable(tableName string) {
 	}
 	previous := a.captureResultNavigationState()
 	previousStack := append([]resultNavigationState(nil), a.resultNavStack...)
-	a.selectedTable = tableName
+	a.selectTableWithRememberedFilter(tableName)
 	a.clearResultNavigation()
-	a.resultFilter = nil
 	a.resetSort()
 	a.resetPagination()
 	a.setFocusWithColor(a.tables)
