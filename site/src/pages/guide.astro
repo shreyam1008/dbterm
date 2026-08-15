@@ -46,8 +46,8 @@ const workspacePanels = [
   },
   {
     panel: "Tables",
-    behavior: "Browse schema objects and load table data into the results pane.",
-    keys: "Alt+T, F5, Ctrl+F5"
+    behavior: "Browse grouped schema objects, type to jump, pin frequent tables, and load data into Results.",
+    keys: "Alt+T, type, Space, F5, Ctrl+F5"
   },
   {
     panel: "Results",
@@ -394,15 +394,4 @@ dbterm backup restore --connection production --identity ./age-identity.txt --ye
     </ul>
   </section>
 
-  <section class="panel" id="preview">
-    <h2>7. Interface preview</h2>
-    <p class="lead">Screenshot is placed at the end so the guide stays task-focused first.</p>
-    <div class="preview-wrap">
-      <img
-        src={withBase("/main_ui.png")}
-        alt="dbterm main interface with tables and SQL query editor"
-        loading="lazy"
-      />
-    </div>
-  </section>
 </BaseLayout>

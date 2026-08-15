@@ -24,7 +24,7 @@ const products = [
     surface: "Terminal TUI · Go",
     coverage: "Query and backup: PostgreSQL, MySQL, SQLite, Turso (LibSQL), and Cloudflare D1. Guarded restore: PostgreSQL, MySQL/MariaDB, and local SQLite.",
     strengths:
-      "Saved connections; fuzzy command/object palette; foreign-key navigation; typed filters; scoped CSV export; instant and OS-managed scheduled backups with compression, age encryption, retention, inspection, and guarded restore.",
+      "Server-first PostgreSQL/MySQL logins with database discovery; fuzzy command/object palette; persistent table pins; foreign-key navigation; typed filters; import/export; local service controls; and instant or OS-managed local/remote backups with inspection and guarded restore.",
     delivery:
       "Single release binary. Linux, macOS, and Windows builds for AMD64 and ARM64, plus Debian packages.",
     maturity: null,
@@ -127,7 +127,7 @@ const bestFits = [
   {
     name: "dbterm",
     label: "Operations-first terminal workflow",
-    body: "A strong fit when you want one downloadable binary for five focused targets, fast object navigation, and a current-user backup agent for compressed, encrypted, retained database artifacts."
+    body: "A strong fit when you want one downloadable binary for server-wide database discovery, fast object/data navigation, local service operations, and a native backup agent for verified local or remote artifacts."
   },
   {
     name: "Harlequin",
@@ -233,7 +233,7 @@ const articleJsonLd = {
   description,
   image: "https://shreyam1008.github.io/dbterm/assets/command-palette.png",
   datePublished: "2026-08-04",
-  dateModified: "2026-08-04",
+  dateModified: "2026-08-15",
   mainEntityOfPage: canonicalUrl,
   author: {
     "@type": "Organization",
@@ -421,11 +421,11 @@ const breadcrumbJsonLd = {
     <section class="choice-section" aria-labelledby="choice-heading">
       <div class="choice-card dbterm-choice">
         <p class="compare-kicker">Choose dbterm when</p>
-        <h2 id="choice-heading">You want a focused tool that arrives ready.</h2>
+        <h2 id="choice-heading">You want the database loop in one binary.</h2>
         <ul>
           <li>You prefer a downloadable binary over managing a Python or Java runtime.</li>
           <li>Your work centres on PostgreSQL, MySQL, SQLite, Turso, or Cloudflare D1.</li>
-          <li>You want command search, foreign-key navigation, filtered export, and database operations in one keyboard-first workspace.</li>
+          <li>You want server-wide database discovery, command search, foreign-key navigation, import/export, local services, and durable backup operations in one keyboard-first workspace.</li>
         </ul>
       </div>
 
@@ -460,10 +460,10 @@ const breadcrumbJsonLd = {
       <div class="grid overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)] sm:grid-cols-2">
         <article class="p-5 sm:border-r sm:border-[var(--line)]">
           <p class="mb-5 font-mono text-[.66rem] font-semibold tracking-wider text-[var(--brand-strong)] uppercase">Where dbterm can replace it</p>
-          <h3>A fast five-engine terminal loop</h3>
+          <h3>A five-engine data and recovery loop</h3>
           <p class="mb-0 text-sm leading-relaxed text-[var(--ink-soft)]">
-            Choose dbterm when a single binary, keyboard navigation, foreign-key jumps, typed
-            filters, scoped CSV export, and selected PostgreSQL/MySQL operations cover the job.
+            Choose dbterm when a single binary, server-first connections, keyboard navigation,
+            typed filtering, import/export, local services, and scheduled backup/recovery cover the job.
           </p>
         </article>
         <article class="border-t border-[var(--line)] p-5 sm:border-t-0">

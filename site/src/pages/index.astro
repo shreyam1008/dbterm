@@ -1,12 +1,11 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 import InteractiveDemo from "../components/InteractiveDemo.astro";
-import ProductShowcase from "../components/ProductShowcase.astro";
 import ShaderField from "../components/ShaderField.astro";
 
-const title = "dbterm — Fast, Keyboard-First Terminal Database Client";
+const title = "dbterm — Connect, Query, Operate & Back Up Databases";
 const description =
-  "Explore schemas, run SQL, and schedule encrypted PostgreSQL, MySQL, and SQLite backups in one fast terminal UI for Linux, macOS, and Windows.";
+  "Connect once, browse every accessible database, query and inspect data, operate local services, and back up local or cloud databases from one terminal.";
 const keywords =
   "terminal database client, terminal SQL client, PostgreSQL backup scheduler, MySQL backup tool, SQLite backup, encrypted database backup, DBeaver alternative, TUI database client";
 
@@ -66,6 +65,33 @@ const features = [
   }
 ];
 
+const productPillars = [
+  {
+    marker: "01",
+    title: "Server-first connections",
+    body: "Save one PostgreSQL or MySQL login without a database name. Browse everything that account can access, choose a default, or open another database with the same credentials.",
+    facts: ["Optional database", "All accessible DBs", "Stable per-user profile"]
+  },
+  {
+    marker: "02",
+    title: "Complete data workspace",
+    body: "Discover schema objects, run cancellable SQL, inspect typed results, build AND filters, follow foreign keys, pin tables, and stream exactly the rows you want to CSV.",
+    facts: ["Object palette", "Typed filters", "Import + export"]
+  },
+  {
+    marker: "03",
+    title: "Local database operations",
+    body: "Inspect, start, and stop MySQL or PostgreSQL services, then connect with a saved database login and browse the server without confusing sudo credentials with database credentials.",
+    facts: ["Service status", "Start / stop", "Saved-login connect"]
+  },
+  {
+    marker: "04",
+    title: "Backup and recovery",
+    body: "Route local or remote sources to local, mounted, or rclone storage. Verify, compress, encrypt, retain, inspect, notify, and restore through a native OS-managed agent.",
+    facts: ["All 4 local/remote routes", "Native agents", "Guarded restore"]
+  }
+];
+
 const engines = [
   ["PostgreSQL", "PG"],
   ["MySQL", "MY"],
@@ -88,7 +114,7 @@ const faqItems = [
   {
     question: "Why another terminal SQL client?",
     answer:
-      "dbterm focuses on a tight end-to-end loop: connection, schema, query, relationship navigation, typed filtering, scoped export, and selected PostgreSQL/MySQL operations in one keyboard model. The comparison page also calls out where another tool may fit better."
+      "dbterm covers a deliberate end-to-end loop: server-first connection, database discovery, schema, query, relationship navigation, typed filtering, import/export, local services, and durable backup/recovery in one keyboard model."
   },
   {
     question: "Can dbterm back up a remote or cloud database?",
@@ -112,13 +138,10 @@ const softwareJsonLd = {
   codeRepository: "https://github.com/shreyam1008/dbterm",
   license: "https://github.com/shreyam1008/dbterm/blob/main/LICENSE",
   image: "https://shreyam1008.github.io/dbterm/assets/command-palette.png",
-  screenshot: [
-    "https://shreyam1008.github.io/dbterm/assets/command-palette.png",
-    "https://shreyam1008.github.io/dbterm/main_ui.png"
-  ],
+  screenshot: "https://shreyam1008.github.io/dbterm/assets/command-palette.png",
   offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
   isAccessibleForFree: true,
-  featureList: features.map((feature) => feature.title)
+  featureList: [...productPillars.map((pillar) => pillar.title), ...features.map((feature) => feature.title)]
 };
 
 const websiteJsonLd = {
@@ -174,13 +197,13 @@ const faqJsonLd = {
           <span aria-hidden="true">↗</span>
         </a>
         <p class="mb-4 font-mono text-[.7rem] font-semibold tracking-[.15em] text-[var(--brand-strong)] uppercase">
-          Open-source terminal database client
+          Open-source terminal database workbench
         </p>
         <h1 class="max-w-[11ch] text-[clamp(3.2rem,7.8vw,7rem)] leading-[.9] font-[650] tracking-[-.07em] text-[var(--ink)]">
-          Your database.<br /><span class="text-[var(--brand)]">Your terminal.</span>
+          Connect once.<br /><span class="text-[var(--brand)]">See every database.</span>
         </h1>
         <p class="mt-6 max-w-[600px] text-[clamp(1rem,1.8vw,1.2rem)] leading-relaxed text-[var(--ink-soft)]">
-          Browse tables, run SQL, follow foreign keys, filter, copy, and export—without leaving the keyboard.
+          Choose a database, query and inspect its data, operate local services, and protect local or cloud sources—without leaving the keyboard.
         </p>
         <div class="mt-7 flex flex-wrap gap-3">
           <a class={primaryButton} href="#playground">Try the real workflow <span aria-hidden="true">↓</span></a>
@@ -190,9 +213,9 @@ const faqJsonLd = {
           </a>
         </div>
         <ul class="mt-7 flex flex-wrap gap-x-6 gap-y-2 p-0 font-mono text-[.68rem] text-[var(--ink-faint)]" aria-label="Product facts">
-          <li class="list-none">Single binary</li>
+          <li class="list-none">Server-first logins</li>
           <li class="list-none">Five engines</li>
-          <li class="list-none">MIT licensed</li>
+          <li class="list-none">Native backup agent</li>
         </ul>
       </div>
 
@@ -233,6 +256,29 @@ const faqJsonLd = {
   <div class="site-container py-16 sm:py-20">
     <InteractiveDemo />
   </div>
+
+  <section class="border-y border-[var(--line)] bg-[color-mix(in_srgb,var(--surface)_70%,transparent)] py-16 sm:py-20" id="product" aria-labelledby="product-title">
+    <div class="site-container">
+      <header class="mb-10 max-w-3xl">
+        <p class="mb-3 font-mono text-[.68rem] font-semibold tracking-[.14em] text-[var(--brand-strong)] uppercase">The whole system</p>
+        <h2 id="product-title" class="text-[clamp(2.4rem,5vw,4.6rem)] leading-none tracking-[-.06em]">Four jobs. One binary.</h2>
+        <p class="mt-5 max-w-2xl text-[var(--ink-soft)]">dbterm is no longer only a query client. Connections, data work, local operations, and recovery share the same saved context and keyboard model.</p>
+      </header>
+      <div class="grid overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)] lg:grid-cols-2">
+        {productPillars.map((pillar) => (
+          <article class="border-b border-[var(--line)] p-6 sm:p-8 lg:[&:nth-child(odd)]:border-r lg:[&:nth-last-child(-n+2)]:border-b-0">
+            <span class="font-mono text-[.65rem] font-semibold text-[var(--brand-strong)]">{pillar.marker}</span>
+            <h3 class="mt-8 text-2xl tracking-[-.045em]">{pillar.title}</h3>
+            <p class="mt-3 max-w-xl text-sm leading-relaxed text-[var(--ink-soft)]">{pillar.body}</p>
+            <ul class="mt-6 flex flex-wrap gap-2 p-0 font-mono text-[.64rem] text-[var(--ink-soft)]">
+              {pillar.facts.map((fact) => <li class="list-none rounded-md border border-[var(--line)] bg-[var(--surface-raised)] px-2.5 py-1.5">{fact}</li>)}
+            </ul>
+          </article>
+        ))}
+      </div>
+      <a class="mt-7 inline-flex items-center gap-2 font-mono text-xs font-semibold text-[var(--brand-strong)]" href={withBase('/features/')}>See the complete feature map <span aria-hidden="true">→</span></a>
+    </div>
+  </section>
 
   <section class="border-y border-[var(--line)] bg-[#11111b] py-16 text-[#cdd6f4] sm:py-20" id="backup-center" aria-labelledby="backup-title">
     <div class="site-container grid items-center gap-10 lg:grid-cols-[minmax(0,.9fr)_minmax(420px,1.1fr)] lg:gap-16">
@@ -286,10 +332,6 @@ dbterm backup restore --connection prod --identity ./age-identity.txt --yes prod
       </div>
     </div>
   </section>
-
-  <div class="site-container py-18 sm:py-24">
-    <ProductShowcase />
-  </div>
 
   <section class="border-y border-[var(--line)] bg-[var(--brand-pale)] py-16 sm:py-20" aria-labelledby="engines-title">
     <div class="site-container grid gap-12 lg:grid-cols-[1fr_1fr]">

@@ -1,0 +1,239 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+
+const title = "dbterm Features | Connections, SQL Workspace, Operations & Backups";
+const description =
+  "Explore dbterm's server-first connections, keyboard SQL workspace, local service operations, and verified backup and restore platform for PostgreSQL, MySQL, SQLite, Turso, and D1.";
+
+const baseUrl = import.meta.env.BASE_URL;
+const withBase = (path: string) => {
+  const trimmedBase = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
+  const trimmedPath = path.startsWith("/") ? path.slice(1) : path;
+  return `${trimmedBase}/${trimmedPath}`.replace(/\/{2,}/g, "/");
+};
+
+const pillars = [
+  {
+    marker: "01",
+    title: "Connect to the server, not a guess",
+    summary: "Save one PostgreSQL or MySQL login and let the server tell you which databases are available.",
+    points: [
+      "Leave Database blank, browse every database visible to the account, and open one with the same credentials.",
+      "Choose an optional default or save another database connection only when a durable job needs its own target.",
+      "Reuse prefilled local and cloud connection details for PostgreSQL, MySQL, SQLite, Turso, and D1.",
+      "Keep one private per-user profile even if dbterm is accidentally launched through sudo; recover legacy root-only connections explicitly."
+    ]
+  },
+  {
+    marker: "02",
+    title: "Move from object to answer",
+    summary: "Search schema objects, run SQL, inspect typed results, and follow relationships in one keyboard model.",
+    points: [
+      "Search actions, database objects, and recent SQL from the configurable command palette.",
+      "Browse schema/database groups, views, functions, triggers, procedures, and extensions; type to jump and Space to pin tables.",
+      "Run cancellable queries with per-connection history, preview limits, and protection against stale asynchronous results.",
+      "Filter with typed AND conditions, sort and page, inspect full cells, follow composite foreign keys, and return through the navigation stack."
+    ]
+  },
+  {
+    marker: "03",
+    title: "Operate without leaving the terminal",
+    summary: "Use the same workspace for data movement and the local database services behind it.",
+    points: [
+      "Inspect columns, keys, foreign keys, and indexes without writing metadata queries by hand.",
+      "Stream selected rows, the current page, or every server-side filtered match to CSV with cancellation and no-clobber publication.",
+      "Import PostgreSQL and MySQL SQL dumps with official clients, progress reporting, cancellation, and stop-on-error control.",
+      "Inspect, start, and stop local MySQL/PostgreSQL services; connect using a saved database login and browse the server from there."
+    ]
+  },
+  {
+    marker: "04",
+    title: "Protect the database after the TUI closes",
+    summary: "Build a verified artifact pipeline around local or remote data, with a native agent owned by the operating system.",
+    points: [
+      "Back up local or remote sources to absolute local/mounted folders or rclone remotes—every source/destination pairing is supported.",
+      "Verify native dumps, compress with gzip, ZIP, or zstd, optionally encrypt with age X25519, hash, and publish without replacement.",
+      "Schedule manual, interval, daily, or weekly jobs; bound storage by count, age, and total size; notify through Gmail-ready or custom SMTP.",
+      "Inspect file content through compression/encryption layers, then use guarded merge or clean restore for PostgreSQL, MySQL/MariaDB, or local SQLite."
+    ]
+  }
+];
+
+const engines = [
+  {
+    engine: "PostgreSQL",
+    connect: "Server login + database discovery",
+    workspace: "Query, schema, objects, import",
+    backup: "Custom pg_dump archive",
+    restore: "Merge or guarded clean"
+  },
+  {
+    engine: "MySQL / MariaDB",
+    connect: "Server login + database discovery",
+    workspace: "Query, schema, objects, import",
+    backup: "Single-database mysqldump SQL",
+    restore: "Merge or guarded clean"
+  },
+  {
+    engine: "SQLite",
+    connect: "Local database file",
+    workspace: "Query, schema, objects",
+    backup: "Consistent built-in snapshot",
+    restore: "Staged snapshot or SQL"
+  },
+  {
+    engine: "Turso / LibSQL",
+    connect: "Cloud URL + token",
+    workspace: "Query, schema, objects",
+    backup: "Single-transaction logical SQL",
+    restore: "Inspect only in this release"
+  },
+  {
+    engine: "Cloudflare D1",
+    connect: "Account + database + token",
+    workspace: "API query, schema, objects",
+    backup: "Cloudflare native export",
+    restore: "Inspect only in this release"
+  }
+];
+
+const flow = [
+  ["Save", "Store one private, reusable connection or server login."],
+  ["Choose", "Browse accessible databases and open the one you need."],
+  ["Work", "Query, inspect, filter, navigate, import, and export."],
+  ["Protect", "Run now or schedule a verified local/remote backup."],
+  ["Recover", "Inspect content first, then restore through explicit guards."]
+];
+
+const safety = [
+  ["Private state", "Atomic private connection/settings files, private backup staging, and a transactional SQLite job catalog."],
+  ["Honest progress", "Real phases, byte growth, elapsed time, rate, and ETA only where a trustworthy total exists."],
+  ["Bounded work", "Preview limits, streamed exports/restores, decoded-layer caps, cancellation, timeouts, and one-worker backup serialization."],
+  ["Native supervision", "systemd, launchd, or Task Scheduler registration with separate runtime and startup state, heartbeat, PID, memory, and logs."],
+  ["Conservative cleanup", "Retention touches only recorded artifacts in the exact destination and rechecks identity, size, and checksum before deletion."],
+  ["Explicit destruction", "No-clobber publication, merge restore by default, and exact-name confirmation before a clean restore."]
+];
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  name: "dbterm feature map",
+  description,
+  url: "https://shreyam1008.github.io/dbterm/features/",
+  mainEntity: {
+    "@type": "SoftwareApplication",
+    name: "dbterm",
+    applicationCategory: "DeveloperApplication",
+    operatingSystem: "Linux, macOS, Windows",
+    featureList: pillars.flatMap((pillar) => [pillar.title, ...pillar.points])
+  }
+};
+---
+
+<BaseLayout title={title} description={description} jsonLd={jsonLd}>
+  <section class="border-b border-[var(--line)] py-16 sm:py-20 lg:py-24">
+    <div class="site-container grid items-end gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(340px,.85fr)]">
+      <div>
+        <p class="mb-4 font-mono text-[.68rem] font-semibold tracking-[.14em] text-[var(--brand-strong)] uppercase">Complete feature map · v0.6.4</p>
+        <h1 class="max-w-[12ch] text-[clamp(3.2rem,7vw,6.5rem)] leading-[.9] tracking-[-.07em]">One terminal. The whole database loop.</h1>
+      </div>
+      <div>
+        <p class="max-w-xl text-lg leading-relaxed text-[var(--ink-soft)]">Connect at server scope, choose the database, work with its data, operate local services, and protect local or cloud sources through the same deliberate interface.</p>
+        <div class="mt-6 flex flex-wrap gap-3">
+          <a class="button primary" href={withBase('/#install')}>Install dbterm</a>
+          <a class="button outline" href={withBase('/guide/')}>Open the guide</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="py-16 sm:py-20" aria-labelledby="systems-title">
+    <div class="site-container">
+      <header class="mb-10 max-w-3xl">
+        <p class="mb-3 font-mono text-[.68rem] font-semibold tracking-[.14em] text-[var(--brand-strong)] uppercase">Four connected systems</p>
+        <h2 id="systems-title" class="text-[clamp(2.4rem,5vw,4.6rem)] leading-none tracking-[-.06em]">More than a query screen.</h2>
+      </header>
+      <div class="grid overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)] lg:grid-cols-2">
+        {pillars.map((pillar) => (
+          <article class="border-b border-[var(--line)] p-6 sm:p-8 lg:[&:nth-child(odd)]:border-r lg:[&:nth-last-child(-n+2)]:border-b-0">
+            <div class="mb-7 flex items-center justify-between gap-4">
+              <span class="font-mono text-[.66rem] font-semibold text-[var(--brand-strong)]">{pillar.marker}</span>
+              <span class="h-px flex-1 bg-[var(--line)]" aria-hidden="true"></span>
+            </div>
+            <h3 class="max-w-[18ch] text-2xl tracking-[-.045em]">{pillar.title}</h3>
+            <p class="mt-3 text-sm leading-relaxed text-[var(--ink-soft)]">{pillar.summary}</p>
+            <ul class="mt-6 grid gap-3 pl-5 text-sm leading-relaxed text-[var(--ink-soft)]">
+              {pillar.points.map((point) => <li>{point}</li>)}
+            </ul>
+          </article>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section class="border-y border-[var(--line)] bg-[var(--surface)] py-16 sm:py-20" aria-labelledby="engines-title">
+    <div class="site-container">
+      <header class="mb-9 max-w-3xl">
+        <p class="mb-3 font-mono text-[.68rem] font-semibold tracking-[.14em] text-[var(--brand-strong)] uppercase">Engine capability matrix</p>
+        <h2 id="engines-title" class="text-[clamp(2.3rem,5vw,4.3rem)] leading-none tracking-[-.055em]">Five focused integrations.</h2>
+        <p class="mt-4 text-[var(--ink-soft)]">Support is explicit by workflow, so backup availability is not mistaken for restore availability.</p>
+      </header>
+      <p class="table-hint">Scroll horizontally to inspect every engine capability.</p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Database engine capability matrix; scroll horizontally for all columns">
+        <table class="command-table">
+          <thead><tr><th>Engine</th><th>Connection</th><th>Workspace</th><th>Backup format</th><th>Restore</th></tr></thead>
+          <tbody>
+            {engines.map((item) => (
+              <tr><th scope="row">{item.engine}</th><td>{item.connect}</td><td>{item.workspace}</td><td>{item.backup}</td><td>{item.restore}</td></tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="py-16 sm:py-20" aria-labelledby="flow-title">
+    <div class="site-container">
+      <header class="mb-9 max-w-2xl">
+        <p class="mb-3 font-mono text-[.68rem] font-semibold tracking-[.14em] text-[var(--brand-strong)] uppercase">End-to-end workflow</p>
+        <h2 id="flow-title" class="text-[clamp(2.3rem,5vw,4.3rem)] leading-none tracking-[-.055em]">Connect once. Keep moving.</h2>
+      </header>
+      <ol class="m-0 grid list-none overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)] p-0 sm:grid-cols-2 lg:grid-cols-5">
+        {flow.map(([name, body], index) => (
+          <li class="border-b border-[var(--line)] p-5 sm:[&:nth-child(odd)]:border-r lg:border-r lg:border-b-0 lg:last:border-r-0">
+            <span class="font-mono text-[.64rem] text-[var(--brand-strong)]">{String(index + 1).padStart(2, '0')}</span>
+            <h3 class="mt-7 text-lg">{name}</h3>
+            <p class="mb-0 text-sm leading-relaxed text-[var(--ink-soft)]">{body}</p>
+          </li>
+        ))}
+      </ol>
+    </div>
+  </section>
+
+  <section class="border-y border-[var(--line)] bg-[var(--brand-pale)] py-16 sm:py-20" aria-labelledby="safety-title">
+    <div class="site-container grid gap-10 lg:grid-cols-[.65fr_1.35fr]">
+      <div>
+        <p class="mb-3 font-mono text-[.68rem] font-semibold tracking-[.14em] text-[var(--brand-strong)] uppercase">Operational safety</p>
+        <h2 id="safety-title" class="text-[clamp(2.3rem,5vw,4rem)] leading-none tracking-[-.055em]">The guardrails are features.</h2>
+      </div>
+      <div class="grid overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)] sm:grid-cols-2">
+        {safety.map(([name, body]) => (
+          <article class="border-b border-[var(--line)] p-5 sm:[&:nth-child(odd)]:border-r sm:[&:nth-last-child(-n+2)]:border-b-0">
+            <h3 class="text-base">{name}</h3>
+            <p class="mb-0 text-sm leading-relaxed text-[var(--ink-soft)]">{body}</p>
+          </article>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section class="py-16 text-center sm:py-20">
+    <div class="site-container">
+      <h2 class="text-[clamp(2.5rem,6vw,5.2rem)] leading-none tracking-[-.065em]">Work with the data.<br />Protect the data.</h2>
+      <div class="mt-8 flex flex-wrap justify-center gap-3">
+        <a class="button primary" href={withBase('/#install')}>Install dbterm</a>
+        <a class="button outline" href={withBase('/backup/')}>Explore Backup Center</a>
+      </div>
+    </div>
+  </section>
+</BaseLayout>

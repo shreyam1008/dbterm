@@ -37,7 +37,7 @@ const normalizedPathname = Astro.url.pathname.endsWith("/")
   : `${Astro.url.pathname}/`;
 
 const navItems = [
-  { label: "Product", href: withBase("/#product"), compact: false },
+  { label: "Features", href: withBase("/features/"), compact: false },
   { label: "Live demo", href: withBase("/#playground") },
   { label: "Backups", href: withBase("/backup/") },
   { label: "Guide", href: withBase("/guide/") },
@@ -170,10 +170,10 @@ const jsonLdBlocks = Array.isArray(jsonLd) ? jsonLd : jsonLd ? [jsonLd] : [];
             </svg>
             <span class="font-mono text-base font-semibold tracking-[-.045em]">dbterm</span>
           </a>
-          <p class="mt-4 max-w-sm text-sm text-[var(--ink-soft)]">A fast, keyboard-first database client for the terminal.</p>
+          <p class="mt-4 max-w-sm text-sm text-[var(--ink-soft)]">Connect, query, operate, and protect local or cloud databases from one terminal.</p>
         </div>
         <div class="grid grid-cols-3 gap-6 max-[680px]:grid-cols-1" aria-label="Project links">
-          <div class="grid content-start gap-2 text-sm"><strong class="mb-1 font-mono text-[.68rem] tracking-[.1em] uppercase">Learn</strong><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href={withBase("/guide/")}>Guide</a><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href={withBase("/compare/")}>Compare</a><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href={withBase("/#faq")}>FAQ</a></div>
+          <div class="grid content-start gap-2 text-sm"><strong class="mb-1 font-mono text-[.68rem] tracking-[.1em] uppercase">Learn</strong><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href={withBase("/features/")}>Features</a><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href={withBase("/backup/")}>Backups</a><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href={withBase("/guide/")}>Guide</a><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href={withBase("/compare/")}>Compare</a></div>
           <div class="grid content-start gap-2 text-sm"><strong class="mb-1 font-mono text-[.68rem] tracking-[.1em] uppercase">Project</strong><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href="https://github.com/shreyam1008/dbterm">GitHub</a><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href="https://github.com/shreyam1008/dbterm/releases">Releases</a><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href="https://github.com/shreyam1008/dbterm/issues">Issues</a></div>
           <div class="grid content-start gap-2 text-sm"><strong class="mb-1 font-mono text-[.68rem] tracking-[.1em] uppercase">Open source</strong><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href={withBase("/open-source/")}>Attribution</a><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href="https://github.com/shreyam1008/dbterm/blob/main/LICENSE">MIT license</a><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href="https://pkg.go.dev/github.com/shreyam1008/dbterm">pkg.go.dev</a></div>
         </div>

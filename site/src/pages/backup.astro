@@ -44,6 +44,21 @@ const safeguards = [
   }
 ];
 
+const pipeline = [
+  ["01", "Stage", "Create the engine-native dump inside dbterm's private state, never directly in the destination."],
+  ["02", "Verify", "Check that the dump is non-empty and structurally consistent with the expected engine format."],
+  ["03", "Wrap", "Apply gzip, ZIP, or single-worker zstd compression and optional age X25519 encryption."],
+  ["04", "Publish", "Calculate SHA-256, sync, and publish locally or through rclone without replacing an existing artifact."],
+  ["05", "Retain", "Record history, apply count/age/size ceilings conservatively, and deliver the configured notification."]
+];
+
+const routes = [
+  ["Local database", "Local / mounted folder", "Local → local"],
+  ["Local database", "rclone remote", "Local → remote"],
+  ["Remote / cloud database", "Local / mounted folder", "Remote → local"],
+  ["Remote / cloud database", "rclone remote", "Remote → remote"]
+];
+
 const faq = [
   {
     q: "Can I back up an AWS or other remote database to my machine?",
@@ -122,7 +137,46 @@ const jsonLd = [
     </div>
   </section>
 
-  <section class="py-16 sm:py-20">
+  <section class="border-b border-[var(--line)] bg-[var(--brand-pale)] py-16 sm:py-20" aria-labelledby="routing-title">
+    <div class="site-container grid gap-12 lg:grid-cols-[.8fr_1.2fr] lg:gap-16">
+      <div>
+        <p class="mb-3 font-mono text-[.68rem] font-semibold tracking-[.14em] text-[var(--brand-strong)] uppercase">Source and destination are independent</p>
+        <h2 id="routing-title" class="text-[clamp(2.3rem,5vw,4.2rem)] leading-none tracking-[-.055em]">All four routes work.</h2>
+        <p class="mt-5 leading-relaxed text-[var(--ink-soft)]">The database may be on this machine or across the network. The completed artifact may stay local, land on a mounted volume, or move through a configured rclone remote.</p>
+        <p class="mt-5 text-sm leading-relaxed text-[var(--ink-soft)]">rclone keeps its own credentials. dbterm stores the destination as <code>rclone://remote/path</code> and uses the backup agent's OS account when the job runs unattended.</p>
+      </div>
+      <div class="grid overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)] sm:grid-cols-2">
+        {routes.map(([source, destination, label]) => (
+          <article class="border-b border-[var(--line)] p-5 sm:[&:nth-child(odd)]:border-r sm:[&:nth-last-child(-n+2)]:border-b-0">
+            <p class="mb-5 font-mono text-[.65rem] font-semibold text-[var(--brand-strong)] uppercase">{label}</p>
+            <h3 class="text-base">{source}</h3>
+            <p class="mb-0 text-sm text-[var(--ink-soft)]">to {destination}</p>
+          </article>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section class="py-16 sm:py-20" aria-labelledby="pipeline-title">
+    <div class="site-container">
+      <header class="mb-10 max-w-3xl">
+        <p class="mb-3 font-mono text-[.68rem] font-semibold tracking-[.14em] text-[var(--brand-strong)] uppercase">The verified artifact pipeline</p>
+        <h2 id="pipeline-title" class="text-[clamp(2.4rem,5vw,4.5rem)] leading-none tracking-[-.06em]">Private until it is complete.</h2>
+        <p class="mt-5 text-[var(--ink-soft)]">Instant backups, scheduled jobs, and the headless CLI use the same stages and safety rules.</p>
+      </header>
+      <ol class="m-0 grid list-none overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)] p-0 sm:grid-cols-2 lg:grid-cols-5">
+        {pipeline.map(([number, name, body]) => (
+          <li class="border-b border-[var(--line)] p-5 sm:[&:nth-child(odd)]:border-r lg:border-r lg:border-b-0 lg:last:border-r-0">
+            <span class="font-mono text-[.64rem] text-[var(--brand-strong)]">{number}</span>
+            <h3 class="mt-7 text-lg">{name}</h3>
+            <p class="mb-0 text-sm leading-relaxed text-[var(--ink-soft)]">{body}</p>
+          </li>
+        ))}
+      </ol>
+    </div>
+  </section>
+
+  <section class="border-t border-[var(--line)] py-16 sm:py-20">
     <div class="site-container">
       <header class="mb-10 max-w-2xl">
         <p class="mb-3 font-mono text-[.68rem] font-semibold tracking-[.14em] text-[var(--brand-strong)] uppercase">One durable policy</p>

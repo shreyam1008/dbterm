@@ -1,28 +1,35 @@
 # dbterm
 
-Open-source, keyboard-first terminal client for SQL workflows.
+Open-source terminal database workbench for local and cloud data.
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/shreyam1008/dbterm.svg)](https://pkg.go.dev/github.com/shreyam1008/dbterm)
+[![CI](https://github.com/shreyam1008/dbterm/actions/workflows/ci.yml/badge.svg)](https://github.com/shreyam1008/dbterm/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/shreyam1008/dbterm)](https://github.com/shreyam1008/dbterm/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-success.svg)](LICENSE)
 
-`dbterm` is a single binary that lets you connect, query, and operate across multiple databases without heavyweight desktop tooling.
+`dbterm` is one keyboard-first binary for connecting to database servers, exploring and querying data, operating local services, and protecting local or remote databases with durable backups.
 
-![dbterm main interface](docs/images/main_ui.png)
+Save a PostgreSQL or MySQL server login once—without memorizing a database name—then browse every database that account can access. Open one temporarily with the same credentials, choose a default, or save a separate database connection only when you need one.
 
-## Why dbterm
+## What ships today
 
-- Single binary install for Linux, macOS, and Windows.
-- Keyboard-driven TUI with fast panel navigation.
-- Supports PostgreSQL, MySQL, SQLite, Turso (LibSQL), and Cloudflare D1.
-- Instant backups plus a durable, OS-managed backup agent with schedules, live progress, capacity-aware destinations, bounded retention, email alerts, compression, age encryption, inspection, and guarded restore.
-- Low-overhead, serialized backup agent (roughly 12–13 MiB idle RSS in Linux amd64 smoke tests; platform allocators vary).
+| Area | Current capabilities |
+| --- | --- |
+| **Connections** | PostgreSQL, MySQL/MariaDB, SQLite, Turso/LibSQL, and Cloudflare D1; server-first PostgreSQL/MySQL logins; database discovery; optional defaults; reusable prefilled local/cloud connection forms; one stable per-user profile even after an accidental `sudo dbterm` launch. |
+| **Data workspace** | Schema/object discovery, a command/object/recent-SQL palette, persistent table pins, query history, asynchronous cancellable execution, typed results, composable `AND` filters, sorting, first/last pagination, foreign-key navigation, schema inspection, and streamed CSV export. |
+| **Database operations** | PostgreSQL/MySQL SQL-dump import with progress and cancellation, plus local MySQL/PostgreSQL service status, start, stop, install guidance, saved-login connection, and server-wide database browsing. |
+| **Backup and recovery** | Instant or scheduled backups from local or remote sources to local/mounted or rclone destinations; native dumps, private staging, verification, compression, age encryption, SHA-256 history, retention, email alerts, native OS agents, content inspection, and guarded PostgreSQL/MySQL/SQLite restore. |
 
-## Highlights
-![Connections and services](docs/images/1.png)
-*Connection management + service controls in one terminal workflow.*
+The backup routing model covers all four combinations:
 
-![Table browsing and editing](docs/images/2.png)
-*SQL editing + result exploration with keyboard-first controls.*
+| Source | Local / mounted destination | rclone remote destination |
+| --- | --- | --- |
+| **Local database** | Supported | Supported |
+| **Remote / cloud database** | Supported | Supported |
+
+PostgreSQL uses custom `pg_dump` archives; MySQL/MariaDB uses single-database `mysqldump` SQL; SQLite uses a consistent built-in snapshot; Turso uses a single-transaction logical export; and D1 uses Cloudflare's native export API. Restore currently targets PostgreSQL, MySQL/MariaDB, and local SQLite.
+
+See the [complete feature map](https://shreyam1008.github.io/dbterm/features/) or jump to the [Backup Center handbook](docs/backup.md).
 
 ## Quick install
 
@@ -47,6 +54,7 @@ go install github.com/shreyam1008/dbterm/cmd/dbterm@latest
 ## Documentation
 
 - Website: <https://shreyam1008.github.io/dbterm/>
+- Complete feature map: <https://shreyam1008.github.io/dbterm/features/>
 - Product guide: <https://shreyam1008.github.io/dbterm/guide/>
 - Backup Center: <https://shreyam1008.github.io/dbterm/backup/>
 - Complete backup handbook: [docs/backup.md](docs/backup.md)
