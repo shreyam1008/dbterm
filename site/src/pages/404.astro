@@ -1,0 +1,29 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+
+const baseUrl = import.meta.env.BASE_URL;
+const withBase = (path: string) => {
+  const trimmedBase = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
+  const trimmedPath = path.startsWith("/") ? path.slice(1) : path;
+  return `${trimmedBase}/${trimmedPath}`.replace(/\/{2,}/g, "/");
+};
+---
+
+<BaseLayout
+  title="Page not found | dbterm"
+  description="The requested dbterm documentation page could not be found."
+>
+  <section class="site-container py-20 sm:py-28">
+    <div class="max-w-3xl rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-7 shadow-sm sm:p-10">
+      <p class="mb-4 font-mono text-[.68rem] font-semibold tracking-[.14em] text-[var(--brand-strong)] uppercase">404 · No matching object</p>
+      <h1 class="max-w-[12ch] text-[clamp(3rem,7vw,6rem)] leading-[.92] tracking-[-.065em]">That page is not in this schema.</h1>
+      <p class="mt-6 max-w-xl text-lg leading-relaxed text-[var(--ink-soft)]">The link may be old or the page may have moved. Continue with the current feature map, backup handbook, or practical guide.</p>
+      <div class="mt-8 flex flex-wrap gap-3">
+        <a class="button primary" href={withBase('/')}>Go home</a>
+        <a class="button outline" href={withBase('/features/')}>Browse features</a>
+        <a class="button outline" href={withBase('/backup/')}>Backup Center</a>
+        <a class="button outline" href={withBase('/guide/')}>Open guide</a>
+      </div>
+    </div>
+  </section>
+</BaseLayout>

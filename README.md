@@ -31,6 +31,8 @@ PostgreSQL uses custom `pg_dump` archives; MySQL/MariaDB uses single-database `m
 
 See the [complete feature map](https://shreyam1008.github.io/dbterm/features/) or jump to the [Backup Center handbook](docs/backup.md).
 
+Created and maintained by [Shreyam Adhikari (@shreyam1008)](https://shreyam1008.com.np/).
+
 ## Quick install
 
 ### Linux / macOS
@@ -58,6 +60,7 @@ go install github.com/shreyam1008/dbterm/cmd/dbterm@latest
 - Product guide: <https://shreyam1008.github.io/dbterm/guide/>
 - Backup Center: <https://shreyam1008.github.io/dbterm/backup/>
 - Complete backup handbook: [docs/backup.md](docs/backup.md)
+- Marketing, domain, and search plan: [docs/marketing-plan.md](docs/marketing-plan.md)
 - Open-source handbook: <https://shreyam1008.github.io/dbterm/open-source/>
 - Go package page: <https://pkg.go.dev/github.com/shreyam1008/dbterm>
 

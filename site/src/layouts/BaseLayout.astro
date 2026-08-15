@@ -72,13 +72,15 @@ const jsonLdBlocks = Array.isArray(jsonLd) ? jsonLd : jsonLd ? [jsonLd] : [];
     </script>
     <title>{title}</title>
     <meta name="description" content={description} />
-    <meta name="author" content="dbterm contributors" />
+    <meta name="author" content="Shreyam Adhikari" />
     <meta name="application-name" content="dbterm" />
     <meta id="theme-color" name="theme-color" content="#f6f4ea" />
     <meta name="format-detection" content="telephone=no" />
     <meta name="google-site-verification" content="nsLMV5dqPB3vxpuq7DPX9iBtRAikKDpxEUJNvMnriTk" />
     <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
     <link rel="canonical" href={canonical} />
+    <link rel="author" href="https://shreyam1008.com.np/" />
+    <link rel="me" href="https://github.com/shreyam1008" />
     <link rel="manifest" href={withBase("/manifest.webmanifest")} />
     <link rel="sitemap" type="application/xml" href={withBase("/sitemap.xml")} />
     <link rel="preload" href={manropeLatinUrl} as="font" type="font/woff2" crossorigin />
@@ -171,6 +173,7 @@ const jsonLdBlocks = Array.isArray(jsonLd) ? jsonLd : jsonLd ? [jsonLd] : [];
             <span class="font-mono text-base font-semibold tracking-[-.045em]">dbterm</span>
           </a>
           <p class="mt-4 max-w-sm text-sm text-[var(--ink-soft)]">Connect, query, operate, and protect local or cloud databases from one terminal.</p>
+          <p class="mt-2 max-w-sm text-xs text-[var(--ink-faint)]">Created and maintained by <a href="https://shreyam1008.com.np/">Shreyam Adhikari · @shreyam1008</a>.</p>
         </div>
         <div class="grid grid-cols-3 gap-6 max-[680px]:grid-cols-1" aria-label="Project links">
           <div class="grid content-start gap-2 text-sm"><strong class="mb-1 font-mono text-[.68rem] tracking-[.1em] uppercase">Learn</strong><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href={withBase("/features/")}>Features</a><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href={withBase("/backup/")}>Backups</a><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href={withBase("/guide/")}>Guide</a><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href={withBase("/compare/")}>Compare</a></div>
