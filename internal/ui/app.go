@@ -63,6 +63,8 @@ type App struct {
 	tables              *tview.List
 	databaseObjects     map[int]databaseObjectListItem
 	tableIdentifiers    map[int]string
+	tableOrder          []string
+	tableSidebarItems   int
 	tableSearch         string
 	databaseObjectCount int
 	selectedTable       string
@@ -420,7 +422,13 @@ func (a *App) updateStatusBar(extra string, rowCount int) {
 		parts = append(parts, extra)
 	}
 
-	parts = append(parts, actionText)
+	// Put contextual table actions first so the pin/open/find controls remain
+	// visible even when a narrow terminal truncates status details on the right.
+	if a.focusedPanel == a.tables {
+		parts = append([]string{actionText}, parts...)
+	} else {
+		parts = append(parts, actionText)
+	}
 	a.statusBar.SetText("  " + strings.Join(parts, "  │  "))
 }
 
@@ -1531,9 +1539,19 @@ func (a *App) applyResponsiveLayout(width, height int) {
 func (a *App) statusActionText(width int) string {
 	inQuery := a.focusedPanel == a.queryInput
 	inResults := a.focusedPanel == a.results
+	inTables := a.focusedPanel == a.tables
 	filterActive := a.isTableResultActive() && a.activeResultFilter(a.selectedTable) != nil
 	tableActive := a.isTableResultActive()
 	paletteKey := tview.Escape(a.commandPaletteShortcutHint())
+	if inTables {
+		if width < 100 {
+			return "[yellow]Space[-] Pin/unpin  │  [yellow]Enter[-] Open  │  [yellow]Esc[-] Back"
+		}
+		if width < 140 {
+			return fmt.Sprintf("[yellow]Space[-] Pin/unpin  │  [yellow]Type[-] Find  │  [yellow]Enter[-] Open  │  [yellow]%s[-] Palette", paletteKey)
+		}
+		return fmt.Sprintf("[yellow]Space[-] Pin/unpin table  │  [yellow]Type[-] Find  │  [yellow]Enter[-] Open  │  [yellow]Alt+M[-] Schema  │  [yellow]%s[-] Palette", paletteKey)
+	}
 	switch {
 	case width < 72:
 		if inQuery {
@@ -1611,7 +1629,13 @@ func (a *App) currentResultRowCount() int {
 }
 
 func (a *App) flashStatus(extra string, rowCount int, duration time.Duration) {
+	if a == nil || a.statusBar == nil {
+		return
+	}
 	a.updateStatusBar(extra, rowCount)
+	if a.app == nil {
+		return
+	}
 	go func() {
 		time.Sleep(duration)
 		a.app.QueueUpdateDraw(func() {

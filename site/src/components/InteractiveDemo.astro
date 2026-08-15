@@ -25,7 +25,7 @@
   <div class="demo-terminal" data-demo-terminal data-focus="tables">
     <div class="demo-terminal-titlebar" aria-hidden="true">
       <span>dbterm 132×40</span>
-      <span>v0.6.3 · Alaknanda</span>
+      <span>v0.6.4 · Bhagirathi</span>
     </div>
 
     <div class="demo-workspace" data-demo-workspace>
@@ -113,7 +113,7 @@
       <button type="button" data-demo-run><kbd>Enter</kbd> Run ▶</button>
       <button type="button" data-demo-open-palette><kbd>Ctrl+P</kbd> Palette</button>
       <button type="button" data-demo-open-help><kbd>Alt+H</kbd> Help</button>
-      <span class="demo-live" data-demo-status role="status" aria-live="polite">Tables focused · type to find</span>
+      <span class="demo-live" data-demo-status role="status" aria-live="polite">Tables focused · Space pin/unpin · type to find</span>
     </div>
 
     <div class="demo-loading" data-demo-loading hidden aria-hidden="true">
@@ -125,7 +125,7 @@
   </div>
 
   <p class="demo-aftercare">
-    Try <kbd>Ctrl P</kbd>, table type-ahead, <kbd>/</kbd>, <kbd>C</kbd>, <kbd>V</kbd>, <kbd>F</kbd>, and <kbd>Backspace</kbd>.
+    Try <kbd>Space</kbd> to pin a table, <kbd>Ctrl P</kbd>, table type-ahead, <kbd>/</kbd>, <kbd>C</kbd>, <kbd>V</kbd>, <kbd>F</kbd>, and <kbd>Backspace</kbd>.
     <a href="./guide/">All shortcuts →</a>
   </p>
 
@@ -189,6 +189,7 @@
           <div><kbd>Enter</kbd><span>Run SQL / open row details</span></div>
           <div><kbd>Shift+Enter</kbd><span>New query line</span></div>
           <div><kbd>Ctrl+P</kbd><span>Command &amp; object palette</span></div>
+          <div><kbd>Space (Tables)</kbd><span>Pin / unpin highlighted table</span></div>
           <div><kbd>/</kbd><span>Filter selected column</span></div>
           <div><kbd>C / V</kbd><span>Copy cell / filter by clipboard</span></div>
           <div><kbd>F / Backspace</kbd><span>Follow foreign key / return</span></div>
@@ -390,6 +391,7 @@
   .demo-table-list button:hover { background: var(--tui-surface-0); }
   .demo-table-list button[aria-selected="true"] { background: var(--tui-blue); color: var(--tui-crust); }
   .demo-table-list button[aria-selected="true"] small { color: var(--tui-crust); }
+  .demo-table-list button[data-pinned="true"] [data-demo-table-label]::before { content: "📌 "; }
   :global(.dbt-demo .demo-table-list mark) { background: var(--tui-yellow); color: var(--tui-crust); font-weight: 700; }
 
   .demo-query-panel textarea {

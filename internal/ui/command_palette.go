@@ -31,6 +31,7 @@ const (
 	paletteActionPreviousPage     keymapAction = "palette_previous_page"
 	paletteActionFirstPage        keymapAction = "palette_first_page"
 	paletteActionLastPage         keymapAction = "palette_last_page"
+	paletteActionToggleTablePin   keymapAction = "palette_toggle_table_pin"
 )
 
 type commandPaletteItemKind string
@@ -95,6 +96,7 @@ var commandPaletteActionSpecs = []commandPaletteActionSpec{
 	{paletteActionRunQuery, "Run Current SQL", "Execute the SQL currently in the Query editor against the active connection.", "execute statement editor", "Enter"},
 	{paletteActionRefreshTable, "Refresh Current Table", "Reload the active table page without blocking the interface; Esc cancels safely.", "reload data rows", "F5"},
 	{paletteActionRefreshDatabase, "Refresh Database Objects and Data", "Reload tables and objects, then reload the active table with cancellable progress.", "full reload schema sidebar", "Ctrl+F5"},
+	{paletteActionToggleTablePin, "Pin / Unpin Selected Table", "Move the selected sidebar table into or out of the persistent pinned section for this database connection.", "favorite favourite top sidebar table", "Space (Tables)"},
 	{paletteActionFilterColumn, "Filter Selected Column", "Open the typed filter builder for the selected result column; Apply updates and Add AND composes.", "where search operator contains starts null", "/"},
 	{paletteActionFilterClipboard, "Filter Column by Clipboard", "Apply or update equality on the selected column using the copied value; SQL NULL becomes IS NULL.", "paste value cross table lookup", "V"},
 	{paletteActionClearFilters, "Clear All Active Filters", "Remove every active table predicate and reload the first page.", "reset where predicates", "Esc"},
@@ -812,6 +814,9 @@ func (a *App) executeCommandPaletteAction(action keymapAction, title string) {
 	case paletteActionRefreshDatabase:
 		a.pages.SwitchToPage("main")
 		a.refreshDataAsync()
+	case paletteActionToggleTablePin:
+		a.showCommandPaletteWorkspace(a.tables)
+		a.toggleSelectedTablePin()
 	case paletteActionFilterColumn:
 		a.showCommandPaletteWorkspace(a.results)
 		a.showResultFilterModal()
@@ -860,6 +865,7 @@ func commandPaletteActionNeedsConnection(action keymapAction) bool {
 		actionBackup, actionExportCSV, actionHistory, actionImportDump,
 		actionInspectSchema, actionSelectAll, actionClearSelection,
 		paletteActionRunQuery, paletteActionRefreshTable, paletteActionRefreshDatabase,
+		paletteActionToggleTablePin,
 		paletteActionFilterColumn, paletteActionFilterClipboard, paletteActionClearFilters,
 		paletteActionCopyCell, paletteActionFollowForeignKey, paletteActionSortColumn,
 		paletteActionOpenRowDetail, paletteActionNextPage, paletteActionPreviousPage,

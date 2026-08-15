@@ -128,16 +128,28 @@ func (a *App) applyTableListSnapshot(snapshot *tableListSnapshot) {
 	a.tableSearch = ""
 	a.databaseObjectCount = 0
 	a.tableCount = 0
+	a.tableOrder = nil
+	a.tableSidebarItems = 0
 	if snapshot == nil {
 		return
 	}
 
-	for index, item := range snapshot.items {
+	for _, item := range snapshot.items {
+		if item.identifier != "" {
+			a.tableOrder = append(a.tableOrder, item.identifier)
+		}
+	}
+	items := a.orderedTableSidebarItems()
+	if snapshot.tableCount == 0 {
+		items = snapshot.items
+	}
+	for index, item := range items {
 		a.tables.AddItem(item.label, "", 0, nil)
 		if item.identifier != "" {
 			a.tableIdentifiers[index] = item.identifier
 		}
 	}
+	a.tableSidebarItems = len(items)
 
 	a.tableCount = snapshot.tableCount
 	a.tables.SetMainTextColor(peach)
@@ -146,8 +158,8 @@ func (a *App) applyTableListSnapshot(snapshot *tableListSnapshot) {
 	if snapshot.tableCount == 0 {
 		a.selectedTable = ""
 	} else {
-		a.tables.SetCurrentItem(snapshot.selectedIndex)
 		a.selectedTable = snapshot.selectedTable
+		a.selectTableListIdentifier(snapshot.selectedTable)
 	}
 	a.refreshTableSidebarState()
 
@@ -179,6 +191,172 @@ func (a *App) applyTableListSnapshot(snapshot *tableListSnapshot) {
 			},
 		})
 	})
+}
+
+func (a *App) orderedTableSidebarItems() []tableListSnapshotItem {
+	if a == nil || len(a.tableOrder) == 0 {
+		return nil
+	}
+
+	available := make(map[string]bool, len(a.tableOrder))
+	for _, table := range a.tableOrder {
+		available[table] = true
+	}
+	pinned := make([]string, 0)
+	pinnedSet := make(map[string]bool)
+	for _, table := range a.pinnedTablesForConnection() {
+		if available[table] && !pinnedSet[table] {
+			pinned = append(pinned, table)
+			pinnedSet[table] = true
+		}
+	}
+
+	items := make([]tableListSnapshotItem, 0, len(a.tableOrder)+len(pinned)+1)
+	if len(pinned) > 0 {
+		items = append(items, tableListSnapshotItem{
+			label: fmt.Sprintf("[#6c7086]── %s Pinned (%d) ──[-]", iconPin, len(pinned)),
+		})
+		for _, table := range pinned {
+			items = append(items, tableListSnapshotItem{label: table, identifier: table})
+		}
+	}
+
+	lastNamespace := ""
+	for _, table := range a.tableOrder {
+		if pinnedSet[table] {
+			continue
+		}
+		namespace := namespaceForTable(a.dbType, table)
+		if namespace != "" && namespace != lastNamespace {
+			items = append(items, tableListSnapshotItem{
+				label: fmt.Sprintf("[#6c7086]── %s %s (%s) ──[-]", iconTables, namespaceKindLabel(a.dbType), namespace),
+			})
+			lastNamespace = namespace
+		}
+		items = append(items, tableListSnapshotItem{label: table, identifier: table})
+	}
+	return items
+}
+
+type preservedSidebarItem struct {
+	mainText      string
+	secondaryText string
+	object        *databaseObjectListItem
+}
+
+func (a *App) rebuildTableSidebarForPins(selectedTable string) {
+	if a == nil || a.tables == nil {
+		return
+	}
+	preserved := make([]preservedSidebarItem, 0, max(0, a.tables.GetItemCount()-a.tableSidebarItems))
+	for index := a.tableSidebarItems; index < a.tables.GetItemCount(); index++ {
+		mainText, secondaryText := a.tables.GetItemText(index)
+		item := preservedSidebarItem{mainText: mainText, secondaryText: secondaryText}
+		if object, ok := a.databaseObjects[index]; ok {
+			objectCopy := object
+			item.object = &objectCopy
+		}
+		preserved = append(preserved, item)
+	}
+
+	a.tables.Clear()
+	a.tableIdentifiers = map[int]string{}
+	a.databaseObjects = map[int]databaseObjectListItem{}
+	items := a.orderedTableSidebarItems()
+	for index, item := range items {
+		a.tables.AddItem(item.label, "", 0, nil)
+		if item.identifier != "" {
+			a.tableIdentifiers[index] = item.identifier
+		}
+	}
+	a.tableSidebarItems = len(items)
+	for _, item := range preserved {
+		index := a.tables.GetItemCount()
+		a.tables.AddItem(item.mainText, item.secondaryText, 0, nil)
+		if item.object != nil {
+			a.databaseObjects[index] = *item.object
+		}
+	}
+	a.selectTableListIdentifier(selectedTable)
+	a.refreshTableSidebarState()
+}
+
+func (a *App) pinnedTablesForConnection() []string {
+	if a == nil || a.settings == nil || a.settings.PinnedTables == nil {
+		return nil
+	}
+	connection, ok := a.activeConnectionKey()
+	if !ok {
+		return nil
+	}
+	return a.settings.PinnedTables[connection]
+}
+
+func (a *App) tableIsPinned(table string) bool {
+	for _, pinned := range a.pinnedTablesForConnection() {
+		if pinned == table {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *App) selectedSidebarTable() (string, bool) {
+	if a == nil || a.tables == nil {
+		return "", false
+	}
+	table, ok := a.tableIdentifiers[a.tables.GetCurrentItem()]
+	return table, ok && table != ""
+}
+
+func (a *App) toggleSelectedTablePin() {
+	table, ok := a.selectedSidebarTable()
+	if !ok {
+		a.flashStatus("[yellow]Select a table to pin or unpin[-]", a.currentResultRowCount(), 1600*time.Millisecond)
+		return
+	}
+	connection, ok := a.activeConnectionKey()
+	if !ok || a.settings == nil {
+		a.flashStatus("[yellow]Table pins require an active database connection[-]", a.currentResultRowCount(), 1800*time.Millisecond)
+		return
+	}
+	if a.settings.PinnedTables == nil {
+		a.settings.PinnedTables = make(map[string][]string)
+	}
+	previous := append([]string(nil), a.settings.PinnedTables[connection]...)
+	pins := append([]string(nil), previous...)
+	pinned := true
+	for index, candidate := range pins {
+		if candidate == table {
+			pins = append(pins[:index], pins[index+1:]...)
+			pinned = false
+			break
+		}
+	}
+	if pinned {
+		pins = append(pins, table)
+	}
+	if len(pins) == 0 {
+		delete(a.settings.PinnedTables, connection)
+	} else {
+		a.settings.PinnedTables[connection] = pins
+	}
+	if err := config.SaveSettings(a.settings); err != nil {
+		if len(previous) == 0 {
+			delete(a.settings.PinnedTables, connection)
+		} else {
+			a.settings.PinnedTables[connection] = previous
+		}
+		a.flashStatus(fmt.Sprintf("[yellow]Could not save table pin: %s[-]", tview.Escape(err.Error())), a.currentResultRowCount(), 2400*time.Millisecond)
+		return
+	}
+
+	a.rebuildTableSidebarForPins(table)
+	verb := "Unpinned"
+	if pinned {
+		verb = "Pinned"
+	}
+	a.flashStatus(fmt.Sprintf("[green]%s %s[-]", verb, tview.Escape(table)), a.currentResultRowCount(), 1600*time.Millisecond)
 }
 
 func namespaceForTable(dbType config.DBType, tableName string) string {
@@ -243,7 +421,8 @@ func isSelectableTableLabel(label string) bool {
 	trimmed := strings.TrimSpace(label)
 	if strings.HasPrefix(trimmed, "[#a6e3a1]▶[-]") ||
 		strings.HasPrefix(trimmed, "[#6c7086]•[-]") ||
-		strings.HasPrefix(trimmed, "[#cba6f7]/[-]") {
+		strings.HasPrefix(trimmed, "[#cba6f7]/[-]") ||
+		strings.HasPrefix(trimmed, "[#f9e2af]"+iconPin+"[-]") {
 		return true
 	}
 	return !strings.HasPrefix(trimmed, "[")
@@ -278,6 +457,10 @@ func (a *App) handleTableListInput(event *tcell.EventKey) *tcell.EventKey {
 			return nil
 		}
 	case tcell.KeyRune:
+		if event.Modifiers()&(tcell.ModCtrl|tcell.ModAlt|tcell.ModMeta) == 0 && !a.hasActiveTableSearch() && event.Rune() == ' ' {
+			a.toggleSelectedTablePin()
+			return nil
+		}
 		if event.Modifiers()&(tcell.ModCtrl|tcell.ModAlt|tcell.ModMeta) == 0 && unicode.IsPrint(event.Rune()) {
 			a.tableSearch += string(event.Rune())
 			a.applyTableSearch()
@@ -332,8 +515,8 @@ func (a *App) applyTableSearch() {
 
 // refreshTableSidebarState redraws table-only rows without disturbing schema
 // headers or discovered database objects. The markers work without color:
-// ▶ is the table currently shown, • means opened this connection, and / means
-// that table has a remembered filter.
+// ▶ is the table currently shown, • means opened this connection, / means that
+// table has a remembered filter, and 📌 means pinned to the top.
 func (a *App) refreshTableSidebarState() {
 	if a == nil || a.tables == nil {
 		return
@@ -353,7 +536,11 @@ func (a *App) tableSidebarLabel(identifier, identifierLabel string) string {
 	if a.tableHasRememberedFilter(identifier) {
 		filterMarker = "[#cba6f7]/[-]"
 	}
-	return fmt.Sprintf("%s%s %s", stateMarker, filterMarker, identifierLabel)
+	pinMarker := "  "
+	if a.tableIsPinned(identifier) {
+		pinMarker = "[#f9e2af]" + iconPin + "[-]"
+	}
+	return fmt.Sprintf("%s%s%s %s", stateMarker, filterMarker, pinMarker, identifierLabel)
 }
 
 func (a *App) tableHasRememberedFilter(identifier string) bool {
@@ -427,6 +614,6 @@ func (a *App) updateTableListTitle() {
 	if a.tableSearch != "" {
 		search = fmt.Sprintf(" [#a6adc8]find:[-] [#f9e2af]%s[-]", tview.Escape(a.tableSearch))
 	}
-	legend := " [#6c7086]▶ now • used / filter[-]"
+	legend := fmt.Sprintf(" [yellow]Space[-] pin %s  [#6c7086]▶ • /[-]", iconPin)
 	a.tables.SetTitle(fmt.Sprintf(" %s %s%s%s [yellow](Alt+T)[-] ", iconTables, count, search, legend))
 }

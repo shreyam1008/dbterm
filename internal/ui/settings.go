@@ -87,6 +87,7 @@ func cloneSettings(settings *config.Settings) *config.Settings {
 		Keymap:                make(map[string][]string, len(settings.Keymap)),
 		DashboardHealthChecks: settings.DashboardHealthChecks,
 		TableColumnWidths:     make(map[string]map[string]map[string]int, len(settings.TableColumnWidths)),
+		PinnedTables:          make(map[string][]string, len(settings.PinnedTables)),
 	}
 
 	for action, bindings := range settings.Keymap {
@@ -102,6 +103,9 @@ func cloneSettings(settings *config.Settings) *config.Settings {
 				cloned.TableColumnWidths[connection][table][column] = width
 			}
 		}
+	}
+	for connection, tables := range settings.PinnedTables {
+		cloned.PinnedTables[connection] = append([]string(nil), tables...)
 	}
 
 	return cloned

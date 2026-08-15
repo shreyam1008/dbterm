@@ -57,6 +57,7 @@ type Settings struct {
 	Keymap                map[string][]string                  `json:"keymap"`
 	DashboardHealthChecks string                               `json:"dashboard_health_checks"`
 	TableColumnWidths     map[string]map[string]map[string]int `json:"table_column_widths,omitempty"`
+	PinnedTables          map[string][]string                  `json:"pinned_tables,omitempty"`
 }
 
 // DefaultSettings returns a deep-copied default settings value.
@@ -65,6 +66,7 @@ func DefaultSettings() *Settings {
 		Keymap:                DefaultKeymapBindings(),
 		DashboardHealthChecks: "auto",
 		TableColumnWidths:     map[string]map[string]map[string]int{},
+		PinnedTables:          map[string][]string{},
 	}
 }
 
@@ -150,12 +152,14 @@ func mergeSettings(defaults, loaded *Settings) *Settings {
 		Keymap:                map[string][]string{},
 		DashboardHealthChecks: "auto",
 		TableColumnWidths:     map[string]map[string]map[string]int{},
+		PinnedTables:          map[string][]string{},
 	}
 
 	if defaults != nil {
 		merged.Keymap = cloneKeymapBindings(defaults.Keymap)
 		merged.DashboardHealthChecks = normalizeDashboardHealthChecks(defaults.DashboardHealthChecks)
 		merged.TableColumnWidths = cloneTableColumnWidths(defaults.TableColumnWidths)
+		merged.PinnedTables = clonePinnedTables(defaults.PinnedTables)
 	}
 
 	if loaded == nil {
@@ -166,6 +170,7 @@ func mergeSettings(defaults, loaded *Settings) *Settings {
 		merged.DashboardHealthChecks = mode
 	}
 	merged.TableColumnWidths = cloneTableColumnWidths(loaded.TableColumnWidths)
+	merged.PinnedTables = clonePinnedTables(loaded.PinnedTables)
 
 	for action, bindings := range loaded.Keymap {
 		name := strings.ToLower(strings.TrimSpace(action))
@@ -182,6 +187,25 @@ func mergeSettings(defaults, loaded *Settings) *Settings {
 	}
 
 	return merged
+}
+
+func clonePinnedTables(in map[string][]string) map[string][]string {
+	out := make(map[string][]string, len(in))
+	for connection, tables := range in {
+		seen := make(map[string]bool, len(tables))
+		for _, table := range tables {
+			table = strings.TrimSpace(table)
+			if table == "" || seen[table] {
+				continue
+			}
+			seen[table] = true
+			out[connection] = append(out[connection], table)
+		}
+		if len(out[connection]) == 0 {
+			delete(out, connection)
+		}
+	}
+	return out
 }
 
 func cloneTableColumnWidths(in map[string]map[string]map[string]int) map[string]map[string]map[string]int {

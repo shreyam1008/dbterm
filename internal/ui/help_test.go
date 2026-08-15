@@ -18,6 +18,7 @@ func TestKeyboardHelpHighlightsCoreWorkflows(t *testing.T) {
 		"[yellow]V[-]",
 		"[yellow]/[-]",
 		"Clear a filter",
+		"Pin/unpin the selected table",
 		"Tab / Shift+Tab",
 		"[yellow]Ctrl++ / Ctrl+-[-]",
 		"[yellow]Alt++ / Alt+-[-]",

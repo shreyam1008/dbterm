@@ -143,6 +143,7 @@ func TestBuildCommandPaletteItemsIncludesObjectsRecentQueriesAndEffectiveShortcu
 		commandPaletteQuery:     false,
 	}
 	focusTablesShortcut := ""
+	pinShortcut := ""
 	containsExtension := false
 	for _, item := range items {
 		if _, wanted := wantedKinds[item.kind]; wanted {
@@ -150,6 +151,9 @@ func TestBuildCommandPaletteItemsIncludesObjectsRecentQueriesAndEffectiveShortcu
 		}
 		if item.action == actionFocusTables {
 			focusTablesShortcut = item.shortcut
+		}
+		if item.action == paletteActionToggleTablePin {
+			pinShortcut = item.shortcut
 		}
 		if item.objectName == "uuid-ossp" {
 			containsExtension = true
@@ -162,6 +166,13 @@ func TestBuildCommandPaletteItemsIncludesObjectsRecentQueriesAndEffectiveShortcu
 	}
 	if focusTablesShortcut != "Ctrl+G / Alt+T" {
 		t.Fatalf("effective shortcut = %q, want %q", focusTablesShortcut, "Ctrl+G / Alt+T")
+	}
+	if pinShortcut != "Space (Tables)" {
+		t.Fatalf("pin action shortcut = %q, want Space (Tables)", pinShortcut)
+	}
+	pinMatches := searchCommandPaletteItems(items, "favorite sidebar")
+	if len(pinMatches) == 0 || pinMatches[0].item.action != paletteActionToggleTablePin {
+		t.Fatalf("pin action search = %#v, want pin toggle first", pinMatches)
 	}
 	if containsExtension {
 		t.Fatal("palette unexpectedly included an unsupported extension object")

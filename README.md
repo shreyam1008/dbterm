@@ -100,6 +100,7 @@ dbterm keeps one connection profile for the signed-in OS user. Run the TUI norma
 | --- | --- |
 | `Ctrl + P` (default) | Search commands, database objects, and recent queries in the command palette |
 | `Alt + Q / T / R` | Focus Query / Tables / Results |
+| `Space` (Tables) | Pin or unpin the highlighted table at the top; saved separately for each database connection |
 | Type while Tables is focused | Jump to and highlight the first matching table; Enter opens it and clears the search |
 | `Enter` | Execute query (in Query panel) |
 | `Shift + Enter` | New line in Query panel |

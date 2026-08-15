@@ -10,6 +10,7 @@
 # 5) If that tag already exists, the workflow skips release creation safely.
 #
 # Newest entry first:
+0.6.4|Bhagirathi|Persistent per-database table pins with a conflict-free Space shortcut, type-ahead search, command-palette access, and clear contextual guidance.
 0.6.3|Alaknanda|One canonical user profile across sudo and updates, plus server-first PostgreSQL/MySQL connections with accessible database browsing and safe legacy recovery.
 0.6.2|Teesta|First-class rclone destinations for local and remote database backups, with verified uploads, safe remote retention, and clearer table browsing state.
 0.6.1|Mandakini|Uniform resizable result columns with per-table widths that persist across navigation and app restarts.

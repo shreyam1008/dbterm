@@ -11,6 +11,7 @@ const (
 	iconQuery     = "📝"
 	iconResults   = "📊"
 	iconBackup    = "💾"
+	iconPin       = "📌"
 
 	iconBack     = "←"
 	iconRefresh  = "↻"

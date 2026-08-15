@@ -18,7 +18,8 @@ func keyboardHelpText() string {
   [#89b4fa]Resize results[-]     [yellow]+ / -[-] selected column  │  [yellow]Ctrl++ / Ctrl+-[-] all columns  │  [yellow]Alt++ / Alt+-[-] rows
 
 [#a6e3a1]TABLES[-]
-  [#6c7086]Markers[-]          [#a6e3a1]▶[-] currently shown  [#6c7086]•[-] opened this connection  [#cba6f7]/[-] remembered filter
+  [#6c7086]Markers[-]          [#a6e3a1]▶[-] currently shown  [#6c7086]•[-] opened this connection  [#cba6f7]/[-] remembered filter  [#f9e2af]` + iconPin + `[-] pinned
+  [yellow]Space[-]            Pin/unpin the selected table at the top (saved per database connection)
   [yellow]Type[-]             Jump to the first matching table and highlight the match
   [yellow]Backspace[-]        Edit the table search
   [yellow]Enter[-]            Open the match and clear the search

@@ -140,3 +140,24 @@ func TestSaveSettingsPreservesTableColumnWidths(t *testing.T) {
 		t.Fatalf("reloaded profile width = %d, want 42", got)
 	}
 }
+
+func TestSaveSettingsPreservesPinnedTablesPerConnection(t *testing.T) {
+	useTestConfigDir(t)
+	settings := DefaultSettings()
+	settings.PinnedTables["connection-a"] = []string{"orders", "users", "orders", " "}
+	settings.PinnedTables["connection-b"] = []string{"events"}
+
+	if err := SaveSettings(settings); err != nil {
+		t.Fatalf("SaveSettings() error = %v", err)
+	}
+	reloaded, err := LoadSettings()
+	if err != nil {
+		t.Fatalf("LoadSettings() error = %v", err)
+	}
+	if got := reloaded.PinnedTables["connection-a"]; len(got) != 2 || got[0] != "orders" || got[1] != "users" {
+		t.Fatalf("connection-a pins = %#v, want [orders users]", got)
+	}
+	if got := reloaded.PinnedTables["connection-b"]; len(got) != 1 || got[0] != "events" {
+		t.Fatalf("connection-b pins = %#v, want [events]", got)
+	}
+}

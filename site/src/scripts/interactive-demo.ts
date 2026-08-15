@@ -322,6 +322,7 @@ class DbtermDemo {
   private selectedTable: string | null = "users";
   private tableCursor = "users";
   private tableSearch = "";
+  private pinnedTables = new Set<string>();
   private activeSql = "";
   private sortColumn = -1;
   private sortAscending = true;
@@ -574,6 +575,18 @@ class DbtermDemo {
         keywords: "execute statement editor",
         shortcut: "Enter",
         run: () => this.runQuery()
+      },
+      {
+        id: "toggle-table-pin",
+        kind: "ACTION",
+        label: "Pin / Unpin Selected Table",
+        description: "Move the highlighted table into or out of the pinned section for this database connection.",
+        keywords: "favorite favourite top sidebar table",
+        shortcut: "Space (Tables)",
+        run: () => {
+          this.setPanelFocus("tables");
+          this.toggleTablePin();
+        }
       },
       ...Object.keys(TABLE_QUERIES).map((table) => ({
         id: `table-${table}`,
@@ -846,6 +859,12 @@ class DbtermDemo {
     this.selectedTable = "users";
     this.tableCursor = "users";
     this.tableSearch = "";
+    this.pinnedTables.clear();
+    this.root.querySelectorAll<HTMLButtonElement>("[data-demo-table]").forEach((button) => {
+      button.dataset.pinned = "false";
+      button.removeAttribute("aria-label");
+    });
+    this.renderTableOrder();
     this.activeSql = "";
     this.sortColumn = -1;
     this.sortAscending = true;
@@ -1325,7 +1344,10 @@ class DbtermDemo {
     }
 
     if (this.focusedPanel === "tables") {
-      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      if (event.key === " " && !this.tableSearch) {
+        event.preventDefault();
+        this.toggleTablePin();
+      } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         event.preventDefault();
         this.moveTableCursor(event.key === "ArrowDown" ? 1 : -1);
       } else if (event.key === "Enter") {
@@ -1426,7 +1448,7 @@ class DbtermDemo {
   }
 
   private moveTableCursor(delta: number): void {
-    const names = Object.keys(TABLE_QUERIES);
+    const names = this.orderedTableNames();
     const current = Math.max(0, names.indexOf(this.tableCursor));
     this.tableCursor = names[(current + delta + names.length) % names.length];
     this.updateTableSelection();
@@ -1435,7 +1457,7 @@ class DbtermDemo {
 
   private applyTableSearch(): void {
     const needle = this.tableSearch.toLocaleLowerCase();
-    const names = Object.keys(TABLE_QUERIES);
+    const names = this.orderedTableNames();
     const match = names.find((name) => name.toLocaleLowerCase().includes(needle));
     if (match) this.tableCursor = match;
     this.root.querySelectorAll<HTMLButtonElement>("[data-demo-table]").forEach((button) => {
@@ -1459,6 +1481,36 @@ class DbtermDemo {
     this.tableSearch = "";
     this.applyTableSearch();
     if (announce) this.announce("Table search cleared.");
+  }
+
+  private toggleTablePin(): void {
+    const table = this.tableCursor;
+    const button = this.root.querySelector<HTMLButtonElement>(`[data-demo-table="${table}"]`);
+    if (!button) return;
+    const pinned = !this.pinnedTables.has(table);
+    if (pinned) this.pinnedTables.add(table);
+    else this.pinnedTables.delete(table);
+    button.dataset.pinned = String(pinned);
+    if (pinned) button.setAttribute("aria-label", `Pinned table ${table}`);
+    else button.removeAttribute("aria-label");
+    this.renderTableOrder();
+    this.announce(`${pinned ? "Pinned" : "Unpinned"} ${table}.`);
+  }
+
+  private orderedTableNames(): string[] {
+    const names = Object.keys(TABLE_QUERIES);
+    return [
+      ...Array.from(this.pinnedTables).filter((table) => names.includes(table)),
+      ...names.filter((table) => !this.pinnedTables.has(table))
+    ];
+  }
+
+  private renderTableOrder(): void {
+    const list = query<HTMLElement>(this.root, ".demo-table-list");
+    this.orderedTableNames().forEach((table) => {
+      const button = this.root.querySelector<HTMLButtonElement>(`[data-demo-table="${table}"]`);
+      if (button) list.append(button);
+    });
   }
 
   private async toggleSort(): Promise<void> {
@@ -1758,7 +1810,7 @@ class DbtermDemo {
     }
     this.status.textContent = this.tableSearch
       ? `find: ${this.tableSearch} · Enter open · Backspace edit · Esc clear`
-      : "Tables focused · type to find · Enter open · Esc release";
+      : "Space Pin/unpin · type to find · Enter open · Esc release";
   }
 }
 

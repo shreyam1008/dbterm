@@ -6,6 +6,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+	"github.com/shreyam1008/dbterm/internal/config"
 )
 
 func TestIsSelectableTableLabelIgnoresDecorativeRows(t *testing.T) {
@@ -18,6 +19,7 @@ func TestIsSelectableTableLabelIgnoresDecorativeRows(t *testing.T) {
 		{name: "active table", label: "[#a6e3a1]▶[-][#cba6f7]/[-] public.users", want: true},
 		{name: "visited table", label: "[#6c7086]•[-]  public.orders", want: true},
 		{name: "filtered unvisited table", label: "[#cba6f7]/[-] public.logs", want: true},
+		{name: "pinned table", label: "[#f9e2af]" + iconPin + "[-] public.events", want: true},
 		{name: "section header", label: "[#6c7086]── Views (2) ──[-]", want: false},
 		{name: "indented styled object", label: "  [#a6adc8]◈[-] reporting_view", want: false},
 		{name: "empty decorative", label: "   [gray]No tables found[-]", want: false},
@@ -82,8 +84,169 @@ func TestTableTypeAheadSelectsFirstMatchAndClearsOnEnter(t *testing.T) {
 		t.Fatalf("search was not cleared: %q", app.tableSearch)
 	}
 	label, _ = list.GetItemText(1)
-	if label != "   audit_users" {
+	if label != "     audit_users" {
 		t.Fatalf("highlight was not cleared: %q", label)
+	}
+}
+
+func TestPinnedTablesMoveToTopWithoutDuplication(t *testing.T) {
+	activeConnection := &config.ConnectionConfig{Type: config.SQLite, FilePath: "/tmp/pins.db"}
+	app := &App{
+		activeConn: activeConnection,
+		settings:   config.DefaultSettings(),
+		dbType:     config.SQLite,
+		tableOrder: []string{"users", "orders", "events"},
+	}
+	connection, ok := app.activeConnectionKey()
+	if !ok {
+		t.Fatal("active connection key is unavailable")
+	}
+	app.settings.PinnedTables[connection] = []string{"orders", "users", "missing"}
+
+	items := app.orderedTableSidebarItems()
+	if len(items) != 4 {
+		t.Fatalf("sidebar item count = %d, want pin header + 3 tables", len(items))
+	}
+	if !strings.Contains(items[0].label, "Pinned (2)") {
+		t.Fatalf("first item is not the pinned section: %#v", items[0])
+	}
+	want := []string{"orders", "users", "events"}
+	got := make([]string, 0, len(want))
+	for _, item := range items {
+		if item.identifier != "" {
+			got = append(got, item.identifier)
+		}
+	}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("table order = %#v, want %#v", got, want)
+	}
+}
+
+func TestTablePinShortcutTogglesAndPersistsPerConnection(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	list := tview.NewList().ShowSecondaryText(false)
+	list.AddItem("users", "", 0, nil)
+	list.AddItem("orders", "", 0, nil)
+	app := &App{
+		tables:            list,
+		tableIdentifiers:  map[int]string{0: "users", 1: "orders"},
+		tableOrder:        []string{"users", "orders"},
+		tableSidebarItems: 2,
+		tableCount:        2,
+		dbType:            config.SQLite,
+		activeConn:        &config.ConnectionConfig{Type: config.SQLite, FilePath: "/tmp/pins.db"},
+		settings:          config.DefaultSettings(),
+	}
+
+	space := tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone)
+	if got := app.handleTableListInput(space); got != nil {
+		t.Fatal("Space pin shortcut was not consumed")
+	}
+	connection, _ := app.activeConnectionKey()
+	if got := app.settings.PinnedTables[connection]; len(got) != 1 || got[0] != "users" {
+		t.Fatalf("pins after Space = %#v, want [users]", got)
+	}
+	if selected, ok := app.selectedSidebarTable(); !ok || selected != "users" {
+		t.Fatalf("selection after pin = %q, %v; want users", selected, ok)
+	}
+	label, _ := list.GetItemText(list.GetCurrentItem())
+	if !strings.Contains(label, iconPin) {
+		t.Fatalf("pinned row has no pin icon: %q", label)
+	}
+
+	if got := app.handleTableListInput(space); got != nil {
+		t.Fatal("Space unpin shortcut was not consumed")
+	}
+	if got := app.settings.PinnedTables[connection]; len(got) != 0 {
+		t.Fatalf("pins after second P = %#v, want none", got)
+	}
+	reloaded, err := config.LoadSettings()
+	if err != nil {
+		t.Fatalf("LoadSettings() error = %v", err)
+	}
+	if got := reloaded.PinnedTables[connection]; len(got) != 0 {
+		t.Fatalf("persisted pins after unpin = %#v, want none", got)
+	}
+}
+
+func TestPinShortcutDoesNotStealPrintableTableSearch(t *testing.T) {
+	list := tview.NewList().ShowSecondaryText(false)
+	list.AddItem("people", "", 0, nil)
+	app := &App{
+		tables:           list,
+		tableIdentifiers: map[int]string{0: "people"},
+	}
+	app.handleTableListInput(tcell.NewEventKey(tcell.KeyRune, 'p', tcell.ModNone))
+	if app.tableSearch != "p" {
+		t.Fatalf("search beginning with p = %q, want p", app.tableSearch)
+	}
+	app.tableSearch = "peo"
+	app.handleTableListInput(tcell.NewEventKey(tcell.KeyRune, 'p', tcell.ModNone))
+	if app.tableSearch != "peop" {
+		t.Fatalf("active search = %q, want peop", app.tableSearch)
+	}
+	app.handleTableListInput(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone))
+	if app.tableSearch != "peop " {
+		t.Fatalf("space inside active search = %q, want %q", app.tableSearch, "peop ")
+	}
+}
+
+func TestTableContextHintsPrioritizePinAndSearch(t *testing.T) {
+	tables := tview.NewList()
+	app := &App{tables: tables, focusedPanel: tables}
+
+	for _, test := range []struct {
+		width int
+		want  []string
+	}{
+		{width: 72, want: []string{"Space", "Pin/unpin", "Enter", "Open"}},
+		{width: 112, want: []string{"Space", "Type", "Find", "Ctrl+P"}},
+		{width: 160, want: []string{"Space", "Alt+M", "Schema", "Ctrl+P"}},
+	} {
+		hint := app.statusActionText(test.width)
+		for _, want := range test.want {
+			if !strings.Contains(hint, want) {
+				t.Fatalf("statusActionText(%d) = %q, want %q", test.width, hint, want)
+			}
+		}
+	}
+
+	app.tableCount = 3
+	app.updateTableListTitle()
+	if title := tables.GetTitle(); !strings.Contains(title, "Space") || !strings.Contains(title, iconPin) {
+		t.Fatalf("table title does not expose pin control: %q", title)
+	}
+}
+
+func TestPinReorderPreservesDatabaseObjectRows(t *testing.T) {
+	list := tview.NewList().ShowSecondaryText(false)
+	list.AddItem("users", "", 0, nil)
+	list.AddItem("orders", "", 0, nil)
+	list.AddItem("[#6c7086]── ◈ Views (1) ──[-]", "", 0, nil)
+	list.AddItem("  [#a6adc8]◈[-] active_users", "", 0, nil)
+	app := &App{
+		tables:            list,
+		tableIdentifiers:  map[int]string{0: "users", 1: "orders"},
+		databaseObjects:   map[int]databaseObjectListItem{3: {name: "active_users"}},
+		tableOrder:        []string{"users", "orders"},
+		tableSidebarItems: 2,
+		dbType:            config.SQLite,
+		activeConn:        &config.ConnectionConfig{Type: config.SQLite, FilePath: "/tmp/pins.db"},
+		settings:          config.DefaultSettings(),
+	}
+	connection, _ := app.activeConnectionKey()
+	app.settings.PinnedTables[connection] = []string{"users"}
+
+	app.rebuildTableSidebarForPins("orders")
+	if got := list.GetItemCount(); got != 5 {
+		t.Fatalf("item count after reorder = %d, want 5", got)
+	}
+	object, ok := app.databaseObjects[4]
+	if !ok || object.name != "active_users" {
+		t.Fatalf("database object mapping after reorder = %#v, %v", object, ok)
+	}
+	if selected, ok := app.selectedSidebarTable(); !ok || selected != "orders" {
+		t.Fatalf("selected table after reorder = %q, %v; want orders", selected, ok)
 	}
 }
 
@@ -123,7 +286,7 @@ func TestTableSidebarShowsActiveVisitedAndFilteredStates(t *testing.T) {
 	if strings.ContainsAny(logs, "▶•/") {
 		t.Fatalf("untouched table has a state marker: %q", logs)
 	}
-	if !strings.Contains(list.GetTitle(), "▶ now • used / filter") {
+	if title := list.GetTitle(); !strings.Contains(title, "Space") || !strings.Contains(title, iconPin) || !strings.Contains(title, "▶ • /") {
 		t.Fatalf("sidebar marker legend missing: %q", list.GetTitle())
 	}
 
