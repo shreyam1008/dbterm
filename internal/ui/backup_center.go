@@ -395,19 +395,26 @@ func (a *App) showBackupJobForm(existing *backupcore.Job) {
 }
 
 type backupConnectionChoice struct {
-	connectionID string
-	name         string
-	detail       string
-	addNew       bool
+	connectionID           string
+	name                   string
+	detail                 string
+	addNew                 bool
+	requiresDatabaseChoice bool
 }
 
 func backupConnectionChoices(connections []config.ConnectionConfig) []backupConnectionChoice {
 	choices := make([]backupConnectionChoice, 0, len(connections)+1)
 	for _, connection := range connections {
+		detail := backupConnectionSummary(connection)
+		requiresDatabaseChoice := connectionNeedsDatabaseChoice(connection)
+		if requiresDatabaseChoice {
+			detail += " · choose and save a database first"
+		}
 		choices = append(choices, backupConnectionChoice{
-			connectionID: connection.ID,
-			name:         nonEmptyOr(strings.TrimSpace(connection.Name), "unnamed connection"),
-			detail:       backupConnectionSummary(connection),
+			connectionID:           connection.ID,
+			name:                   nonEmptyOr(strings.TrimSpace(connection.Name), "unnamed connection"),
+			detail:                 detail,
+			requiresDatabaseChoice: requiresDatabaseChoice,
 		})
 	}
 	choices = append(choices, backupConnectionChoice{
@@ -462,6 +469,10 @@ func (a *App) showBackupConnectionPicker() {
 		choice := choices[index]
 		if choice.addNew {
 			addConnection()
+			return
+		}
+		if choice.requiresDatabaseChoice {
+			a.ShowAlert(fmt.Sprintf("%s %s is a server login, not a specific database.\n\nFrom Dashboard, press A on it, choose a database, then press N to save that database for scheduled backups.", iconInfo, tview.Escape(choice.name)), pageBackupConnectionPicker)
 			return
 		}
 		a.pages.RemovePage(pageBackupConnectionPicker)

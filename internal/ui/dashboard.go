@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -181,6 +182,16 @@ func (a *App) showDashboardWithHealthChecks(forceHealthChecks bool) {
 			case 'n', 'N':
 				a.showConnectionForm(nil, -1)
 				return nil
+			case 'a', 'A':
+				if connCount == 0 {
+					a.ShowAlert(fmt.Sprintf("%s Save a connection first, then press A to add another database from its server.", iconInfo), "dashboard")
+					return nil
+				}
+				idx := connList.GetCurrentItem()
+				if idx >= 0 && idx < connCount {
+					a.browseDatabasesForSavedConnection(idx)
+				}
+				return nil
 			case 'e', 'E':
 				if connCount > 0 {
 					idx := connList.GetCurrentItem()
@@ -351,15 +362,26 @@ func dashboardConnectionLabel(conn config.ConnectionConfig) string {
 		typeTag = "[#6c7086]DB[-]"
 	}
 
-	return fmt.Sprintf(" %s  %s  %s %s  %s", statusIcon, typeTag, iconConnect, conn.Name, activity)
+	return fmt.Sprintf(" %s  %s  %s %s  %s", statusIcon, typeTag, iconConnect, tview.Escape(conn.Name), activity)
 }
 
 func dashboardConnectionDetail(conn config.ConnectionConfig) string {
 	var detail string
-	if conn.Type == config.SQLite {
-		detail = fmt.Sprintf("       ◆ %s", conn.FilePath)
-	} else {
-		detail = fmt.Sprintf("       %s@%s:%s/%s", conn.User, conn.Host, conn.Port, conn.Database)
+	switch conn.Type {
+	case config.SQLite:
+		detail = fmt.Sprintf("       Local file  ›  %s", tview.Escape(conn.FilePath))
+	case config.Turso:
+		detail = fmt.Sprintf("       Turso cloud  ›  %s", tview.Escape(conn.Host))
+	case config.CloudflareD1:
+		detail = fmt.Sprintf("       Cloudflare account %s  ›  database %s", tview.Escape(conn.AccountID), tview.Escape(conn.DatabaseID))
+	default:
+		if strings.TrimSpace(conn.Database) == "" {
+			detail = fmt.Sprintf("       %s server  %s:%s  ›  [#89b4fa]choose database on connect[-]  │  user %s",
+				conn.TypeLabel(), tview.Escape(conn.Host), tview.Escape(conn.Port), tview.Escape(conn.User))
+		} else {
+			detail = fmt.Sprintf("       %s server  %s:%s  ›  database %s [#89b4fa](default)[-]  │  user %s",
+				conn.TypeLabel(), tview.Escape(conn.Host), tview.Escape(conn.Port), tview.Escape(conn.Database), tview.Escape(conn.User))
+		}
 	}
 
 	if conn.LastUsed != "" {
@@ -516,16 +538,16 @@ func dashboardFooterText(hasConnections, hasWorkspace bool, width int, paletteSh
 	}
 	minimal := "  [yellow]N[-] New  │  [green]B[-] Backups  │  [#cba6f7]Q[-] Quit"
 	if hasConnections {
-		short := fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [green]Ctrl+B[-] Schedule  │  [green]B[-] Backups  │  [#cba6f7]Q[-] Quit", iconConnect)
+		short := fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [blue]A[-] All DBs  │  [green]B[-] Backups  │  [#cba6f7]Q[-] Quit", iconConnect)
 		if hasWorkspace {
-			short = fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [green]Ctrl+B[-] Schedule  │  [green]B[-] Center  │  [yellow]W/Esc[-] Back %s", iconConnect, iconBack)
-			medium := fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [yellow]N[-] New  │  [green]Ctrl+B[-] Schedule  │  [green]B[-] Center  │  [yellow]W/Esc[-] Back %s", iconConnect, iconBack)
-			full := fmt.Sprintf("  [green]Enter[-] Connect %s  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [yellow]I[-] Import  │  [green]Ctrl+B[-] Schedule selected  │  [green]B[-] Backup Center  │  [#94e2d5]S[-] Services %s  │  [yellow]R[-] Recheck %s  │  [yellow]%s[-] Palette  │  [yellow]G[-] Settings  │  [yellow]W/Esc[-] Back %s  │  [#cba6f7]Q[-] Quit",
+			short = fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [blue]A[-] All DBs  │  [green]B[-] Center  │  [yellow]W/Esc[-] Back %s", iconConnect, iconBack)
+			medium := fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [blue]A[-] All DBs  │  [yellow]N[-] New  │  [green]B[-] Center  │  [yellow]W/Esc[-] Back %s", iconConnect, iconBack)
+			full := fmt.Sprintf("  [green]Enter[-] Connect %s  │  [blue]A[-] All server DBs  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [yellow]I[-] Import  │  [green]Ctrl+B[-] Schedule selected  │  [green]B[-] Backup Center  │  [#94e2d5]S[-] Services %s  │  [yellow]R[-] Recheck %s  │  [yellow]%s[-] Palette  │  [yellow]G[-] Settings  │  [yellow]W/Esc[-] Back %s  │  [#cba6f7]Q[-] Quit",
 				iconConnect, iconServices, iconRefresh, paletteShortcut, iconBack)
 			return firstDashboardFooterThatFits(width, full, medium, short, minimal)
 		}
-		medium := fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [green]Ctrl+B[-] Schedule  │  [green]B[-] Center  │  [yellow]G[-] Settings  │  [teal]H[-] Help %s", iconConnect, iconHelp)
-		full := fmt.Sprintf("  [green]Enter[-] Connect %s  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [yellow]I[-] Import  │  [green]Ctrl+B[-] Schedule selected  │  [green]B[-] Backup Center  │  [#94e2d5]S[-] Services %s  │  [yellow]R[-] Recheck %s  │  [yellow]%s[-] Palette  │  [yellow]G[-] Settings  │  [teal]H[-] Help %s  │  [#cba6f7]Q[-] Quit",
+		medium := fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [blue]A[-] All DBs  │  [green]B[-] Center  │  [yellow]G[-] Settings  │  [teal]H[-] Help %s", iconConnect, iconHelp)
+		full := fmt.Sprintf("  [green]Enter[-] Connect %s  │  [blue]A[-] All server DBs  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [yellow]I[-] Import  │  [green]Ctrl+B[-] Schedule selected  │  [green]B[-] Backup Center  │  [#94e2d5]S[-] Services %s  │  [yellow]R[-] Recheck %s  │  [yellow]%s[-] Palette  │  [yellow]G[-] Settings  │  [teal]H[-] Help %s  │  [#cba6f7]Q[-] Quit",
 			iconConnect, iconServices, iconRefresh, paletteShortcut, iconHelp)
 		return firstDashboardFooterThatFits(width, full, medium, short, minimal)
 	}

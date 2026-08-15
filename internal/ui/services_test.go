@@ -23,7 +23,7 @@ func newServiceConnectionTestForm(serviceIndex int, database, password string) *
 func TestBuildServiceConnectionConfigUsesVisibleCredentials(t *testing.T) {
 	form := newServiceConnectionTestForm(0, "shop", "  exact password  ")
 
-	cfg, err := buildServiceConnectionConfig(form, true)
+	cfg, err := buildServiceConnectionConfig(form)
 	if err != nil {
 		t.Fatalf("buildServiceConnectionConfig() error = %v", err)
 	}
@@ -38,21 +38,24 @@ func TestBuildServiceConnectionConfigUsesVisibleCredentials(t *testing.T) {
 func TestBuildServiceDiscoveryConfigUsesPostgresMaintenanceDatabase(t *testing.T) {
 	form := newServiceConnectionTestForm(1, "", "secret")
 
-	cfg, err := buildServiceConnectionConfig(form, false)
+	cfg, err := buildServiceConnectionConfig(form)
 	if err != nil {
 		t.Fatalf("buildServiceConnectionConfig() error = %v", err)
 	}
-	if cfg.Type != config.PostgreSQL || cfg.Port != "5432" || cfg.Database != "postgres" || cfg.SSLMode != "disable" {
-		t.Fatalf("discovery config = %#v, want PostgreSQL maintenance connection", cfg)
+	if cfg.Type != config.PostgreSQL || cfg.Port != "5432" || cfg.Database != "" || cfg.SSLMode != "disable" {
+		t.Fatalf("server config = %#v, want blank optional database", cfg)
 	}
 }
 
-func TestBuildServiceConnectionConfigRequiresDatabaseForConnect(t *testing.T) {
+func TestBuildServiceConnectionConfigAllowsDatabaseChoiceAfterLogin(t *testing.T) {
 	form := newServiceConnectionTestForm(0, "", "secret")
 
-	_, err := buildServiceConnectionConfig(form, true)
-	if err == nil || !strings.Contains(err.Error(), "Find DBs") {
-		t.Fatalf("buildServiceConnectionConfig() error = %v, want database guidance", err)
+	cfg, err := buildServiceConnectionConfig(form)
+	if err != nil {
+		t.Fatalf("server login was rejected without a database: %v", err)
+	}
+	if cfg.Database != "" || cfg.Name != "MySQL server" {
+		t.Fatalf("server login = %+v", cfg)
 	}
 }
 
@@ -102,7 +105,7 @@ func TestLocalServiceLoginsIncludesOnlyLocalServerConnections(t *testing.T) {
 func TestLocalAuthenticationHintExplainsSudoBoundary(t *testing.T) {
 	cfg := &config.ConnectionConfig{Type: config.MySQL, Host: "localhost"}
 	hint := connectionHint(errors.New("access denied"), cfg)
-	if !strings.Contains(hint, "saved database login") || !strings.Contains(hint, "Do not use sudo") {
+	if !strings.Contains(hint, "database name is optional") || !strings.Contains(hint, "socket-only") || !strings.Contains(hint, "Do not use sudo") {
 		t.Fatalf("connectionHint() = %q", hint)
 	}
 }

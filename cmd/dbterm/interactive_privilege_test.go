@@ -22,3 +22,27 @@ func TestNormalizedSudoInvokerDetectsOnlyInteractiveSudoRoot(t *testing.T) {
 		})
 	}
 }
+
+func TestShouldUseInvokerProfile(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{name: "interactive TUI", want: true},
+		{name: "connection backup", args: []string{"backup", "run", "nightly"}, want: true},
+		{name: "user backup service", args: []string{"backup", "service", "status", "--user"}, want: true},
+		{name: "system backup service", args: []string{"backup", "service", "status", "--system"}, want: false},
+		{name: "system scope value", args: []string{"backup", "service", "install", "--scope", "system"}, want: false},
+		{name: "sudo connection recovery", args: []string{"connections", "recover-sudo"}, want: false},
+		{name: "update", args: []string{"--update"}, want: false},
+		{name: "uninstall", args: []string{"uninstall"}, want: false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := shouldUseInvokerProfile(test.args); got != test.want {
+				t.Fatalf("shouldUseInvokerProfile(%q) = %t, want %t", test.args, got, test.want)
+			}
+		})
+	}
+}

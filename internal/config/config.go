@@ -325,6 +325,13 @@ func (c *ConnectionConfig) BuildConnString() string {
 		if sslMode == "" {
 			sslMode = "disable"
 		}
+		databaseName := strings.TrimSpace(c.Database)
+		if databaseName == "" {
+			// A profile may represent the whole server. PostgreSQL still needs a
+			// physical database for login tests and catalog discovery, so use its
+			// maintenance database without changing the saved default database.
+			databaseName = "postgres"
+		}
 
 		user := url.User(c.User)
 		if c.Password != "" {
@@ -335,7 +342,7 @@ func (c *ConnectionConfig) BuildConnString() string {
 			Scheme: "postgres",
 			User:   user,
 			Host:   net.JoinHostPort(c.Host, c.Port),
-			Path:   c.Database,
+			Path:   databaseName,
 		}
 		q := u.Query()
 		q.Set("sslmode", sslMode)

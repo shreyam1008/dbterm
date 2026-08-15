@@ -319,16 +319,20 @@ func TestBackupConnectionChoicesKeepSavedConnectionsBeforeAddAction(t *testing.T
 	connections := []config.ConnectionConfig{
 		{ID: "conn_local", Name: "local", Type: config.SQLite, FilePath: "/tmp/local.db"},
 		{ID: "conn_prod", Name: "production", Type: config.PostgreSQL, Host: "db.example", Port: "5432", Database: "app"},
+		{ID: "conn_server", Name: "server", Type: config.MySQL, Host: "db.example", Port: "3306"},
 	}
 	choices := backupConnectionChoices(connections)
-	if len(choices) != 3 {
-		t.Fatalf("choice count = %d, want 3", len(choices))
+	if len(choices) != 4 {
+		t.Fatalf("choice count = %d, want 4", len(choices))
 	}
 	if choices[0].connectionID != "conn_local" || choices[1].connectionID != "conn_prod" {
 		t.Fatalf("saved connection order changed: %#v", choices)
 	}
-	if !choices[2].addNew || !strings.Contains(choices[2].name, "Add") {
-		t.Fatalf("last choice = %#v, want explicit add action", choices[2])
+	if !choices[2].requiresDatabaseChoice || !strings.Contains(choices[2].detail, "choose") {
+		t.Fatalf("server-only choice = %#v, want database guidance", choices[2])
+	}
+	if !choices[3].addNew || !strings.Contains(choices[3].name, "Add") {
+		t.Fatalf("last choice = %#v, want explicit add action", choices[3])
 	}
 }
 

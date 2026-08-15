@@ -46,8 +46,14 @@ func PlanFor(cfg *config.ConnectionConfig) (NativePlan, error) {
 	}
 	switch cfg.Type {
 	case config.PostgreSQL:
+		if strings.TrimSpace(cfg.Database) == "" {
+			return NativePlan{}, fmt.Errorf("choose and save a specific PostgreSQL database before creating a backup")
+		}
 		return NativePlan{Format: "postgres_custom", FormatLabel: "pg_dump custom archive", ToolLabel: "pg_dump / pg_restore", Extension: ".dump"}, nil
 	case config.MySQL:
+		if strings.TrimSpace(cfg.Database) == "" {
+			return NativePlan{}, fmt.Errorf("choose and save a specific MySQL database before creating a backup")
+		}
 		return NativePlan{Format: "mysql_sql", FormatLabel: "mysqldump SQL", ToolLabel: "mysqldump / mysql", Extension: ".sql"}, nil
 	case config.SQLite:
 		return NativePlan{Format: "sqlite_database", FormatLabel: "SQLite snapshot", ToolLabel: "VACUUM INTO", Extension: ".sqlite3"}, nil

@@ -91,3 +91,73 @@ func TestBuildDatabaseDiscoveryConfigRejectsUnsupportedType(t *testing.T) {
 		t.Fatalf("unsupported discovery error = %v", err)
 	}
 }
+
+func TestDatabasesWithCurrentFirst(t *testing.T) {
+	got := databasesWithCurrentFirst([]string{"analytics", "orders", "analytics", ""}, "orders")
+	want := []string{"orders", "analytics"}
+	if len(got) != len(want) {
+		t.Fatalf("databasesWithCurrentFirst() = %q, want %q", got, want)
+	}
+	for index := range want {
+		if got[index] != want[index] {
+			t.Fatalf("databasesWithCurrentFirst() = %q, want %q", got, want)
+		}
+	}
+}
+
+func TestNewConnectionForDatabasePreservesServerSettings(t *testing.T) {
+	base := config.ConnectionConfig{
+		ID: "saved-id", Name: "Production", Type: config.PostgreSQL,
+		Host: "pg.example.com", Port: "5432", User: "alice", Password: "secret",
+		Database: "orders", SSLMode: "require", ReadOnly: true, LastUsed: "yesterday", Active: true,
+	}
+	got := newConnectionForDatabase(base, "analytics")
+	if got.ID != "" || got.LastUsed != "" || got.Active {
+		t.Fatalf("new connection retained saved identity/state: %+v", got)
+	}
+	if got.Name != "Production / analytics" || got.Database != "analytics" {
+		t.Fatalf("new connection identity = %q / %q", got.Name, got.Database)
+	}
+	if got.Host != base.Host || got.Port != base.Port || got.User != base.User || got.Password != base.Password || got.SSLMode != base.SSLMode || !got.ReadOnly {
+		t.Fatalf("new connection did not preserve server settings: %+v", got)
+	}
+}
+
+func TestConnectionForDatabaseReusesOneServerProfile(t *testing.T) {
+	base := config.ConnectionConfig{
+		ID: "server-id", Name: "Production server", Type: config.PostgreSQL,
+		Host: "pg.example.com", Port: "5432", User: "alice", Password: "secret",
+		SSLMode: "require", ReadOnly: true,
+	}
+	selected := connectionForDatabase(base, "analytics")
+	if selected.ID != base.ID || selected.Database != "analytics" || selected.Name != "analytics" {
+		t.Fatalf("selected database identity = %+v", selected)
+	}
+	if selected.Host != base.Host || selected.User != base.User || selected.Password != base.Password || selected.SSLMode != base.SSLMode || !selected.ReadOnly {
+		t.Fatalf("selected database did not reuse the server login: %+v", selected)
+	}
+	if base.Database != "" {
+		t.Fatalf("selecting a database mutated the saved server profile: %+v", base)
+	}
+}
+
+func TestSavedDatabaseIndexUsesSameServerLogin(t *testing.T) {
+	base := config.ConnectionConfig{Type: config.MySQL, Host: "db.example.com", Port: "3306", User: "alice", Database: "orders"}
+	connections := []config.ConnectionConfig{
+		{Type: config.MySQL, Host: "db.example.com", Port: "3306", User: "bob", Database: "analytics"},
+		{Type: config.MySQL, Host: "DB.EXAMPLE.COM", Port: "3306", User: "alice", Database: "analytics"},
+	}
+	if got := savedDatabaseIndex(connections, base, "analytics"); got != 1 {
+		t.Fatalf("savedDatabaseIndex() = %d, want 1", got)
+	}
+}
+
+func TestNewConnectionInSameScopeClearsOnlyDatabaseIdentity(t *testing.T) {
+	d1 := newConnectionInSameScope(config.ConnectionConfig{
+		ID: "one", Name: "D1 Orders", Type: config.CloudflareD1,
+		AccountID: "account", DatabaseID: "orders-id", AuthToken: "token", ReadOnly: true,
+	})
+	if d1.ID != "" || d1.Name != "" || d1.DatabaseID != "" || d1.AccountID != "account" || d1.AuthToken != "token" || !d1.ReadOnly {
+		t.Fatalf("D1 scope prefill = %+v", d1)
+	}
+}

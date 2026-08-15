@@ -85,7 +85,8 @@ const (
 	connLabelPort       = "Port"
 	connLabelUser       = "User"
 	connLabelPassword   = "Password"
-	connLabelDatabase   = "Database"
+	connLabelDatabase   = "Default Database (optional)"
+	connLabelSSLMode    = "SSL Mode (PostgreSQL)"
 	connLabelFilePath   = "File Path (SQLite)"
 	connLabelAuthToken  = "Auth Token"
 	connLabelAccountID  = "Account ID"
@@ -104,6 +105,7 @@ const (
 	connFieldUser       connectFieldKey = "user"
 	connFieldPassword   connectFieldKey = "password"
 	connFieldDatabase   connectFieldKey = "database"
+	connFieldSSLMode    connectFieldKey = "ssl_mode"
 	connFieldFilePath   connectFieldKey = "file_path"
 	connFieldAuthToken  connectFieldKey = "auth_token"
 	connFieldAccountID  connectFieldKey = "account_id"
@@ -120,6 +122,7 @@ var connectFieldLabels = map[connectFieldKey]string{
 	connFieldUser:       connLabelUser,
 	connFieldPassword:   connLabelPassword,
 	connFieldDatabase:   connLabelDatabase,
+	connFieldSSLMode:    connLabelSSLMode,
 	connFieldFilePath:   connLabelFilePath,
 	connFieldAuthToken:  connLabelAuthToken,
 	connFieldAccountID:  connLabelAccountID,
@@ -133,6 +136,7 @@ var dynamicConnectFields = []connectFieldKey{
 	connFieldUser,
 	connFieldPassword,
 	connFieldDatabase,
+	connFieldSSLMode,
 	connFieldFilePath,
 	connFieldAuthToken,
 	connFieldAccountID,
@@ -144,10 +148,11 @@ func connectFieldLabel(key connectFieldKey) string {
 }
 
 type connectionSaveContinuation struct {
-	title       string
-	buttonLabel string
-	onSaved     func(config.ConnectionConfig)
-	returnFocus tview.Primitive
+	title                   string
+	buttonLabel             string
+	requireSpecificDatabase bool
+	onSaved                 func(config.ConnectionConfig)
+	returnFocus             tview.Primitive
 }
 
 // showConnectionForm displays the standard form for creating or editing a
@@ -161,15 +166,30 @@ func (a *App) showConnectionForm(editConn *config.ConnectionConfig, editIndex in
 // background agent can resolve it after the interactive TUI exits.
 func (a *App) showNewConnectionForBackup(onSaved func(config.ConnectionConfig)) *tview.Form {
 	return a.showConnectionFormWithContinuation(nil, -1, &connectionSaveContinuation{
-		title:       fmt.Sprintf(" %s Add Database for Backup ", iconConnect),
-		buttonLabel: "Save & Continue",
-		onSaved:     onSaved,
-		returnFocus: a.app.GetFocus(),
+		title:                   fmt.Sprintf(" %s Add Database for Backup ", iconConnect),
+		buttonLabel:             "Save & Continue",
+		requireSpecificDatabase: true,
+		onSaved:                 onSaved,
+		returnFocus:             a.app.GetFocus(),
 	})
 }
 
 func (a *App) showConnectionFormWithContinuation(editConn *config.ConnectionConfig, editIndex int, continuation *connectionSaveContinuation) *tview.Form {
+	return a.showConnectionFormWithInitial(editConn, editIndex, continuation, nil, "")
+}
+
+// showPrefilledConnectionForm creates a distinct saved connection while
+// retaining the selected server's credentials and transport settings.
+func (a *App) showPrefilledConnectionForm(prefill *config.ConnectionConfig, title string) *tview.Form {
+	return a.showConnectionFormWithInitial(nil, -1, nil, prefill, title)
+}
+
+func (a *App) showConnectionFormWithInitial(editConn *config.ConnectionConfig, editIndex int, continuation *connectionSaveContinuation, prefill *config.ConnectionConfig, titleOverride string) *tview.Form {
 	isEdit := editConn != nil
+	initialConn := editConn
+	if initialConn == nil {
+		initialConn = prefill
+	}
 
 	form := tview.NewForm()
 
@@ -178,11 +198,12 @@ func (a *App) showConnectionFormWithContinuation(editConn *config.ConnectionConf
 	nameDefault := ""
 	connStringDefault := ""
 	hostDefault, portDefault, userDefault, passDefault, dbDefault, fileDefault := "localhost", "5432", "", "", "", ""
+	sslModeDefault := ""
 	readOnlyDefault := false
 	authTokenDefault, accountIDDefault, dbIDDefault := "", "", ""
-	if isEdit {
-		nameDefault = editConn.Name
-		switch editConn.Type {
+	if initialConn != nil {
+		nameDefault = initialConn.Name
+		switch initialConn.Type {
 		case config.MySQL:
 			initialType = 1
 		case config.SQLite:
@@ -192,16 +213,17 @@ func (a *App) showConnectionFormWithContinuation(editConn *config.ConnectionConf
 		case config.CloudflareD1:
 			initialType = 4
 		}
-		hostDefault = editConn.Host
-		portDefault = editConn.Port
-		userDefault = editConn.User
-		passDefault = editConn.Password
-		dbDefault = editConn.Database
-		fileDefault = editConn.FilePath
-		readOnlyDefault = editConn.ReadOnly
-		authTokenDefault = editConn.AuthToken
-		accountIDDefault = editConn.AccountID
-		dbIDDefault = editConn.DatabaseID
+		hostDefault = initialConn.Host
+		portDefault = initialConn.Port
+		userDefault = initialConn.User
+		passDefault = initialConn.Password
+		dbDefault = initialConn.Database
+		sslModeDefault = initialConn.SSLMode
+		fileDefault = initialConn.FilePath
+		readOnlyDefault = initialConn.ReadOnly
+		authTokenDefault = initialConn.AuthToken
+		accountIDDefault = initialConn.AccountID
+		dbIDDefault = initialConn.DatabaseID
 	}
 
 	form.AddInputField(connLabelName, nameDefault, 30, nil, nil)
@@ -215,6 +237,7 @@ func (a *App) showConnectionFormWithContinuation(editConn *config.ConnectionConf
 		connFieldUser:       userDefault,
 		connFieldPassword:   passDefault,
 		connFieldDatabase:   dbDefault,
+		connFieldSSLMode:    sslModeDefault,
 		connFieldFilePath:   fileDefault,
 		connFieldAuthToken:  authTokenDefault,
 		connFieldAccountID:  accountIDDefault,
@@ -236,13 +259,16 @@ func (a *App) showConnectionFormWithContinuation(editConn *config.ConnectionConf
 		}
 	}
 
-	addNetworkFields := func() {
+	addNetworkFields := func(typeName string) {
 		form.AddInputField(connLabelDSN, fieldValues[connFieldDSN], 72, nil, nil)
 		form.AddInputField(connLabelHost, fieldValues[connFieldHost], 30, nil, nil)
 		form.AddInputField(connLabelPort, fieldValues[connFieldPort], 10, nil, nil)
 		form.AddInputField(connLabelUser, fieldValues[connFieldUser], 30, nil, nil)
 		form.AddPasswordField(connLabelPassword, fieldValues[connFieldPassword], 30, '*', nil)
 		form.AddInputField(connLabelDatabase, fieldValues[connFieldDatabase], 30, nil, nil)
+		if typeName == "PostgreSQL" {
+			form.AddInputField(connLabelSSLMode, fieldValues[connFieldSSLMode], 18, nil, nil)
+		}
 	}
 
 	addSQLiteFields := func() {
@@ -295,7 +321,7 @@ func (a *App) showConnectionFormWithContinuation(editConn *config.ConnectionConf
 					fieldValues[connFieldPort] = "3306"
 				}
 			}
-			addNetworkFields()
+			addNetworkFields(typeName)
 		}
 		updateFooter()
 	}
@@ -309,6 +335,9 @@ func (a *App) showConnectionFormWithContinuation(editConn *config.ConnectionConf
 	// ── Buttons ──
 	title := fmt.Sprintf(" %s New Connection ", iconConnect)
 	btnLabel := "Save & Connect"
+	if strings.TrimSpace(titleOverride) != "" {
+		title = titleOverride
+	}
 	if isEdit {
 		title = fmt.Sprintf(" ✎ Edit %s ", iconConnect)
 		btnLabel = "Update & Connect"
@@ -324,6 +353,10 @@ func (a *App) showConnectionFormWithContinuation(editConn *config.ConnectionConf
 		form.AddButton(btnLabel, func() {
 			cfg := a.buildConfigFromForm(form)
 			if cfg == nil {
+				return
+			}
+			if continuation.requireSpecificDatabase && connectionNeedsDatabaseChoice(*cfg) {
+				a.ShowAlert(fmt.Sprintf("%s Backups need one specific database.\n\nUse Find DBs and choose the database to back up.", iconInfo), "connectModal")
 				return
 			}
 			if err := a.store.Add(*cfg); err != nil {
@@ -451,6 +484,10 @@ func (a *App) showConnectionFormWithContinuation(editConn *config.ConnectionConf
 	return form
 }
 
+func connectionNeedsDatabaseChoice(connection config.ConnectionConfig) bool {
+	return (connection.Type == config.PostgreSQL || connection.Type == config.MySQL) && strings.TrimSpace(connection.Database) == ""
+}
+
 // testConnection tries to connect and shows a result toast
 func (a *App) testConnection(cfg *config.ConnectionConfig) {
 	loadingToken := a.showLoadingModal(fmt.Sprintf("Testing %s connection...", cfg.TypeLabel()))
@@ -497,6 +534,7 @@ func (a *App) buildConfigFromForm(form *tview.Form) *config.ConnectionConfig {
 		User:       getText(connFieldUser),
 		Password:   getText(connFieldPassword),
 		Database:   getText(connFieldDatabase),
+		SSLMode:    getText(connFieldSSLMode),
 		ReadOnly:   formCheckboxChecked(form, connFieldReadOnly),
 		FilePath:   getText(connFieldFilePath),
 		AuthToken:  getText(connFieldAuthToken),
@@ -573,9 +611,6 @@ func (a *App) buildConfigFromForm(form *tview.Form) *config.ConnectionConfig {
 		if cfg.User == "" {
 			missing = append(missing, "User")
 		}
-		if cfg.Database == "" {
-			missing = append(missing, "Database")
-		}
 		if len(missing) > 0 {
 			a.ShowAlert(fmt.Sprintf("%s Required fields missing:\n\n• %s\n\nFill these to connect to %s.", iconInfo, strings.Join(missing, "\n• "), typeName), "connectModal")
 			return nil
@@ -627,9 +662,9 @@ func connectFooterText(width int, dbType config.DBType) string {
 	default:
 		switch {
 		case width < 78:
-			return fmt.Sprintf(" [yellow]Tab[-] Next  │  [yellow]Esc[-] Back %s  │  [yellow]Find DBs[-] %s", iconBack, iconDropdown)
+			return fmt.Sprintf(" [yellow]Tab[-] Next  │  [yellow]Esc[-] Back %s  │  [yellow]Database optional[-]", iconBack)
 		default:
-			return fmt.Sprintf(" [yellow]Tab[-] Navigate  │  [yellow]Esc[-] Back %s  │  [yellow]Find DBs[-] %s uses entered server credentials[-]", iconBack, iconDropdown)
+			return fmt.Sprintf(" [yellow]Tab[-] Navigate  │  [yellow]Esc[-] Back %s  │  [yellow]Database optional[-] — Save & Connect opens the server's database list", iconBack)
 		}
 	}
 }
@@ -702,6 +737,7 @@ func (a *App) applyConnectionStringToForm(form *tview.Form) (*config.ConnectionC
 	setFormInputValue(form, connFieldUser, parsedCfg.User)
 	setFormInputValue(form, connFieldPassword, parsedCfg.Password)
 	setFormInputValue(form, connFieldDatabase, parsedCfg.Database)
+	setFormInputValue(form, connFieldSSLMode, parsedCfg.SSLMode)
 	return parsedCfg, nil
 }
 
@@ -895,7 +931,17 @@ func splitHostPortWithDefault(address, defaultPort string) (string, string) {
 
 // connectWithConfig connects and transitions to the main workspace
 func (a *App) connectWithConfig(cfg *config.ConnectionConfig, storeIndex int) {
+	if cfg != nil && storeIndex >= 0 &&
+		(cfg.Type == config.PostgreSQL || cfg.Type == config.MySQL) && strings.TrimSpace(cfg.Database) == "" {
+		a.pages.RemovePage("connectModal")
+		a.browseDatabasesForSavedConnection(storeIndex)
+		return
+	}
 	loadingToken := a.showLoadingModal(fmt.Sprintf("%s Connecting to %s...", iconConnect, cfg.Name))
+	failureReturnPage := "dashboard"
+	if a.pages.HasPage("connectModal") {
+		failureReturnPage = "connectModal"
+	}
 
 	selectedTable := a.selectedTable
 	currentTableIndex := a.tables.GetCurrentItem()
@@ -918,7 +964,7 @@ func (a *App) connectWithConfig(cfg *config.ConnectionConfig, storeIndex int) {
 
 			if err != nil {
 				a.ShowAlert(fmt.Sprintf("%s Connection failed\n\n%s\n\n%s", iconFail,
-					err.Error(), connectionHint(err, cfg)), "connectModal")
+					err.Error(), connectionHint(err, cfg)), failureReturnPage)
 				return
 			}
 
@@ -967,7 +1013,7 @@ func connectionHint(err error, cfg *config.ConnectionConfig) string {
 		return fmt.Sprintf("💡 Could not resolve hostname \"%s\". Check spelling.", cfg.Host)
 	case (strings.Contains(errStr, "password") || strings.Contains(errStr, "authentication") || strings.Contains(errStr, "access denied")) &&
 		(cfg.Type == config.MySQL || cfg.Type == config.PostgreSQL) && isLocalDatabaseHost(cfg.Host):
-		return "💡 Use a saved database login or enter its database username/password. Do not use sudo: your Linux password is only for starting or stopping the service."
+		return "💡 The database name is optional, but the server still needs a valid database login. Use a saved login or enter its database username/password. Ubuntu MySQL root often uses socket-only authentication; use a TCP-capable database user. Do not use sudo: your Linux password is only for service management."
 	case strings.Contains(errStr, "password") || strings.Contains(errStr, "authentication") || strings.Contains(errStr, "access denied"):
 		return "💡 Check your username and password."
 	case strings.Contains(errStr, "does not exist") || strings.Contains(errStr, "unknown database"):

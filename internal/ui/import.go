@@ -338,7 +338,7 @@ func validateImportTarget(cfg *config.ConnectionConfig) (*config.ConnectionConfi
 	}
 
 	if target.Database == "" {
-		return nil, fmt.Errorf("selected connection is missing a database name. Update it and try again")
+		return nil, fmt.Errorf("this is a server login without a selected database. Press A on it in Dashboard, open a database, then use Alt+I from the workspace")
 	}
 
 	return target, nil

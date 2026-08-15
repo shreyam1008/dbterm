@@ -892,7 +892,7 @@ func serviceLoginLabel(connection config.ConnectionConfig) string {
 	return fmt.Sprintf("%s · %s@%s/%s", connection.TypeLabel(), connection.User, host, databaseName)
 }
 
-func buildServiceConnectionConfig(form *tview.Form, requireDatabase bool) (*config.ConnectionConfig, error) {
+func buildServiceConnectionConfig(form *tview.Form) (*config.ConnectionConfig, error) {
 	if form == nil {
 		return nil, fmt.Errorf("connection form is unavailable")
 	}
@@ -935,14 +935,8 @@ func buildServiceConnectionConfig(form *tview.Form, requireDatabase bool) (*conf
 		return nil, fmt.Errorf("unsupported service %q", serviceName)
 	}
 
-	if requireDatabase && cfg.Database == "" {
-		return nil, fmt.Errorf("choose a database or use Find DBs first")
-	}
 	if cfg.Database == "" {
-		cfg.Name = "database discovery"
-		if cfg.Type == config.PostgreSQL {
-			cfg.Database = "postgres"
-		}
+		cfg.Name = cfg.TypeLabel() + " server"
 	} else {
 		cfg.Name = cfg.Database
 	}
@@ -1016,59 +1010,17 @@ func (a *App) showConnectServiceModal() {
 		savedDropDown.SetCurrentOption(selectedSavedLogin)
 	}
 
-	form.AddButton("Connect", func() {
-		cfg, err := buildServiceConnectionConfig(form, true)
+	form.AddButton("Connect / Browse", func() {
+		cfg, err := buildServiceConnectionConfig(form)
 		if err != nil {
 			a.ShowAlert(fmt.Sprintf("%s Cannot connect:\n\n%v", iconInfo, err), serviceConnectionPage)
 			return
 		}
-
-		loadingToken := a.showLoadingModal(fmt.Sprintf("Connecting to %s...", cfg.Database))
-		selectedTable := a.selectedTable
-		currentTableIndex := a.tables.GetCurrentItem()
-
-		go func() {
-			db, connectErr := database.Connect(cfg)
-			var snapshot *tableListSnapshot
-			var tableLoadErr error
-			if connectErr == nil {
-				snapshot, tableLoadErr = loadTableListSnapshot(db, cfg.Type, selectedTable, currentTableIndex)
-			}
-			a.app.QueueUpdateDraw(func() {
-				if !a.finishLoadingModal(loadingToken) {
-					if db != nil {
-						_ = db.Close()
-					}
-					return
-				}
-				if connectErr != nil {
-					a.ShowAlert(fmt.Sprintf("%s Connection failed:\n\n%v\n\n%s",
-						iconFail, connectErr, connectionHint(connectErr, cfg)), serviceConnectionPage)
-					return
-				}
-
-				a.cleanup()
-				a.db = db
-				a.dbType = cfg.Type
-				a.dbName = cfg.Name
-				a.activeConn = cloneConnectionConfig(cfg)
-				if tableLoadErr != nil {
-					a.applyTableListSnapshot(&tableListSnapshot{
-						items: []tableListSnapshotItem{{label: fmt.Sprintf("[gray]%s Tables could not be loaded[-]", iconWarn)}},
-					})
-					a.ShowAlert(fmt.Sprintf("%s Connected, but could not load tables:\n\n%v\n\nYou can still run queries manually.", iconWarn, tableLoadErr), "main")
-				} else {
-					a.applyTableListSnapshot(snapshot)
-					a.loadDatabaseObjects()
-				}
-				a.results.SetTitle(fmt.Sprintf(" %s Results [yellow](Alt+R)[-] ", iconResults))
-				a.pages.RemovePage(serviceConnectionPage)
-				a.pages.RemovePage("services")
-				a.pages.ShowPage("main")
-				a.setFocusWithColor(a.tables)
-				a.updateStatusBar(fmt.Sprintf("[green]Connected to %s[-]", cfg.Database), 0)
-			})
-		}()
+		if strings.TrimSpace(cfg.Database) == "" {
+			a.discoverServiceDatabases(form)
+			return
+		}
+		a.connectServiceConfig(cfg)
 	})
 
 	form.AddButton("Find DBs", func() {
@@ -1097,7 +1049,7 @@ func (a *App) showConnectServiceModal() {
 	hint := tview.NewTextView().
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignCenter).
-		SetText(fmt.Sprintf(" [yellow]Find DBs[-] uses the selected login — never run dbterm itself with sudo  │  [yellow]Esc[-] Back %s", iconBack))
+		SetText(fmt.Sprintf(" [yellow]Database is optional[-] — Connect lists every database visible to this DB login  │  [yellow]Esc[-] Back %s", iconBack))
 	hint.SetBackgroundColor(crust)
 	formWithHint := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(form, 0, 1, true).
@@ -1113,8 +1065,57 @@ func (a *App) showConnectServiceModal() {
 	a.app.SetFocus(form)
 }
 
+func (a *App) connectServiceConfig(cfg *config.ConnectionConfig) {
+	loadingToken := a.showLoadingModal(fmt.Sprintf("Connecting to %s...", cfg.Database))
+	selectedTable := a.selectedTable
+	currentTableIndex := a.tables.GetCurrentItem()
+
+	go func() {
+		db, connectErr := database.Connect(cfg)
+		var snapshot *tableListSnapshot
+		var tableLoadErr error
+		if connectErr == nil {
+			snapshot, tableLoadErr = loadTableListSnapshot(db, cfg.Type, selectedTable, currentTableIndex)
+		}
+		a.app.QueueUpdateDraw(func() {
+			if !a.finishLoadingModal(loadingToken) {
+				if db != nil {
+					_ = db.Close()
+				}
+				return
+			}
+			if connectErr != nil {
+				a.ShowAlert(fmt.Sprintf("%s Connection failed:\n\n%v\n\n%s",
+					iconFail, connectErr, connectionHint(connectErr, cfg)), serviceConnectionPage)
+				return
+			}
+
+			a.cleanup()
+			a.db = db
+			a.dbType = cfg.Type
+			a.dbName = cfg.Name
+			a.activeConn = cloneConnectionConfig(cfg)
+			if tableLoadErr != nil {
+				a.applyTableListSnapshot(&tableListSnapshot{
+					items: []tableListSnapshotItem{{label: fmt.Sprintf("[gray]%s Tables could not be loaded[-]", iconWarn)}},
+				})
+				a.ShowAlert(fmt.Sprintf("%s Connected, but could not load tables:\n\n%v\n\nYou can still run queries manually.", iconWarn, tableLoadErr), "main")
+			} else {
+				a.applyTableListSnapshot(snapshot)
+				a.loadDatabaseObjects()
+			}
+			a.results.SetTitle(fmt.Sprintf(" %s Results [yellow](Alt+R)[-] ", iconResults))
+			a.pages.RemovePage(serviceConnectionPage)
+			a.pages.RemovePage("services")
+			a.pages.ShowPage("main")
+			a.setFocusWithColor(a.tables)
+			a.updateStatusBar(fmt.Sprintf("[green]Connected to %s[-]", cfg.Database), 0)
+		})
+	}()
+}
+
 func (a *App) discoverServiceDatabases(form *tview.Form) {
-	cfg, err := buildServiceConnectionConfig(form, false)
+	cfg, err := buildServiceConnectionConfig(form)
 	if err != nil {
 		a.ShowAlert(fmt.Sprintf("%s Cannot find databases:\n\n%v", iconInfo, err), serviceConnectionPage)
 		return
@@ -1146,6 +1147,7 @@ func (a *App) discoverServiceDatabases(form *tview.Form) {
 					iconInfo, cfg.User, cfg.Host, cfg.Port), serviceConnectionPage)
 				return
 			}
+			names = databasesWithCurrentFirst(names, formInputValueByLabel(form, connLabelDatabase))
 			a.showServiceDatabasePicker(form, cfg, names)
 		})
 	}()
@@ -1154,7 +1156,7 @@ func (a *App) discoverServiceDatabases(form *tview.Form) {
 func (a *App) showServiceDatabasePicker(parentForm *tview.Form, cfg *config.ConnectionConfig, names []string) {
 	list := tview.NewList().ShowSecondaryText(false)
 	list.SetBorder(true).
-		SetTitle(fmt.Sprintf(" %s Select Database (%s) ", iconDatabase, cfg.TypeLabel())).
+		SetTitle(fmt.Sprintf(" %s Open Database (%s) ", iconDatabase, cfg.TypeLabel())).
 		SetBorderColor(blue).
 		SetTitleColor(mauve).
 		SetBackgroundColor(bg)
@@ -1174,7 +1176,9 @@ func (a *App) showServiceDatabasePicker(parentForm *tview.Form, cfg *config.Conn
 		databaseName := name
 		list.AddItem(fmt.Sprintf("  %s  %s", iconDatabase, tview.Escape(databaseName)), "", 0, func() {
 			setFormInputValueByLabel(parentForm, connLabelDatabase, databaseName)
-			returnToForm()
+			a.pages.RemovePage(serviceDatabasePicker)
+			selected := connectionForDatabase(*cfg, databaseName)
+			a.connectServiceConfig(&selected)
 		})
 	}
 
@@ -1189,7 +1193,7 @@ func (a *App) showServiceDatabasePicker(parentForm *tview.Form, cfg *config.Conn
 	footer := tview.NewTextView().
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignCenter).
-		SetText(fmt.Sprintf(" [yellow]↑/↓[-] Choose  │  [yellow]Enter[-] Select  │  [yellow]Esc[-] Back %s  │  [#6c7086]%d found[-]", iconBack, len(names)))
+		SetText(fmt.Sprintf(" [yellow]↑/↓[-] Choose  │  [yellow]Enter[-] Open database  │  [yellow]Esc[-] Back %s  │  [#6c7086]%d accessible[-]", iconBack, len(names)))
 	footer.SetBackgroundColor(crust)
 
 	picker := tview.NewFlex().SetDirection(tview.FlexRow).

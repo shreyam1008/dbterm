@@ -63,9 +63,9 @@ go install github.com/shreyam1008/dbterm/cmd/dbterm@latest
 | Turso (LibSQL) | Cloud SQLite-compatible querying + schema inspector + transaction-backed logical SQL backup |
 | Cloudflare D1 | D1 API-backed SQL querying + schema inspector + Cloudflare-native SQL export |
 
-For MySQL or PostgreSQL, a new connection does not require you to remember the database name. Enter the server credentials, choose **Find DBs**, and select from the databases visible to that account; dbterm fills the Database field and an empty connection Name automatically.
+For MySQL or PostgreSQL, the database name is optional: save the server login once, then choose from every database visible to that account. **Save & Connect** automatically opens the database browser when no default is set. From the Dashboard, highlight a server and press **A** to browse again; **Enter** opens any database with the same saved login, **D** makes it the optional default, and **N** saves it as a separate connection only when that is useful (for example, a scheduled backup). SQLite, Turso, and Cloudflare D1 use the same Dashboard shortcut to prefill their reusable local/cloud scope details.
 
-Run the interactive TUI as your normal OS user, not with `sudo`. An elevated TUI uses root's separate profile and therefore cannot see your saved connections. In **Services → Connect**, choose a saved local database login before **Find DBs**; dbterm requests sudo separately only when a native service must be started or stopped. The Linux sudo password and the MySQL/PostgreSQL account password are different credentials.
+dbterm keeps one connection profile for the signed-in OS user. Run the TUI normally; if it is accidentally launched as `sudo dbterm`, dbterm immediately hands control back to the invoking user before reading or writing connections, settings, backup plans, or state. Explicit system-service operations, updates, and uninstalls retain the requested elevation. If an older version already saved connections under root, dbterm reports that legacy profile; `sudo dbterm connections recover-sudo` merges its unique connections into the user profile, backs up an existing user file, restores user ownership, and leaves the root file unchanged. In **Services → Connect**, choose a saved local database login or enter a database username/password; the Linux sudo password is not a database password. Ubuntu's MySQL `root` account commonly uses socket-only authentication, so a TCP-capable MySQL user is needed for the interactive client.
 
 ## CLI reference
 
@@ -75,6 +75,7 @@ Run the interactive TUI as your normal OS user, not with `sudo`. An elevated TUI
 | `dbterm --help` | Show help |
 | `dbterm --version` | Show version/build info |
 | `dbterm --info` | Show install/config/runtime info |
+| `sudo dbterm connections recover-sudo` | Non-destructively merge connections saved by older sudo-launched versions |
 | `dbterm --update` | Update to latest release |
 | `dbterm --update X.Y.Z` | Update to a specific release |
 | `dbterm --uninstall` | Remove binary with confirmation |
@@ -111,6 +112,7 @@ Run the interactive TUI as your normal OS user, not with `sudo`. An elevated TUI
 | `Alt + D` | Return to dashboard |
 | `Alt + S` | Open services dashboard |
 | `Alt + K` / `B` on Dashboard | Open Backup Center |
+| `A` (Dashboard) | Browse all databases visible through the highlighted server login; open one without another saved connection |
 | `Ctrl + B` (Dashboard) | Create a backup job with the highlighted saved connection preselected |
 | `Alt + B` | Open instant backup from any workspace panel |
 | `F2 / F3` (backup forms) | Choose a local destination folder / refresh destination and staging capacity |

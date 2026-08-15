@@ -55,6 +55,20 @@ func TestBuildConnStringCloudflareD1UsesDriverDSN(t *testing.T) {
 	}
 }
 
+func TestPostgreSQLServerProfileUsesMaintenanceDatabase(t *testing.T) {
+	cfg := ConnectionConfig{Type: PostgreSQL, Host: "localhost", Port: "5432", User: "alice"}
+	parsed, err := url.Parse(cfg.BuildConnString())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed.Path != "/postgres" {
+		t.Fatalf("server profile path = %q, want /postgres", parsed.Path)
+	}
+	if cfg.Database != "" {
+		t.Fatalf("BuildConnString mutated saved default database to %q", cfg.Database)
+	}
+}
+
 func useTestConfigDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()

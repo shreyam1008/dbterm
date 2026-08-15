@@ -21,7 +21,7 @@ const quickStartSteps = [
   },
   {
     step: "Create a connection",
-    detail: "Press N, enter MySQL/PostgreSQL server credentials, use Find DBs to select an accessible database, then Save & Connect."
+    detail: "Press N and enter the MySQL/PostgreSQL server login. The database is optional: Save & Connect opens every accessible database when no default is set."
   },
   {
     step: "Run your first query",
@@ -36,8 +36,8 @@ const quickStartSteps = [
 const workspacePanels = [
   {
     panel: "Dashboard",
-    behavior: "Manage saved connections, enter Backup Center, and reconnect quickly.",
-    keys: "N, E, D, Enter, B, R"
+    behavior: "Manage saved server logins, browse every accessible database, enter Backup Center, and reconnect quickly.",
+    keys: "N, E, D, Enter, A, B, R"
   },
   {
     panel: "Query",
@@ -70,6 +70,7 @@ const shortcutRows = [
   { combo: "Alt + E", action: "Export selected rows, the current page, or all rows matching active table filters" },
   { combo: "Alt + I", action: "Open SQL import modal for active connection (PostgreSQL/MySQL)" },
   { combo: "I (Dashboard)", action: "Import SQL dump into selected saved PostgreSQL/MySQL connection" },
+  { combo: "A (Dashboard)", action: "Browse every database visible through the highlighted PostgreSQL/MySQL server login" },
   { combo: "G (Dashboard) / Alt + ,", action: "Open keymap settings page" },
   { combo: "Alt + H", action: "Toggle help + SQL cheatsheets" },
   { combo: "Alt + D", action: "Back to dashboard" },
@@ -100,7 +101,7 @@ const serviceOps = [
   },
   {
     title: "Connect directly from services",
-    detail: "Use C or Enter to open connect modal with prefilled defaults."
+    detail: "Use C or Enter, select a saved database login or enter credentials, and leave Database blank to browse every accessible database."
   },
   {
     title: "Keep instant backup",

@@ -25,12 +25,13 @@ func TestBuildConfigFromFormPostgreSQL(t *testing.T) {
 	form.AddInputField(connLabelUser, "alice", 30, nil, nil)
 	form.AddPasswordField(connLabelPassword, "secret", 30, '*', nil)
 	form.AddInputField(connLabelDatabase, "appdb", 30, nil, nil)
+	form.AddInputField(connLabelSSLMode, "require", 18, nil, nil)
 
 	cfg := (&App{}).buildConfigFromForm(form)
 	if cfg == nil {
 		t.Fatal("buildConfigFromForm returned nil")
 	}
-	if cfg.Type != config.PostgreSQL || cfg.Host != "pg.example.com" || cfg.Port != "5432" || cfg.User != "alice" || cfg.Password != "secret" || cfg.Database != "appdb" {
+	if cfg.Type != config.PostgreSQL || cfg.Host != "pg.example.com" || cfg.Port != "5432" || cfg.User != "alice" || cfg.Password != "secret" || cfg.Database != "appdb" || cfg.SSLMode != "require" {
 		t.Fatalf("unexpected PostgreSQL config: %+v", cfg)
 	}
 }
@@ -50,6 +51,25 @@ func TestBuildConfigFromFormMySQL(t *testing.T) {
 	}
 	if cfg.Type != config.MySQL || cfg.Host != "mysql.example.com" || cfg.Port != "3306" || cfg.User != "root" || cfg.Password != "secret" || cfg.Database != "shop" {
 		t.Fatalf("unexpected MySQL config: %+v", cfg)
+	}
+}
+
+func TestBuildConfigFromFormAllowsServerProfileWithoutDatabase(t *testing.T) {
+	form := newConnectionTestForm(0)
+	form.AddInputField(connLabelDSN, "", 72, nil, nil)
+	form.AddInputField(connLabelHost, "pg.example.com", 30, nil, nil)
+	form.AddInputField(connLabelPort, "5432", 10, nil, nil)
+	form.AddInputField(connLabelUser, "alice", 30, nil, nil)
+	form.AddPasswordField(connLabelPassword, "secret", 30, '*', nil)
+	form.AddInputField(connLabelDatabase, "", 30, nil, nil)
+	form.AddInputField(connLabelSSLMode, "require", 18, nil, nil)
+
+	cfg := (&App{}).buildConfigFromForm(form)
+	if cfg == nil {
+		t.Fatal("server profile without a database was rejected")
+	}
+	if cfg.Database != "" || cfg.Host != "pg.example.com" || cfg.User != "alice" {
+		t.Fatalf("unexpected server profile: %+v", cfg)
 	}
 }
 

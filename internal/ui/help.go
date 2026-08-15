@@ -67,7 +67,8 @@ func keyboardHelpText() string {
   [yellow]Esc / Backspace[-]  Go back                  [yellow]Ctrl+C[-] Cancel active work / quit
 
 [#a6e3a1]DASHBOARD ` + iconDashboard + `[-]
-  [yellow]Enter[-] Connect   [yellow]N[-] New   [yellow]E[-] Edit   [yellow]D[-] Delete   [yellow]R[-] Health check
+  [yellow]Enter[-] Connect/default DB   [yellow]A[-] All DBs on selected server   [yellow]N[-] New   [yellow]E[-] Edit   [yellow]D[-] Delete
+  [yellow]R[-] Health check
   [yellow]Ctrl+B[-] New backup job for highlighted connection   [yellow]B[-] Backup Center   [yellow]I[-] Import
   [yellow]G[-] Settings   [yellow]H[-] Help   [yellow]W / Esc[-] Workspace   [yellow]Q[-] Quit
   [yellow]1–9 / 0[-] Quick-select the first ten connections
@@ -87,6 +88,7 @@ func keyboardHelpText() string {
 
 [#a6e3a1]SERVICES (Alt+S) ` + iconServices + `[-]
   [yellow]1 / 2[-] Toggle MySQL / PostgreSQL    [yellow]C / Enter[-] Connect
+  [yellow]Database optional[-] Leave it blank to browse every database visible to the selected DB login
   [yellow]R[-] Refresh service info             [yellow]Esc[-] Go back
 
 [#a6e3a1]CLI (run in your terminal)[-]

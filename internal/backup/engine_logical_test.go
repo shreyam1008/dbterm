@@ -35,6 +35,14 @@ func TestPlanForCloudflareD1UsesNativeExport(t *testing.T) {
 	}
 }
 
+func TestPlanForRejectsServerProfileWithoutSpecificDatabase(t *testing.T) {
+	for _, dbType := range []config.DBType{config.PostgreSQL, config.MySQL} {
+		if _, err := PlanFor(&config.ConnectionConfig{Type: dbType}); err == nil || !strings.Contains(err.Error(), "specific") {
+			t.Fatalf("PlanFor(%s server profile) error = %v, want specific database guidance", dbType, err)
+		}
+	}
+}
+
 func TestCreateNativeBackupCloudflareD1DownloadsNativeExport(t *testing.T) {
 	const exportedSQL = "PRAGMA foreign_keys=OFF;\nBEGIN TRANSACTION;\nCREATE TABLE users(id INTEGER PRIMARY KEY);\nCOMMIT;\n"
 	server := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
