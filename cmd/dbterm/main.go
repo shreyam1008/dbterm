@@ -131,8 +131,8 @@ func printHelp() {
     Alt+D      Dashboard
     Ctrl+C     Cancel active work or quit
 
-  ` + "\033[38;2;108;112;134m" + `Docs: https://shreyam1008.github.io/dbterm/
-  Open source: https://shreyam1008.github.io/dbterm/open-source/
+  ` + "\033[38;2;108;112;134m" + `Docs: https://dbterm.shreyam1008.com.np/
+  Open source: https://dbterm.shreyam1008.com.np/open-source/
   Package docs: https://pkg.go.dev/github.com/shreyam1008/dbterm
   Source: https://github.com/shreyam1008/dbterm
   Inspired by pgterm by @nabsk911` + "\033[0m" + `

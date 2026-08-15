@@ -1,37 +1,21 @@
 {
-  "version": "0.4.1",
+  "version": "0.6.4",
   "description": "Keyboard-first terminal database client for PostgreSQL, MySQL, SQLite, Turso, and Cloudflare D1.",
-  "homepage": "https://shreyam1008.github.io/dbterm/",
+  "homepage": "https://dbterm.shreyam1008.com.np/",
   "license": "MIT",
   "architecture": {
     "64bit": {
-      "url": "https://github.com/shreyam1008/dbterm/releases/download/v0.4.1/dbterm-windows-amd64.exe",
-      "hash": "TODO_replace_with_sha256_of_dbterm-windows-amd64.exe",
+      "url": "https://github.com/shreyam1008/dbterm/releases/download/v0.6.4/dbterm-windows-amd64.exe",
+      "hash": "cbc025f0cc01ad0082b34bfbab31aa7465ffb9b1365eaf67c49a4d4fa5e4ca52",
       "bin": [["dbterm-windows-amd64.exe", "dbterm"]]
     },
     "arm64": {
-      "url": "https://github.com/shreyam1008/dbterm/releases/download/v0.4.1/dbterm-windows-arm64.exe",
-      "hash": "TODO_replace_with_sha256_of_dbterm-windows-arm64.exe",
+      "url": "https://github.com/shreyam1008/dbterm/releases/download/v0.6.4/dbterm-windows-arm64.exe",
+      "hash": "5b727ffa4ef1c8020e3fb3830417124dee9286694ad4ee4a97003290c213ed00",
       "bin": [["dbterm-windows-arm64.exe", "dbterm"]]
     }
   },
   "checkver": {
     "github": "https://github.com/shreyam1008/dbterm"
-  },
-  "autoupdate": {
-    "architecture": {
-      "64bit": {
-        "url": "https://github.com/shreyam1008/dbterm/releases/download/v$version/dbterm-windows-amd64.exe",
-        "hash": {
-          "url": "$url.sha256"
-        }
-      },
-      "arm64": {
-        "url": "https://github.com/shreyam1008/dbterm/releases/download/v$version/dbterm-windows-arm64.exe",
-        "hash": {
-          "url": "$url.sha256"
-        }
-      }
-    }
   }
 }

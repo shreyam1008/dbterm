@@ -57,8 +57,8 @@ jobs:
         env:
           PUBLIC_GITHUB_OWNER: ${{ github.repository_owner }}
           PUBLIC_REPOSITORY_NAME: ${{ github.event.repository.name }}
-          PUBLIC_BASE_PATH: /${{ github.event.repository.name }}
-          PUBLIC_SITE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+          PUBLIC_BASE_PATH: /
+          PUBLIC_SITE_URL: https://dbterm.shreyam1008.com.np/
         run: bun run verify
 
       - name: Publish to gh-pages (preserve apt/)

@@ -29,7 +29,7 @@ The backup routing model covers all four combinations:
 
 PostgreSQL uses custom `pg_dump` archives; MySQL/MariaDB uses single-database `mysqldump` SQL; SQLite uses a consistent built-in snapshot; Turso uses a single-transaction logical export; and D1 uses Cloudflare's native export API. Restore currently targets PostgreSQL, MySQL/MariaDB, and local SQLite.
 
-See the [complete feature map](https://shreyam1008.github.io/dbterm/features/) or jump to the [Backup Center handbook](docs/backup.md).
+See the [complete feature map](https://dbterm.shreyam1008.com.np/features/) or jump to the [Backup Center handbook](docs/backup.md).
 
 Created and maintained by [Shreyam Adhikari (@shreyam1008)](https://shreyam1008.com.np/).
 
@@ -55,13 +55,13 @@ go install github.com/shreyam1008/dbterm/cmd/dbterm@latest
 
 ## Documentation
 
-- Website: <https://shreyam1008.github.io/dbterm/>
-- Complete feature map: <https://shreyam1008.github.io/dbterm/features/>
-- Product guide: <https://shreyam1008.github.io/dbterm/guide/>
-- Backup Center: <https://shreyam1008.github.io/dbterm/backup/>
+- Website: <https://dbterm.shreyam1008.com.np/>
+- Complete feature map: <https://dbterm.shreyam1008.com.np/features/>
+- Product guide: <https://dbterm.shreyam1008.com.np/guide/>
+- Backup Center: <https://dbterm.shreyam1008.com.np/backup/>
 - Complete backup handbook: [docs/backup.md](docs/backup.md)
 - Marketing, domain, and search plan: [docs/marketing-plan.md](docs/marketing-plan.md)
-- Open-source handbook: <https://shreyam1008.github.io/dbterm/open-source/>
+- Open-source handbook: <https://dbterm.shreyam1008.com.np/open-source/>
 - Go package page: <https://pkg.go.dev/github.com/shreyam1008/dbterm>
 
 ## Supported databases
@@ -346,5 +346,5 @@ Read `CONTRIBUTING.md` for starter-friendly guidance on submitting issues and pu
 dbterm is MIT licensed.
 
 - Canonical license file: `LICENSE`
-- Open-source + license references: <https://shreyam1008.github.io/dbterm/open-source/>
+- Open-source + license references: <https://dbterm.shreyam1008.com.np/open-source/>
 - Package docs: <https://pkg.go.dev/github.com/shreyam1008/dbterm>

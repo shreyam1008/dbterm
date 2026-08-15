@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.locale.1.6.0.schema.json
 PackageIdentifier: ShreyamAdhikari.dbterm
-PackageVersion: 0.4.1
+PackageVersion: 0.6.4
 PackageLocale: en-US
 ManifestType: locale
 ManifestVersion: 1.6.0
@@ -11,13 +11,14 @@ PublisherUrl: https://shreyam1008.com.np/
 PublisherSupportUrl: https://github.com/shreyam1008/dbterm/issues
 License: MIT
 LicenseUrl: https://github.com/shreyam1008/dbterm/blob/main/LICENSE
-ShortDescription: Keyboard-first terminal database client for PostgreSQL, MySQL, SQLite, Turso, and D1
+ShortDescription: Keyboard-first terminal database workbench and backup agent
 Description: |-
-  Terminal SQL client for PostgreSQL, MySQL, SQLite, Turso, and Cloudflare D1.
-  Single static binary, keyboard-first, low memory, works over SSH.
+  Connect to PostgreSQL, MySQL/MariaDB, SQLite, Turso, and Cloudflare D1;
+  browse and query data, operate local services, and run verified local or remote backups.
 Tags:
   - database
   - sql
   - terminal
   - tui
   - cli
+  - backup

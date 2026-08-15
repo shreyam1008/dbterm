@@ -1,7 +1,7 @@
 # dbterm — Packaging Guide
 
 Publisher: Shreyam Adhikari (shreyam1008@gmail.com)
-Version: 0.4.1
+Version: 0.6.4
 
 ---
 
@@ -12,7 +12,7 @@ Version: 0.4.1
 | `homebrew/dbterm.rb` | Homebrew tap formula |
 | `aur/PKGBUILD` | AUR `dbterm-bin` package |
 | `scoop/dbterm.json` | Scoop bucket manifest |
-| `winget/manifests/s/ShreyamAdhikari/dbterm/0.4.1/` | WinGet manifests |
+| `winget/manifests/s/ShreyamAdhikari/dbterm/0.6.4/` | WinGet manifests |
 
 ---
 
@@ -49,14 +49,14 @@ Run: `make release` to build all of these into `dist/`.
 git clone https://github.com/shreyam1008/homebrew-tap
 cd homebrew-tap
 mkdir -p Formula
-cp /home/shre/Desktop/me/dbterm/packaging/homebrew/dbterm.rb Formula/dbterm.rb
+cp /vsk/PM/dbterm/packaging/homebrew/dbterm.rb Formula/dbterm.rb
 
 # Fill in the real sha256 of the source tarball:
-curl -sL https://github.com/shreyam1008/dbterm/archive/refs/tags/v0.4.1.tar.gz | sha256sum
+curl -sL https://github.com/shreyam1008/dbterm/archive/refs/tags/v0.6.4.tar.gz | sha256sum
 # Paste result into dbterm.rb sha256 field
 
 git add Formula/dbterm.rb
-git commit -m "Add dbterm v0.4.1"
+git commit -m "Add dbterm v0.6.4"
 git push
 ```
 
@@ -74,8 +74,8 @@ brew install shreyam1008/tap/dbterm
 ### Get the binary sha256 values
 
 ```bash
-curl -sL https://github.com/shreyam1008/dbterm/releases/download/v0.4.1/dbterm-linux-amd64 | sha256sum
-curl -sL https://github.com/shreyam1008/dbterm/releases/download/v0.4.1/dbterm-linux-arm64 | sha256sum
+curl -sL https://github.com/shreyam1008/dbterm/releases/download/v0.6.4/dbterm-linux-amd64 | sha256sum
+curl -sL https://github.com/shreyam1008/dbterm/releases/download/v0.6.4/dbterm-linux-arm64 | sha256sum
 ```
 
 ### Publish
@@ -88,8 +88,7 @@ git clone ssh://aur@aur.archlinux.org/dbterm-bin.git
 cd dbterm-bin
 
 # 4. Copy and update PKGBUILD
-cp /home/shre/Desktop/me/dbterm/packaging/aur/PKGBUILD .
-# Edit: replace sha256sums_x86_64=('SKIP') with actual sha256
+cp /vsk/PM/dbterm/packaging/aur/{PKGBUILD,.SRCINFO} .
 
 # 5. Test
 makepkg -si
@@ -97,7 +96,7 @@ makepkg -si
 # 6. Generate .SRCINFO and push
 makepkg --printsrcinfo > .SRCINFO
 git add PKGBUILD .SRCINFO
-git commit -m "Initial release v0.4.1"
+git commit -m "Initial release v0.6.4"
 git push
 ```
 
@@ -146,10 +145,9 @@ sha256sum dbterm-windows-arm64.exe
 git clone https://github.com/shreyam1008/scoop-bucket
 cd scoop-bucket
 mkdir -p bucket
-cp /home/shre/Desktop/me/dbterm/packaging/scoop/dbterm.json bucket/dbterm.json
-# Edit: replace TODO hash values with actual sha256 values
+cp /vsk/PM/dbterm/packaging/scoop/dbterm.json bucket/dbterm.json
 git add bucket/dbterm.json
-git commit -m "Add dbterm v0.4.1"
+git commit -m "Add dbterm v0.6.4"
 git push
 ```
 
@@ -176,13 +174,13 @@ certutil -hashfile dbterm-windows-amd64.exe SHA256
 ### Steps
 
 1. Fork https://github.com/microsoft/winget-pkgs
-2. Create the path: `manifests/s/ShreyamAdhikari/dbterm/0.4.1/`
-3. Add the three YAML files from `packaging/winget/manifests/s/ShreyamAdhikari/dbterm/0.4.1/`
-4. Edit: replace placeholder `InstallerSha256` values with real sha256 values
+2. Create the path: `manifests/s/ShreyamAdhikari/dbterm/0.6.4/`
+3. Add the three YAML files from `packaging/winget/manifests/s/ShreyamAdhikari/dbterm/0.6.4/`
+4. Confirm the installer hashes match the release checksums
 5. Validate locally:
 
 ```powershell
-winget validate manifests/s/ShreyamAdhikari/dbterm/0.4.1/
+winget validate manifests/s/ShreyamAdhikari/dbterm/0.6.4/
 ```
 
 6. Submit PR to winget-pkgs
@@ -204,4 +202,4 @@ winget install ShreyamAdhikari.dbterm
 - [ ] AUR PKGBUILD sha256 updated and .SRCINFO regenerated
 - [ ] Scoop manifest hash updated
 - [ ] WinGet installer sha256 updated
-- [ ] `versions.txt` updated with new version as first entry
+- [ ] `cmd/dbterm/releases.txt` updated with new version as first entry

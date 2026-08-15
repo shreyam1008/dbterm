@@ -1,22 +1,22 @@
 # Maintainer: Shreyam Adhikari <shreyam1008@gmail.com>
 pkgname=dbterm-bin
-pkgver=0.4.1
+pkgver=0.6.4
 pkgrel=1
 pkgdesc="Keyboard-first terminal database client for PostgreSQL, MySQL, SQLite, Turso, and Cloudflare D1"
 arch=('x86_64' 'aarch64')
-url="https://shreyam1008.github.io/dbterm/"
+url="https://dbterm.shreyam1008.com.np/"
 license=('MIT')
 depends=()
 provides=('dbterm')
 conflicts=('dbterm' 'dbterm-git')
 
+source=("LICENSE-${pkgver}::https://raw.githubusercontent.com/shreyam1008/dbterm/v${pkgver}/LICENSE")
 source_x86_64=("dbterm-linux-amd64::https://github.com/shreyam1008/dbterm/releases/download/v${pkgver}/dbterm-linux-amd64")
 source_aarch64=("dbterm-linux-arm64::https://github.com/shreyam1008/dbterm/releases/download/v${pkgver}/dbterm-linux-arm64")
 
-# TODO: Replace sha256sums with actual values from GitHub Releases.
-# Run: sha256sum dbterm-linux-amd64   after downloading the binary.
-sha256sums_x86_64=('SKIP')
-sha256sums_aarch64=('SKIP')
+sha256sums=('a98cfa788e15cae19c08dad8d612c12f21f755d4ea2289b48e4d47ad236664f2')
+sha256sums_x86_64=('9cda326f8a59926032b2fef6452dc6b6e74fc32f0cb476d86c3abff5634068c9')
+sha256sums_aarch64=('8b3b7dd7ec24ecc97cbdcc010250c16583fdaeab0113f8ffd3f7ce803ab19edd')
 
 package() {
     cd "$srcdir"
@@ -27,10 +27,7 @@ package() {
         install -Dm755 "dbterm-linux-arm64" "$pkgdir/usr/bin/dbterm"
     fi
 
-    install -Dm644 /dev/stdin "$pkgdir/usr/share/licenses/$pkgname/LICENSE" << 'EOF'
-MIT License — Copyright (c) 2026 Shreyam Adhikari
-See https://github.com/shreyam1008/dbterm/blob/main/LICENSE for full text.
-EOF
+    install -Dm644 "LICENSE-${pkgver}" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 }
 
 # HOW TO PUBLISH TO AUR:
@@ -44,7 +41,7 @@ EOF
 #      makepkg --printsrcinfo > .SRCINFO
 # 6. Commit and push:
 #      git add PKGBUILD .SRCINFO
-#      git commit -m "Initial release v0.4.1"
+#      git commit -m "Initial release v0.6.4"
 #      git push
 # 7. Test install before pushing:
 #      makepkg -si

@@ -1,11 +1,8 @@
 import { defineConfig } from "astro/config";
 import tailwindcss from "@tailwindcss/vite";
 
-const repositoryName = process.env.PUBLIC_REPOSITORY_NAME || "dbterm";
-const basePath = process.env.PUBLIC_BASE_PATH || `/${repositoryName}`;
-const siteUrl =
-  process.env.PUBLIC_SITE_URL ||
-  `https://${process.env.PUBLIC_GITHUB_OWNER || "shreyam1008"}.github.io/${repositoryName}/`;
+const basePath = process.env.PUBLIC_BASE_PATH || "/";
+const siteUrl = process.env.PUBLIC_SITE_URL || "https://dbterm.shreyam1008.com.np/";
 
 export default defineConfig({
   output: "static",

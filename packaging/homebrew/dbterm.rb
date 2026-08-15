@@ -1,14 +1,10 @@
 class Dbterm < Formula
   desc "Keyboard-first terminal database client for PostgreSQL, MySQL, SQLite, Turso, and Cloudflare D1"
-  homepage "https://shreyam1008.github.io/dbterm/"
-  url "https://github.com/shreyam1008/dbterm/archive/refs/tags/v0.4.1.tar.gz"
-  # TODO: Replace sha256 with the actual SHA256 of the v0.4.1 source tarball.
-  # Run: curl -sL https://github.com/shreyam1008/dbterm/archive/refs/tags/v0.4.1.tar.gz | sha256sum
-  sha256 "0000000000000000000000000000000000000000000000000000000000000000"
+  homepage "https://dbterm.shreyam1008.com.np/"
+  url "https://github.com/shreyam1008/dbterm/archive/refs/tags/v0.6.4.tar.gz"
+  sha256 "60cbfb64c4ac40a9531119c998cdd902d6da859bbc219aab0ea6b0a7c5501fdb"
   license "MIT"
   head "https://github.com/shreyam1008/dbterm.git", branch: "main"
-
-  bottle :unneeded
 
   depends_on "go" => :build
 
@@ -18,7 +14,7 @@ class Dbterm < Formula
       "-buildvcs=false",
       "-ldflags", "-s -w -buildid= -X main.version=#{version}",
       "-o", bin/"dbterm",
-      "."
+      "./cmd/dbterm"
   end
 
   test do
@@ -41,4 +37,3 @@ end
 #   - Submit PR to https://github.com/Homebrew/homebrew-core
 #   - Start with the tap first.
 #
-# Remember to replace the sha256 placeholder above before publishing.
