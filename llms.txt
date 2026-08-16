@@ -1,0 +1,27 @@
+# dbterm
+
+> Keyboard-first terminal database workbench and native backup agent for PostgreSQL, MySQL/MariaDB, SQLite, Turso and Cloudflare D1.
+
+dbterm is created and maintained by Shreyam Adhikari (`shreyam1008`). It is an MIT-licensed Go project distributed as a cross-platform binary.
+
+## Canonical identity
+
+- Product: https://dbterm.shreyam1008.com.np/
+- Source: https://github.com/shreyam1008/dbterm
+- Maintainer: https://shreyam1008.com.np/
+- GitHub: https://github.com/shreyam1008
+
+## Product documentation
+
+- Agent-readable overview: https://dbterm.shreyam1008.com.np/product.md
+- Complete agent-readable context: https://dbterm.shreyam1008.com.np/llms-full.txt
+- Features: https://dbterm.shreyam1008.com.np/features/
+- Guide: https://dbterm.shreyam1008.com.np/guide/
+- Backup Center: https://dbterm.shreyam1008.com.np/backup/
+- Comparison: https://dbterm.shreyam1008.com.np/compare/
+- Open-source handbook: https://dbterm.shreyam1008.com.np/open-source/
+- Go package: https://pkg.go.dev/github.com/shreyam1008/dbterm
+
+## Scope boundary
+
+Backup supports PostgreSQL, MySQL/MariaDB, SQLite, Turso and Cloudflare D1. Restore currently supports PostgreSQL, MySQL/MariaDB and local SQLite. dbterm does not expose a hosted API, OAuth service, MCP server or autonomous agent endpoint.
