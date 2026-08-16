@@ -1,15 +1,14 @@
-# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
-PackageIdentifier: ShreyamAdhikari.dbterm
-PackageVersion: 0.6.4
-DefaultLocale: en-US
-ManifestType: defaultLocale
-ManifestVersion: 1.6.0
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.12.0.schema.json
 
-PackageName: dbterm
+PackageIdentifier: Shreyam1008.dbterm
+PackageVersion: 0.6.4
+PackageLocale: en-US
 Publisher: Shreyam Adhikari
 PublisherUrl: https://shreyam1008.com.np/
 PublisherSupportUrl: https://github.com/shreyam1008/dbterm/issues
 Author: Shreyam Adhikari
+PackageName: dbterm
+PackageUrl: https://dbterm.shreyam1008.com.np/
 License: MIT
 LicenseUrl: https://github.com/shreyam1008/dbterm/blob/main/LICENSE
 Copyright: Copyright (c) 2026 Shreyam Adhikari
@@ -30,5 +29,6 @@ Tags:
   - turso
   - cloudflare-d1
   - cli
-PackageUrl: https://dbterm.shreyam1008.com.np/
 ReleaseNotesUrl: https://github.com/shreyam1008/dbterm/releases/tag/v0.6.4
+ManifestType: defaultLocale
+ManifestVersion: 1.12.0

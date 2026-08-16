@@ -12,7 +12,7 @@ Version: 0.6.4
 | `homebrew/dbterm.rb` | Homebrew tap formula |
 | `aur/PKGBUILD` | AUR `dbterm-bin` package |
 | `scoop/dbterm.json` | Scoop bucket manifest |
-| `winget/manifests/s/ShreyamAdhikari/dbterm/0.6.4/` | WinGet manifests |
+| `winget/manifests/s/Shreyam1008/dbterm/0.6.4/` | WinGet manifests |
 
 ---
 
@@ -188,13 +188,13 @@ certutil -hashfile dbterm-windows-amd64.exe SHA256
 ### Steps
 
 1. Fork https://github.com/microsoft/winget-pkgs
-2. Create the path: `manifests/s/ShreyamAdhikari/dbterm/0.6.4/`
-3. Add the three YAML files from `packaging/winget/manifests/s/ShreyamAdhikari/dbterm/0.6.4/`
+2. Create the path: `manifests/s/Shreyam1008/dbterm/0.6.4/`
+3. Add the three YAML files from `packaging/winget/manifests/s/Shreyam1008/dbterm/0.6.4/`
 4. Confirm the installer hashes match the release checksums
 5. Validate locally:
 
 ```powershell
-winget validate manifests/s/ShreyamAdhikari/dbterm/0.6.4/
+winget validate manifests/s/Shreyam1008/dbterm/0.6.4/
 ```
 
 6. Submit PR to winget-pkgs
@@ -202,7 +202,7 @@ winget validate manifests/s/ShreyamAdhikari/dbterm/0.6.4/
 ### After approval, users install with
 
 ```powershell
-winget install ShreyamAdhikari.dbterm
+winget install Shreyam1008.dbterm
 ```
 
 ---
