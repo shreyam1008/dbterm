@@ -83,6 +83,8 @@ const jsonLdBlocks = Array.isArray(jsonLd) ? jsonLd : jsonLd ? [jsonLd] : [];
     <link rel="me" href="https://github.com/shreyam1008" />
     <link rel="manifest" href={withBase("/manifest.webmanifest")} />
     <link rel="sitemap" type="application/xml" href={withBase("/sitemap.xml")} />
+    <link rel="alternate" type="text/markdown" href={withBase("/product.md")} title="dbterm product overview" />
+    <link rel="alternate" type="text/plain" href={withBase("/llms.txt")} title="dbterm agent-readable index" />
     <link rel="preload" href={manropeLatinUrl} as="font" type="font/woff2" crossorigin />
     <link rel="preload" href={plexMonoLatin400Url} as="font" type="font/woff2" crossorigin />
     <link rel="preload" href={plexMonoLatin500Url} as="font" type="font/woff2" crossorigin />

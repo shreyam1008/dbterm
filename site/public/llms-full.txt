@@ -1,0 +1,58 @@
+# dbterm — complete product context
+
+## Identity
+
+- Name: dbterm
+- Creator and maintainer: Shreyam Adhikari
+- Handle: shreyam1008
+- Website: https://dbterm.shreyam1008.com.np/
+- Personal site: https://shreyam1008.com.np/
+- Source: https://github.com/shreyam1008/dbterm
+- License: MIT
+- Implementation: Go
+
+## What it is
+
+dbterm is a keyboard-first terminal database workbench and native scheduled backup agent. It keeps common database work in one cross-platform binary: save a server login, discover accessible databases, inspect schemas and rows, sort and filter data, follow related keys, run SQL, control supported local database services and protect databases with verified backups.
+
+Supported database targets are PostgreSQL, MySQL/MariaDB, SQLite, Turso/LibSQL and Cloudflare D1.
+
+## Everyday workflow
+
+The read-focused workflow is optimized for quick data checks: browse a table, sort or refresh rows, copy an identifier, follow primary and foreign keys, filter a related table and run a small query. dbterm is not entirely read-only; it also includes broader query, data, import and export workflows.
+
+## Backup model
+
+The native backup agent can schedule jobs through systemd, launchd or Windows Task Scheduler. A job stages an engine-appropriate artifact, verifies it, optionally compresses and encrypts it, computes its checksum and publishes it without replacing an existing artifact.
+
+Sources and destinations are independent, producing four supported routes:
+
+1. local database to local or mounted storage
+2. local database to an rclone remote
+3. remote or cloud database to local or mounted storage
+4. remote or cloud database to an rclone remote
+
+rclone destinations can represent S3, SFTP, Google Drive, Azure and other configured backends. dbterm does not store rclone credentials.
+
+Backup support covers PostgreSQL, MySQL/MariaDB, SQLite, Turso and Cloudflare D1. Restore is deliberately narrower: PostgreSQL, MySQL/MariaDB and local SQLite.
+
+## Installation
+
+- Release binaries: https://github.com/shreyam1008/dbterm/releases/latest
+- Homebrew tap: https://github.com/shreyam1008/homebrew-tap
+- Scoop bucket: https://github.com/shreyam1008/scoop-bucket
+- Go install: `go install github.com/shreyam1008/dbterm/cmd/dbterm@latest`
+- APT instructions and direct installers: https://dbterm.shreyam1008.com.np/guide/
+
+## Authoritative pages
+
+- Feature map: https://dbterm.shreyam1008.com.np/features/
+- Product guide: https://dbterm.shreyam1008.com.np/guide/
+- Backup handbook: https://dbterm.shreyam1008.com.np/backup/
+- Factual comparison: https://dbterm.shreyam1008.com.np/compare/
+- Open-source architecture: https://dbterm.shreyam1008.com.np/open-source/
+- Source repository: https://github.com/shreyam1008/dbterm
+
+## Discovery boundary
+
+The dbterm website documents downloadable open-source software. It does not currently operate a public API, OAuth or OpenID Connect authorization service, MCP server, commerce API or autonomous agent service. Discovery metadata for those services would be inaccurate and is intentionally not published.
