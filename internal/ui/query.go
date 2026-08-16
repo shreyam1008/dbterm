@@ -180,6 +180,7 @@ func (a *App) executeQueryWorker(ctx context.Context, finish func(), db *sql.DB,
 	a.recordQueryHistoryForConnection(connectionKey, query)
 	finishOnReturn = false
 	a.queueManualQueryCompletion(db, resultGeneration, finish, func() {
+		a.recordProfilerActivity(query, rowsAffected)
 		a.ShowAlert(fmt.Sprintf("%s Query executed successfully\n\nRows affected: %d\nTime: %s", iconSuccess, rowsAffected, formatDuration(elapsed)), "main")
 		a.refreshDataAsync()
 	})

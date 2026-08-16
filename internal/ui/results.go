@@ -8,7 +8,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	"github.com/shreyam1008/dbterm/internal/config"
 )
@@ -40,6 +39,8 @@ type resultCellReference struct {
 	displayValue string
 	truncated    bool
 	rowSelected  bool
+	profilerKind string
+	profilerCell bool
 }
 
 type resultSelectionState struct {
@@ -226,6 +227,7 @@ func (a *App) applyTableResultSnapshot(snapshot *tableResultSnapshot) bool {
 	}
 	a.restoreColumnWidths(request.selectedTable)
 	a.applyColumnWidths()
+	a.applyProfilerHighlightsToResults(request.selectedTable)
 	a.restoreResultSelection(request.selection, snapshot.rowCount)
 
 	countArgs := append([]any(nil), request.queryArgs...)
@@ -652,8 +654,7 @@ func (a *App) setResultRowSelected(row int, selected bool) bool {
 		if selected {
 			cell.SetBackgroundColor(surface0)
 		} else {
-			cell.SetBackgroundColor(tcell.ColorDefault)
-			cell.SetTransparency(true)
+			a.restoreProfilerCellStyle(cell)
 		}
 	}
 

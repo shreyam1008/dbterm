@@ -86,6 +86,7 @@ Tests live beside the implementation they exercise.
 | `format` | Shared human-readable value formatting | `bytes.go` |
 | `history` | Persist query history per saved connection | `manager.go` |
 | `mcpserver` | Local MCP tools, read-only SQL policy, metadata, and relationship following | `server.go`, then `service.go` |
+| `changeprofiler` | Stream compressed named baselines, stable-key hashes, determinate progress, and row/cell/schema diff reports | `capture.go`, `progress.go`, then `diff.go` |
 | `osservice` | Manage systemd, launchd, and Windows scheduled tasks | `osservice.go` |
 | `persist` | Atomically save JSON files | `jsonfile.go` |
 | `processinfo` | Inspect process state and resource usage | `processinfo.go` |
@@ -93,6 +94,8 @@ Tests live beside the implementation they exercise.
 
 Platform-specific files use Go suffixes such as `_linux.go`, `_darwin.go`, and
 `_windows.go`. Shared behavior stays in the unsuffixed file in the same module.
+
+The large-database design and native-log decision boundary are documented in [`change-profiler.md`](change-profiler.md).
 
 ## TUI guide: `internal/ui`
 

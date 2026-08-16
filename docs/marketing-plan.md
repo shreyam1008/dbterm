@@ -4,6 +4,8 @@ Status: working plan
 Owner: Shreyam Adhikari (`@shreyam1008`)  
 Baseline: dbterm v0.6.4, 15 August 2026
 
+Execution status and exact public links are maintained in [distribution-log.md](distribution-log.md).
+
 ## The decision
 
 Use **`dbterm.shreyam1008.com.np` as the primary public URL**, while continuing to host the site on GitHub Pages.
@@ -341,15 +343,17 @@ Record a baseline before a launch and review 7, 30, and 90 days later. Use campa
 
 - [x] Execute the custom-domain runbook in one controlled window.
 - [x] Add the personal `/projects/dbterm` case study and update the GitHub repository homepage.
-- [x] Submit to Awesome TUI and email the Terminal Trove curator.
+- [x] Submit to Awesome TUI and email the Terminal Trove curator; public listings are still unverified.
 - [ ] Publish the remote PostgreSQL backup and server-first MySQL guides.
-- [x] Publish tailored project posts to `r/tui`, `r/golang`, and `r/selfhosted`; monitor moderator review and respond to serious questions.
+- [x] Publish the tailored `r/tui` project post.
+- [ ] Wait for moderator approval of the submitted `r/golang` post; do not repost while pending.
+- [ ] Publish to `r/selfhosted` only when there is a genuinely tailored backup-ownership angle; no current submission was found.
 - [ ] Run Show HN only when the demo assets and first-run docs are polished.
 
 ### Days 31–60: proof and useful content
 
 - [ ] Publish SQLite restore and native-agent guides.
-- [x] Submit AlternativeTo with accurate product scope, platforms, license, source, and media.
+- [x] Submit AlternativeTo with accurate product scope, platforms, license, source, and media; public listing is still unverified.
 - [ ] Turn repeated support questions into FAQ/guide improvements.
 - [ ] Add real, attributable user quotes only with permission.
 - [ ] Check canonical migration, redirects, coverage, Core Web Vitals, and referral quality.

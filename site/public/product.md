@@ -7,7 +7,7 @@ dbterm is a keyboard-first database workbench created by [Shreyam Adhikari](http
 - Discover PostgreSQL and MySQL/MariaDB databases available to one saved server login.
 - Inspect tables and rows without opening a heavyweight graphical client.
 - Sort, refresh and apply typed filters.
-- Copy identifiers and follow primary or foreign-key relationships between tables.
+- Copy identifiers and follow declared relationships in either direction across table chains.
 - Run SQL and use import, export and local-service workflows.
 - Work with PostgreSQL, MySQL/MariaDB, SQLite, Turso/LibSQL and Cloudflare D1.
 

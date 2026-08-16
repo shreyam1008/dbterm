@@ -7,15 +7,10 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"sync/atomic"
-	"time"
 
-	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	"github.com/shreyam1008/dbterm/internal/config"
 )
-
-const pageForeignKeyPicker = "foreignKeyPicker"
 
 type foreignKeyColumnReference struct {
 	localColumn  string
@@ -28,6 +23,7 @@ type foreignKeyColumnReference struct {
 // the wrong tenant/partition.
 type foreignKeyReference struct {
 	name        string
+	sourceTable string
 	targetTable string
 	columns     []foreignKeyColumnReference
 }
@@ -240,82 +236,6 @@ func foreignKeysForColumn(refs []foreignKeyReference, column string) []foreignKe
 	return foldedMatches
 }
 
-// followSelectedForeignKey resolves the selected column's declared foreign key
-// off the UI thread, then opens the referenced row with an exact typed filter.
-func (a *App) followSelectedForeignKey() {
-	row, _, column, _, ok := a.currentResultCell()
-	if !ok || !a.isTableResultActive() {
-		a.flashStatus("[yellow]Select a table data cell to follow its foreign key[-]", a.currentResultRowCount(), 1800*time.Millisecond)
-		return
-	}
-
-	rowValues := a.captureForeignKeyRowValues(row)
-	selectedValue, hasSelectedValue := foreignKeyRowValueForColumn(rowValues, column)
-	if !hasSelectedValue {
-		a.flashStatus("[yellow]The selected row no longer contains that column[-]", a.currentResultRowCount(), 1800*time.Millisecond)
-		return
-	}
-	if selectedValue.isNull {
-		a.flashStatus("[yellow]NULL does not reference a row to follow[-]", a.currentResultRowCount(), 1800*time.Millisecond)
-		return
-	}
-	db := a.db
-	dbType := a.dbType
-	tableName := a.selectedTable
-	defaultNamespace := a.defaultObjectNamespace("")
-	// Relationship navigation supersedes a manual query still running behind
-	// the current table and owns result/focus state from this point onward.
-	a.cancelActiveQuery()
-	resultGeneration := a.advanceResultGeneration()
-	a.restartTotalRowCountFetchIfNeeded()
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-	var canceled atomic.Bool
-	loadingToken := a.showLoadingModal(
-		fmt.Sprintf("Looking up foreign keys for %s.%s...", tableName, column),
-		withLoadingCancel("Press Esc to cancel foreign-key lookup.", func() {
-			canceled.Store(true)
-			cancel()
-			a.setFocusWithColor(a.results)
-			a.flashStatus("[yellow]Foreign-key lookup canceled[-]", a.currentResultRowCount(), 1500*time.Millisecond)
-		}),
-	)
-
-	go func() {
-		defer cancel()
-		refs, err := loadForeignKeyReferences(ctx, db, dbType, tableName, defaultNamespace)
-		a.queueUpdateDraw(func() {
-			if canceled.Load() {
-				return
-			}
-			// Validate ownership before touching the shared loading page or focus.
-			// A newer table/filter/page request must keep its own overlay intact.
-			if a.db != db || a.dbType != dbType || a.selectedTable != tableName || a.currentResultGeneration() != resultGeneration {
-				return
-			}
-			if !a.finishLoadingModal(loadingToken) {
-				return
-			}
-			a.setFocusWithColor(a.results)
-			if err != nil {
-				a.ShowAlert(fmt.Sprintf("%s Could not inspect foreign keys for %s:\n\n%v", iconWarn, tableName, err), "main")
-				return
-			}
-			matches := foreignKeysForColumn(refs, column)
-			switch len(matches) {
-			case 0:
-				a.ShowAlert(
-					fmt.Sprintf("%s %s.%s has no declared foreign key.\n\nSelect a foreign-key column and press F. Undeclared application-level relationships cannot be inferred safely.", iconInfo, tableName, column),
-					"main",
-				)
-			case 1:
-				a.followForeignKeyReference(matches[0], rowValues)
-			default:
-				a.showForeignKeyPicker(matches, rowValues)
-			}
-		})
-	}()
-}
-
 func (a *App) captureForeignKeyRowValues(row int) map[string]foreignKeyRowValue {
 	values := make(map[string]foreignKeyRowValue)
 	if a == nil || a.results == nil || row <= 0 || row >= a.results.GetRowCount() {
@@ -368,113 +288,6 @@ func resultReferenceQueryValue(cell *tview.TableCell) (any, bool) {
 	return cell.Text, false
 }
 
-func (a *App) showForeignKeyPicker(refs []foreignKeyReference, rowValues map[string]foreignKeyRowValue) {
-	list := tview.NewList().ShowSecondaryText(true)
-	list.SetBorder(true).
-		SetTitle(" Follow Foreign Key ").
-		SetTitleColor(mauve).
-		SetBorderColor(surface1)
-	list.SetBackgroundColor(bg)
-	list.SetMainTextColor(text)
-	list.SetSecondaryTextColor(subtext0)
-	list.SetSelectedBackgroundColor(surface0)
-	list.SetSelectedTextColor(green)
-
-	for _, ref := range refs {
-		list.AddItem(
-			" "+foreignKeyReferenceLabel(ref),
-			" "+ref.name,
-			0,
-			nil,
-		)
-	}
-	closePicker := func() {
-		a.pages.RemovePage(pageForeignKeyPicker)
-		a.setFocusWithColor(a.results)
-	}
-	list.SetSelectedFunc(func(index int, _ string, _ string, _ rune) {
-		if index < 0 || index >= len(refs) {
-			return
-		}
-		ref := refs[index]
-		closePicker()
-		a.followForeignKeyReference(ref, rowValues)
-	})
-	list.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEscape {
-			closePicker()
-			return nil
-		}
-		return event
-	})
-
-	footer := tview.NewTextView().
-		SetDynamicColors(true).
-		SetTextAlign(tview.AlignCenter).
-		SetText(" [yellow]Enter[-] Follow  │  [yellow]Esc[-] Cancel ")
-	footer.SetBackgroundColor(crust)
-	container := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(list, 0, 1, true).
-		AddItem(footer, 1, 0, false)
-	modalW, modalH := a.modalSize(56, 88, 10, 18)
-	grid := tview.NewGrid().
-		SetColumns(0, modalW, 0).
-		SetRows(0, modalH, 0).
-		AddItem(container, 1, 1, 1, 1, 0, 0, true)
-	a.pages.AddPage(pageForeignKeyPicker, grid, true, true)
-	a.app.SetFocus(list)
-}
-
-func foreignKeyReferenceLabel(ref foreignKeyReference) string {
-	mappings := make([]string, 0, len(ref.columns))
-	for _, component := range ref.columns {
-		mappings = append(mappings, fmt.Sprintf("%s→%s", component.localColumn, component.targetColumn))
-	}
-	return fmt.Sprintf("%s  (%s)", ref.targetTable, strings.Join(mappings, ", "))
-}
-
-func (a *App) followForeignKeyReference(ref foreignKeyReference, rowValues map[string]foreignKeyRowValue) {
-	if a == nil || strings.TrimSpace(ref.targetTable) == "" || len(ref.columns) == 0 {
-		a.ShowAlert(fmt.Sprintf("%s This foreign key does not expose a target table and column.", iconWarn), "main")
-		return
-	}
-	predicates, err := foreignKeyTargetPredicates(ref, rowValues)
-	if err != nil {
-		message := err.Error()
-		if errors.Is(err, errForeignKeyValueIsNull) {
-			message = "This composite foreign key contains NULL, so it does not reference a target row."
-		}
-		a.ShowAlert(fmt.Sprintf("%s Cannot follow %s:\n\n%s", iconInfo, ref.name, message), "main")
-		return
-	}
-
-	origin := a.captureResultNavigationState()
-	stackDepth := len(a.resultNavStack)
-	a.resultNavStack = append(a.resultNavStack, origin)
-	a.rememberCurrentResultFilter()
-	a.selectedTable = ref.targetTable
-	a.resetSort()
-	a.resetPagination()
-	a.setCurrentResultFilter(newResultValueFilter(ref.targetTable, predicates))
-	a.selectTableListIdentifier(ref.targetTable)
-	a.setFocusWithColor(a.results)
-
-	a.loadCurrentTableAsync(tableLoadOptions{
-		loadingText:  fmt.Sprintf("Following %s...", foreignKeyReferenceLabel(ref)),
-		cancelText:   "Press Esc to cancel following this reference.",
-		canceledText: "Foreign-key navigation canceled",
-		errorText:    fmt.Sprintf("Could not follow foreign key to %s", ref.targetTable),
-		successText:  fmt.Sprintf("Following %s • %d key column(s) • Backspace returns", ref.targetTable, len(predicates)),
-		rollback: func() {
-			a.restoreResultNavigationState(origin)
-			if len(a.resultNavStack) > stackDepth {
-				a.resultNavStack = a.resultNavStack[:stackDepth]
-			}
-			a.selectTableListIdentifier(origin.table)
-		},
-	})
-}
-
 func foreignKeyTargetPredicates(ref foreignKeyReference, rowValues map[string]foreignKeyRowValue) ([]resultFilterPredicate, error) {
 	if strings.TrimSpace(ref.targetTable) == "" || len(ref.columns) == 0 {
 		return nil, fmt.Errorf("foreign key target is incomplete")
@@ -500,7 +313,7 @@ func foreignKeyTargetPredicates(ref foreignKeyReference, rowValues map[string]fo
 	return predicates, nil
 }
 
-func (a *App) navigateBackFromForeignKey() bool {
+func (a *App) navigateBackFromRelationship() bool {
 	if a == nil || len(a.resultNavStack) == 0 || !a.isTableResultActive() {
 		return false
 	}

@@ -23,6 +23,7 @@ const (
 	actionFullscreen     keymapAction = config.ActionFullscreen
 	actionBackup         keymapAction = config.ActionBackup
 	actionBackupCenter   keymapAction = config.ActionBackupCenter
+	actionChangeProfiler keymapAction = config.ActionChangeProfiler
 	actionExportCSV      keymapAction = config.ActionExportCSV
 	actionHistory        keymapAction = config.ActionHistory
 	actionSettings       keymapAction = config.ActionSettings
@@ -43,6 +44,7 @@ var knownKeymapActions = map[keymapAction]struct{}{
 	actionFullscreen:     {},
 	actionBackup:         {},
 	actionBackupCenter:   {},
+	actionChangeProfiler: {},
 	actionExportCSV:      {},
 	actionHistory:        {},
 	actionSettings:       {},

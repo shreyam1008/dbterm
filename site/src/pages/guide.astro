@@ -51,7 +51,7 @@ const workspacePanels = [
   },
   {
     panel: "Results",
-    behavior: "Filter typed values, follow foreign keys, page and sort data, inspect full cells, and export selected/current/all-matching CSV.",
+    behavior: "Filter typed values, explore parent and child rows, follow multi-table chains, page and sort data, inspect full cells, and export selected/current/all-matching CSV.",
     keys: "Alt+R, /, V, F, S, PgUp/PgDn, Alt+E, Enter, +/−"
   }
 ];
@@ -63,11 +63,12 @@ const shortcutRows = [
   { combo: "Enter", action: "Execute query (in Query panel)" },
   { combo: "Shift + Enter", action: "New line in query (multiline SQL)" },
   { combo: "Alt + Y", action: "Open per-connection query history" },
+  { combo: "Alt + W", action: "Open Change Profiler; A selects the whole database and live progress shows percent/rate/ETA" },
   { combo: "Alt + A / Alt + C", action: "Select all result rows / clear selection" },
   { combo: "Space (Results)", action: "Toggle current row selection" },
   { combo: "C (Results)", action: "Copy the selected cell's complete value" },
   { combo: "/ / V (Results)", action: "Build typed AND filters / filter the selected column by clipboard value" },
-  { combo: "F / Backspace (Results)", action: "Follow a declared foreign key / return to the previous table" },
+  { combo: "F / Backspace (Results)", action: "Explore declared relationships in both directions / return one step through the table chain" },
   { combo: "Alt + E", action: "Export selected rows, the current page, or all rows matching active table filters" },
   { combo: "Alt + I", action: "Open SQL import modal for active connection (PostgreSQL/MySQL)" },
   { combo: "I (Dashboard)", action: "Import SQL dump into selected saved PostgreSQL/MySQL connection" },

@@ -422,7 +422,11 @@ func isSelectableTableLabel(label string) bool {
 	if strings.HasPrefix(trimmed, "[#a6e3a1]▶[-]") ||
 		strings.HasPrefix(trimmed, "[#6c7086]•[-]") ||
 		strings.HasPrefix(trimmed, "[#cba6f7]/[-]") ||
-		strings.HasPrefix(trimmed, "[#f9e2af]"+iconPin+"[-]") {
+		strings.HasPrefix(trimmed, "[#f9e2af]"+iconPin+"[-]") ||
+		strings.HasPrefix(trimmed, "[green]+[-]") ||
+		strings.HasPrefix(trimmed, "[yellow]~[-]") ||
+		strings.HasPrefix(trimmed, "[red]-[-]") ||
+		strings.HasPrefix(trimmed, "[#cba6f7]Δ[-]") {
 		return true
 	}
 	return !strings.HasPrefix(trimmed, "[")
@@ -539,6 +543,9 @@ func (a *App) tableSidebarLabel(identifier, identifierLabel string) string {
 	pinMarker := "  "
 	if a.tableIsPinned(identifier) {
 		pinMarker = "[#f9e2af]" + iconPin + "[-]"
+	}
+	if summary, ok := a.profilerTableChanges[identifier]; ok {
+		return fmt.Sprintf("%s%s%s%s %s", stateMarker, filterMarker, pinMarker, profilerTableMarker(summary), identifierLabel)
 	}
 	return fmt.Sprintf("%s%s%s %s", stateMarker, filterMarker, pinMarker, identifierLabel)
 }

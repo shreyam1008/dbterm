@@ -13,9 +13,11 @@ func keyboardHelpText() string {
   [#89b4fa]Find a table[-]       [yellow]Alt+T[-] → type its name → [yellow]Enter[-]
   [#89b4fa]Cross-table lookup[-] Select a cell → [yellow]C[-] → open another table/column → [yellow]V[-]
   [#89b4fa]Filter a column[-]    Select column → [yellow]/[-] → choose operator/value → [yellow]Enter[-]; Add AND composes
-  [#89b4fa]Follow a relation[-]  Select a declared FK cell → [yellow]F[-]; [yellow]Backspace[-] returns
+  [#89b4fa]Follow related rows[-] Select a key cell → [yellow]F[-] → choose [#a6e3a1]→ parent[-] or [#89b4fa]← children[-]; repeat for a chain
+  [#89b4fa]Find the same value[-] In Related Data press [yellow]V[-] to check same-named columns across tables
   [#89b4fa]Clear a filter[-]     Press [yellow]Esc[-] once; press it again to return to the Dashboard
   [#89b4fa]Resize results[-]     [yellow]+ / -[-] selected column  │  [yellow]Ctrl++ / Ctrl+-[-] all columns  │  [yellow]Alt++ / Alt+-[-] rows
+  [#89b4fa]Track DB changes[-]   [yellow]Alt+W[-] → [yellow]N[-] name anchor → make changes → [yellow]S[-] scan or [yellow]F[-] finish
 
 [#a6e3a1]TABLES[-]
   [#6c7086]Markers[-]          [#a6e3a1]▶[-] currently shown  [#6c7086]•[-] opened this connection  [#cba6f7]/[-] remembered filter  [#f9e2af]` + iconPin + `[-] pinned
@@ -30,8 +32,9 @@ func keyboardHelpText() string {
   [yellow]C[-]                Copy only the selected cell (full value, even if preview is shortened)
   [yellow]V[-]                Apply/update equality from the clipboard (real NULL uses IS NULL)
   [yellow]/[-]                Open filters; Enter applies, Add AND composes, Tab / Shift+Tab moves; remembered per table
-  [yellow]F[-]                Follow the selected column's declared foreign key
-  [yellow]Backspace[-]        Return after following a foreign key
+  [yellow]F[-]                Explore declared relationships in both directions; Enter opens related rows
+  [yellow]V (Related Data)[-] Find the exact value in same-named columns across tables
+  [yellow]Backspace[-]        Return one step through a Person → Visit → Payment-style chain
   [yellow]Esc[-]              Clear all filters first; press again to return to the Dashboard
   [yellow]Enter[-]            Open row details; C copies the selected detail cell
   [yellow]Space[-]            Toggle current row selection
@@ -63,6 +66,7 @@ func keyboardHelpText() string {
   [yellow]Tab[-]              Cycle Tables → Query → Results
   [yellow]Alt+B[-]            Instant backup from any workspace panel
   [yellow]Alt+D[-]            Dashboard                [yellow]Alt+K[-] Backup Center
+  [yellow]Alt+W[-]            Change Profiler: named before/after anchors and saved reports
   [yellow]Alt+S[-]            Database services
   [yellow]Alt+, / Alt+G[-]    Settings                 [yellow]Alt+H[-] This help
   [yellow]Esc / Backspace[-]  Go back                  [yellow]Ctrl+C[-] Cancel active work / quit
@@ -86,6 +90,15 @@ func keyboardHelpText() string {
   [yellow]F2 / F3[-]         Choose folder / refresh destination + staging capacity
   [yellow]Ctrl+N[-]          Add a database from inside the plan form
   [#6c7086]Filename tokens[-] {job} {connection} {database} {engine} {date} {time} {timestamp} {run}
+
+[#a6e3a1]CHANGE PROFILER (Alt+W)[-]
+  [yellow]N[-]               Create a named anchor on the connected database; risky/keyless tables require opt-in
+  [yellow]Space / A[-]       Toggle one table / explicitly include or exclude the whole database
+  [yellow]S / F[-]           Scan without stopping / run the final scan and finish the anchor
+  [yellow]Enter[-]           Inspect changed tables, rows, columns, and complete before/after values
+  [yellow]E / D[-]           Rename / permanently delete the local anchor report
+  [#6c7086]Large databases[-] Loaders show phase, table, rows, bytes, rate, percent, and ETA; baselines are compressed locally
+  [#6c7086]Attribution[-]     Observed connection and dbterm writes are evidence; writer remains Unknown without an audit trail
 
 [#a6e3a1]SERVICES (Alt+S) ` + iconServices + `[-]
   [yellow]1 / 2[-] Toggle MySQL / PostgreSQL    [yellow]C / Enter[-] Connect

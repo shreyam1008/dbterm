@@ -16,7 +16,7 @@ Save a PostgreSQL or MySQL server login once—without memorizing a database nam
 | Area | Current capabilities |
 | --- | --- |
 | **Connections** | PostgreSQL, MySQL/MariaDB, SQLite, Turso/LibSQL, and Cloudflare D1; server-first PostgreSQL/MySQL logins; database discovery; optional defaults; reusable prefilled local/cloud connection forms; one stable per-user profile even after an accidental `sudo dbterm` launch. |
-| **Data workspace** | Schema/object discovery, a command/object/recent-SQL palette, persistent table pins, query history, asynchronous cancellable execution, typed results, composable `AND` filters, sorting, first/last pagination, foreign-key navigation, schema inspection, and streamed CSV export. |
+| **Data workspace** | Schema/object discovery, named Change Profiler anchors with row/cell/schema diffs, a command/object/recent-SQL palette, persistent table pins, query history, asynchronous cancellable execution, typed results, composable `AND` filters, sorting, first/last pagination, bidirectional related-row navigation, same-value discovery, schema inspection, and streamed CSV export. |
 | **Database operations** | PostgreSQL/MySQL SQL-dump import with progress and cancellation, plus local MySQL/PostgreSQL service status, start, stop, install guidance, saved-login connection, and server-wide database browsing. |
 | **Local agent access** | STDIO MCP server for scoped schema inspection, bounded read-only SQL, query plans, and declared relationship following; stored secrets stay hidden and profile changes require explicit opt-in. |
 | **Backup and recovery** | Instant or scheduled backups from local or remote sources to local/mounted or rclone destinations; native dumps, private staging, verification, compression, age encryption, SHA-256 history, retention, email alerts, native OS agents, content inspection, and guarded PostgreSQL/MySQL/SQLite restore. |
@@ -77,6 +77,7 @@ scoop install dbterm
 - Backup Center: <https://dbterm.shreyam1008.com.np/backup/>
 - Complete backup handbook: [docs/backup.md](docs/backup.md)
 - Marketing, domain, and search plan: [docs/marketing-plan.md](docs/marketing-plan.md)
+- Distribution, submission, and promotion record: [docs/distribution-log.md](docs/distribution-log.md)
 - Open-source handbook: <https://dbterm.shreyam1008.com.np/open-source/>
 - Go package page: <https://pkg.go.dev/github.com/shreyam1008/dbterm>
 
@@ -133,6 +134,7 @@ dbterm keeps one connection profile for the signed-in OS user. Run the TUI norma
 | `Enter` | Execute query (in Query panel) |
 | `Shift + Enter` | New line in Query panel |
 | `Alt + Y` | Open query history (newest first) |
+| `Alt + W` | Open Change Profiler; create a named anchor, scan/finish it, and inspect saved before/after changes |
 | `Alt + , / Alt + G` | Open Settings page |
 | `Alt + M` | Inspect selected table schema |
 | `Alt + A / Alt + C` | Select all result rows / clear selection |
@@ -150,7 +152,8 @@ dbterm keeps one connection profile for the signed-in OS user. Run the TUI norma
 | `Alt + E` | Export selected rows, current page, or all matching table rows to CSV |
 | `C` (Results) | Copy only the selected cell |
 | `/` / `V` (Results) | Build typed filters with optional `AND` conditions / apply clipboard equality (`Enter` applies, `Tab` changes controls); remembered per table for the current connection |
-| `F` / `Backspace` (Results) | Follow a declared foreign key / return to the previous table |
+| `F` / `Backspace` (Results) | Explore declared relationships in both directions / return one step through the table chain |
+| `V` (inside Related Data) | Find the selected exact value in same-named columns across tables; open any match as a typed filter |
 | `Esc` (filtered Results) | Clear the active filter; press again to return to Dashboard |
 | `Alt++ / Alt+- / Alt+0` | Increase / decrease / toggle preview rows per page (`100` ↔ safe max) |
 | `+` / `-` (Results) | Widen / narrow the selected column (remembered per table) |
@@ -158,6 +161,12 @@ dbterm keeps one connection profile for the signed-in OS user. Run the TUI norma
 | `>` / `<` / `0` (Results) | Terminal-safe all-column resize / reset fallback |
 | `F5 / Ctrl + F5` | Refresh table / full refresh |
 | `Ctrl + C` | Cancel an active query/import/export; otherwise quit |
+
+## Change Profiler
+
+Press `Alt+W`, then `N`, to create a named before/after anchor. The review screen estimates known table sizes, keeps risky tables excluded until explicitly selected, and lets `A` include the whole database in one step. Capture and scan loaders show the current phase, table position, rows, bytes, elapsed time, rate, approximate percentage, and table ETA when row estimates are available.
+
+The portable engine works across every supported database without installing triggers or server objects. It streams rows, compares stable-key hashes, and adaptively compresses exact before-values in the private local profiler store. PostgreSQL/MySQL use a consistent repeatable-read snapshot, SQLite/Turso use a transaction, and Cloudflare D1 is reported as best-effort. Database-native WAL/binlog capture is intentionally not enabled automatically because it requires engine-specific privileges/configuration and can retain server logs when a consumer stops.
 
 ## Backup Center
 

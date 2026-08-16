@@ -17,21 +17,21 @@ const (
 	pageCommandPalette       = "commandPalette"
 	commandPaletteQueryLimit = 24
 
-	paletteActionRunQuery         keymapAction = "palette_run_query"
-	paletteActionRefreshTable     keymapAction = "palette_refresh_table"
-	paletteActionRefreshDatabase  keymapAction = "palette_refresh_database"
-	paletteActionFilterColumn     keymapAction = "palette_filter_column"
-	paletteActionFilterClipboard  keymapAction = "palette_filter_clipboard"
-	paletteActionClearFilters     keymapAction = "palette_clear_filters"
-	paletteActionCopyCell         keymapAction = "palette_copy_cell"
-	paletteActionFollowForeignKey keymapAction = "palette_follow_foreign_key"
-	paletteActionSortColumn       keymapAction = "palette_sort_column"
-	paletteActionOpenRowDetail    keymapAction = "palette_open_row_detail"
-	paletteActionNextPage         keymapAction = "palette_next_page"
-	paletteActionPreviousPage     keymapAction = "palette_previous_page"
-	paletteActionFirstPage        keymapAction = "palette_first_page"
-	paletteActionLastPage         keymapAction = "palette_last_page"
-	paletteActionToggleTablePin   keymapAction = "palette_toggle_table_pin"
+	paletteActionRunQuery             keymapAction = "palette_run_query"
+	paletteActionRefreshTable         keymapAction = "palette_refresh_table"
+	paletteActionRefreshDatabase      keymapAction = "palette_refresh_database"
+	paletteActionFilterColumn         keymapAction = "palette_filter_column"
+	paletteActionFilterClipboard      keymapAction = "palette_filter_clipboard"
+	paletteActionClearFilters         keymapAction = "palette_clear_filters"
+	paletteActionCopyCell             keymapAction = "palette_copy_cell"
+	paletteActionExploreRelationships keymapAction = "palette_explore_relationships"
+	paletteActionSortColumn           keymapAction = "palette_sort_column"
+	paletteActionOpenRowDetail        keymapAction = "palette_open_row_detail"
+	paletteActionNextPage             keymapAction = "palette_next_page"
+	paletteActionPreviousPage         keymapAction = "palette_previous_page"
+	paletteActionFirstPage            keymapAction = "palette_first_page"
+	paletteActionLastPage             keymapAction = "palette_last_page"
+	paletteActionToggleTablePin       keymapAction = "palette_toggle_table_pin"
 )
 
 type commandPaletteItemKind string
@@ -84,6 +84,7 @@ var commandPaletteActionSpecs = []commandPaletteActionSpec{
 	{actionHelp, "Open Help & SQL Cheatsheets", "Show dbterm keyboard workflows and database-specific SQL reference sheets.", "shortcuts keys documentation postgres mysql sqlite", ""},
 	{actionServices, "Open Database Services", "Inspect and manage supported local MySQL and PostgreSQL services.", "system local mysql postgresql start stop status", ""},
 	{actionBackupCenter, "Open Backup Center", "Create schedules, run or prune backups, restore artifacts, and manage the agent. N chooses a saved database or adds one; Ctrl+N adds a database from the plan form. Dashboard Ctrl+B starts preselected.", "new saved database connection scheduled automatic restore agent history retention encryption zstd zip ctrl n", ""},
+	{actionChangeProfiler, "Open Change Profiler", "Create named anchors, scan for row and schema changes, and inspect saved before/after reports.", "diff snapshot anchor track changes inserted updated deleted audit", ""},
 	{actionFullscreen, "Toggle Fullscreen Results", "Expand the result grid to the full workspace or restore the normal layout.", "maximize expand data grid", ""},
 	{actionInspectSchema, "Inspect Selected Table Schema", "Show columns, keys, foreign keys, and indexes for the selected table.", "metadata structure columns constraints indexes foreign keys", ""},
 	{actionHistory, "Open Query History", "Browse successful queries saved for the active connection and load one into the editor.", "recent sql previous statements", ""},
@@ -101,7 +102,7 @@ var commandPaletteActionSpecs = []commandPaletteActionSpec{
 	{paletteActionFilterClipboard, "Filter Column by Clipboard", "Apply or update equality on the selected column using the copied value; SQL NULL becomes IS NULL.", "paste value cross table lookup", "V"},
 	{paletteActionClearFilters, "Clear All Active Filters", "Remove every active table predicate and reload the first page.", "reset where predicates", "Esc"},
 	{paletteActionCopyCell, "Copy Selected Cell", "Copy the complete selected cell value, even when its visible preview is shortened.", "clipboard full raw value", "C"},
-	{paletteActionFollowForeignKey, "Follow Selected Foreign Key", "Open the referenced row using every component of the declared foreign key; Backspace returns.", "relationship join reference navigation composite", "F"},
+	{paletteActionExploreRelationships, "Explore Related Rows", "Open parent or child rows using every component of a declared key; repeat across a chain and use Backspace to return.", "relationship parent child join reference navigation composite chain", "F"},
 	{paletteActionSortColumn, "Sort by Selected Column", "Toggle ascending or descending server-side sorting for the active table.", "order ascending descending", "S"},
 	{paletteActionOpenRowDetail, "Open Selected Row Details", "Inspect every full value in the selected row in a vertical detail view.", "inspect record full json", "Enter"},
 	{paletteActionNextPage, "Go to Next Result Page", "Load the next bounded page of the active table with cancellable progress.", "pagination forward", "PgDn / ]"},
@@ -772,6 +773,8 @@ func (a *App) executeCommandPaletteAction(action keymapAction, title string) {
 		a.showServiceDashboard()
 	case actionBackupCenter:
 		a.showBackupCenter()
+	case actionChangeProfiler:
+		a.showChangeProfiler()
 	case actionFullscreen:
 		a.pages.SwitchToPage("main")
 		a.toggleExpandResults()
@@ -829,9 +832,9 @@ func (a *App) executeCommandPaletteAction(action keymapAction, title string) {
 	case paletteActionCopyCell:
 		a.showCommandPaletteWorkspace(a.results)
 		a.copyCurrentResultCell()
-	case paletteActionFollowForeignKey:
+	case paletteActionExploreRelationships:
 		a.showCommandPaletteWorkspace(a.results)
-		a.followSelectedForeignKey()
+		a.exploreSelectedRelationships()
 	case paletteActionSortColumn:
 		a.showCommandPaletteWorkspace(a.results)
 		_, column := a.results.GetSelection()
@@ -867,7 +870,7 @@ func commandPaletteActionNeedsConnection(action keymapAction) bool {
 		paletteActionRunQuery, paletteActionRefreshTable, paletteActionRefreshDatabase,
 		paletteActionToggleTablePin,
 		paletteActionFilterColumn, paletteActionFilterClipboard, paletteActionClearFilters,
-		paletteActionCopyCell, paletteActionFollowForeignKey, paletteActionSortColumn,
+		paletteActionCopyCell, paletteActionExploreRelationships, paletteActionSortColumn,
 		paletteActionOpenRowDetail, paletteActionNextPage, paletteActionPreviousPage,
 		paletteActionFirstPage, paletteActionLastPage:
 		return true

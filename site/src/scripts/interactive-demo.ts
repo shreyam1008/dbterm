@@ -169,10 +169,13 @@ const TABLE_COUNTS: Record<string, number> = {
   products: 6
 };
 
-const FK_TARGETS: Record<string, { table: string; column: string }> = {
-  user_id: { table: "users", column: "id" },
-  order_id: { table: "orders", column: "id" },
-  product_id: { table: "products", column: "id" }
+const RELATED_TARGETS: Record<string, { table: string; column: string }> = {
+  "users.id": { table: "orders", column: "user_id" },
+  "orders.id": { table: "payments", column: "order_id" },
+  "orders.user_id": { table: "users", column: "id" },
+  "orders.product_id": { table: "products", column: "id" },
+  "payments.order_id": { table: "orders", column: "id" },
+  "products.id": { table: "orders", column: "product_id" }
 };
 
 const SAFE_PRAGMAS = new Set([
@@ -626,9 +629,9 @@ class DbtermDemo {
       {
         id: "follow",
         kind: "ACTION",
-        label: "Follow Selected Foreign Key",
-        description: "Open the referenced row; Backspace returns to the prior result.",
-        keywords: "relationship join reference navigation",
+        label: "Explore Related Rows",
+        description: "Open a related row; Backspace returns to the prior result.",
+        keywords: "relationship parent child join reference navigation",
         shortcut: "F",
         run: () => this.followSelectedForeignKey()
       },
@@ -926,14 +929,14 @@ class DbtermDemo {
 
   private async followSelectedForeignKey(): Promise<void> {
     if (!this.selectedTable) {
-      this.announce("Foreign-key navigation is available while browsing a table.");
+      this.announce("Related-row navigation is available while browsing a table.");
       return;
     }
     const value = this.selectedValue();
     const column = this.result.columns[this.selectedColumn];
-    const target = FK_TARGETS[column];
+    const target = RELATED_TARGETS[`${this.selectedTable}.${column}`];
     if (!target || value === undefined || value === null) {
-      this.announce("Select a user_id, order_id, or product_id cell to follow it.");
+      this.announce("Select a key cell with a declared parent or child relationship.");
       return;
     }
     this.pushHistory();
@@ -943,7 +946,7 @@ class DbtermDemo {
     this.sortColumn = -1;
     this.sortAscending = true;
     this.updateTableSelection();
-    await this.reloadTable(`Following ${column} → ${target.table}.${target.column}…`);
+    await this.reloadTable(`Opening related rows in ${target.table}…`);
     this.setPanelFocus("results");
   }
 
@@ -1130,7 +1133,7 @@ class DbtermDemo {
         button.textContent = printable(value);
         if (value === null) button.classList.add("is-null");
         if (typeof value === "number" || typeof value === "bigint") button.classList.add("is-number");
-        if (FK_TARGETS[this.result.columns[columnIndex]]) button.classList.add("is-linkable");
+        if (this.selectedTable && RELATED_TARGETS[`${this.selectedTable}.${this.result.columns[columnIndex]}`]) button.classList.add("is-linkable");
         if (rowIndex === this.selectedRow && columnIndex === this.selectedColumn) {
           button.dataset.selected = "true";
           button.setAttribute("aria-label", `${this.result.columns[columnIndex]}, ${printable(value)}, selected`);

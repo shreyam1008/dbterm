@@ -14,45 +14,56 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	backupcore "github.com/shreyam1008/dbterm/internal/backup"
+	profiler "github.com/shreyam1008/dbterm/internal/changeprofiler"
 	"github.com/shreyam1008/dbterm/internal/config"
 	"github.com/shreyam1008/dbterm/internal/history"
 )
 
 // ── Catppuccin Mocha ──────────────────────────────────────────────────
 var (
-	bg       = tcell.NewRGBColor(30, 30, 46)    // #1e1e2e  base
-	mantle   = tcell.NewRGBColor(24, 24, 37)    // #181825  mantle
-	crust    = tcell.NewRGBColor(17, 17, 27)    // #11111b  crust
-	green    = tcell.NewRGBColor(166, 227, 161) // #a6e3a1  green
-	surface0 = tcell.NewRGBColor(49, 50, 68)    // #313244  surface0
-	surface1 = tcell.NewRGBColor(69, 71, 90)    // #45475a  surface1
-	red      = tcell.NewRGBColor(243, 139, 168) // #f38ba8  red
-	peach    = tcell.NewRGBColor(255, 180, 150) // #ffb496  peach
-	blue     = tcell.NewRGBColor(137, 180, 250) // #89b4fa  blue
-	mauve    = tcell.NewRGBColor(203, 166, 247) // #cba6f7  mauve
-	yellow   = tcell.NewRGBColor(249, 226, 175) // #f9e2af  yellow
-	teal     = tcell.NewRGBColor(148, 226, 213) // #94e2d5  teal
-	text     = tcell.NewRGBColor(205, 214, 244) // #cdd6f4  text
-	subtext0 = tcell.NewRGBColor(166, 173, 200) // #a6adc8  subtext0
-	overlay0 = tcell.NewRGBColor(108, 112, 134) // #6c7086  overlay0
+	bg           = tcell.NewRGBColor(30, 30, 46)    // #1e1e2e  base
+	mantle       = tcell.NewRGBColor(24, 24, 37)    // #181825  mantle
+	crust        = tcell.NewRGBColor(17, 17, 27)    // #11111b  crust
+	green        = tcell.NewRGBColor(166, 227, 161) // #a6e3a1  green
+	surface0     = tcell.NewRGBColor(49, 50, 68)    // #313244  surface0
+	surface1     = tcell.NewRGBColor(69, 71, 90)    // #45475a  surface1
+	red          = tcell.NewRGBColor(243, 139, 168) // #f38ba8  red
+	peach        = tcell.NewRGBColor(255, 180, 150) // #ffb496  peach
+	blue         = tcell.NewRGBColor(137, 180, 250) // #89b4fa  blue
+	mauve        = tcell.NewRGBColor(203, 166, 247) // #cba6f7  mauve
+	yellow       = tcell.NewRGBColor(249, 226, 175) // #f9e2af  yellow
+	teal         = tcell.NewRGBColor(148, 226, 213) // #94e2d5  teal
+	text         = tcell.NewRGBColor(205, 214, 244) // #cdd6f4  text
+	subtext0     = tcell.NewRGBColor(166, 173, 200) // #a6adc8  subtext0
+	overlay0     = tcell.NewRGBColor(108, 112, 134) // #6c7086  overlay0
+	insertRowBG  = tcell.NewRGBColor(32, 58, 43)
+	updateRowBG  = tcell.NewRGBColor(61, 55, 31)
+	updateCellBG = tcell.NewRGBColor(91, 75, 31)
+	deleteRowBG  = tcell.NewRGBColor(63, 34, 43)
 )
 
 // App holds all TUI state for the dbterm application
 type App struct {
-	app         *tview.Application
-	db          *sql.DB
-	pages       *tview.Pages
-	store       *config.Store
-	settings    *config.Settings
-	keymap      *actionKeymap
-	historyMgr  *history.Manager
-	backupStore *backupcore.Store
+	app           *tview.Application
+	db            *sql.DB
+	pages         *tview.Pages
+	store         *config.Store
+	settings      *config.Settings
+	keymap        *actionKeymap
+	historyMgr    *history.Manager
+	backupStore   *backupcore.Store
+	profilerStore *profiler.Store
 
 	// Backup Center keeps its original caller across internal refreshes and
 	// nested forms so Esc returns to the exact panel that opened it.
 	backupCenterReturnPage  string
 	backupCenterReturnFocus tview.Primitive
 	backupCenterSelectedJob string
+	profilerReturnPage      string
+	profilerReturnFocus     tview.Primitive
+	profilerSelectedAnchor  string
+	profilerAnchorID        string
+	profilerTableChanges    map[string]profiler.TableSummary
 	helpReturnPage          string
 	helpReturnFocus         tview.Primitive
 	dbType                  config.DBType
@@ -251,7 +262,7 @@ func (a *App) setupUI() {
 			a.filterSelectedResultColumnByClipboard()
 			return nil
 		case 'f', 'F':
-			a.followSelectedForeignKey()
+			a.exploreSelectedRelationships()
 			return nil
 		case 's', 'S':
 			// Sort by current column
@@ -974,9 +985,9 @@ func (a *App) setupKeyBindings() {
 			if current == a.queryInput {
 				return event
 			}
-			// Foreign-key hops keep a small navigation stack. In Results,
+			// Related-row hops keep a navigation stack. In Results,
 			// Backspace returns through it before using the normal Dashboard path.
-			if page == "main" && current == a.results && a.navigateBackFromForeignKey() {
+			if page == "main" && current == a.results && a.navigateBackFromRelationship() {
 				return nil
 			}
 			// If anywhere else (tables/results), go back to dashboard
@@ -1032,6 +1043,9 @@ func (a *App) setupKeyBindings() {
 				return nil
 			case actionBackupCenter:
 				a.showBackupCenter()
+				return nil
+			case actionChangeProfiler:
+				a.showChangeProfiler()
 				return nil
 			}
 		}
@@ -1133,6 +1147,9 @@ func (a *App) setupKeyBindings() {
 				return nil
 			case actionSettings:
 				a.showSettings()
+				return nil
+			case actionChangeProfiler:
+				a.showChangeProfiler()
 				return nil
 			}
 		}
@@ -1467,6 +1484,9 @@ func (a *App) Run() error {
 	defer func() {
 		if a.backupStore != nil {
 			_ = a.backupStore.Close()
+		}
+		if a.profilerStore != nil {
+			_ = a.profilerStore.Close()
 		}
 	}()
 	a.setupUI()

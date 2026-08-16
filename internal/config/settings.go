@@ -25,6 +25,7 @@ const (
 	ActionFullscreen     = "fullscreen"
 	ActionBackup         = "backup"
 	ActionBackupCenter   = "backup_center"
+	ActionChangeProfiler = "change_profiler"
 	ActionExportCSV      = "export_csv"
 	ActionHistory        = "history"
 	ActionSettings       = "settings"
@@ -53,6 +54,7 @@ var defaultKeymapBindings = map[string][]string{
 	ActionFullscreen:     {"alt+f"},
 	ActionBackup:         {"alt+b"},
 	ActionBackupCenter:   {"alt+k"},
+	ActionChangeProfiler: {"alt+w"},
 	ActionExportCSV:      {"alt+e"},
 	ActionHistory:        {"alt+y"},
 	ActionSettings:       {"alt+,", "alt+g"},

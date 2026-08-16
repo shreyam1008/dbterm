@@ -186,15 +186,15 @@ func TestBuildCommandPaletteItemsIncludesObjectsRecentQueriesAndEffectiveShortcu
 	relationship := searchCommandPaletteItems(items, "relationship composite")
 	foundFollow := false
 	for _, match := range relationship {
-		if match.item.action == paletteActionFollowForeignKey {
+		if match.item.action == paletteActionExploreRelationships {
 			foundFollow = true
-			if !strings.Contains(match.item.description, "every component") || match.item.shortcut != "F" {
+			if !strings.Contains(match.item.description, "every component") || !strings.Contains(match.item.description, "child rows") || match.item.shortcut != "F" {
 				t.Fatalf("follow action details = %#v", match.item)
 			}
 		}
 	}
 	if !foundFollow {
-		t.Fatal("palette search did not include foreign-key navigation action")
+		t.Fatal("palette search did not include related-row navigation action")
 	}
 }
 

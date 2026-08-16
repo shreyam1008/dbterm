@@ -142,3 +142,120 @@ func TestCompositeForeignKeyWithNullDoesNotNavigate(t *testing.T) {
 		t.Fatalf("error = %v, want NULL relationship error", err)
 	}
 }
+
+func TestLoadSQLiteIncomingForeignKeyReferences(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	defer db.Close()
+	db.SetMaxOpenConns(1)
+
+	if _, err := db.Exec(`PRAGMA foreign_keys=ON;
+CREATE TABLE people (
+  tenant_id INTEGER,
+  id INTEGER,
+  PRIMARY KEY (tenant_id, id)
+);
+CREATE TABLE visits (
+  id INTEGER PRIMARY KEY,
+  tenant_id INTEGER,
+  person_id INTEGER,
+  FOREIGN KEY (tenant_id, person_id) REFERENCES people(tenant_id, id)
+);
+CREATE TABLE payments (
+  id INTEGER PRIMARY KEY,
+  visit_id INTEGER REFERENCES visits(id)
+);`); err != nil {
+		t.Fatalf("seed sqlite: %v", err)
+	}
+
+	refs, err := loadIncomingForeignKeyReferences(
+		context.Background(), db, config.SQLite, "people", "", []string{"payments", "people", "visits"},
+	)
+	if err != nil {
+		t.Fatalf("load incoming foreign keys: %v", err)
+	}
+	if len(refs) != 1 {
+		t.Fatalf("incoming foreign key count = %d, want 1: %#v", len(refs), refs)
+	}
+	ref := refs[0]
+	if ref.sourceTable != "visits" || ref.targetTable != "people" || len(ref.columns) != 2 {
+		t.Fatalf("incoming foreign key = %#v, want visits -> people with two columns", ref)
+	}
+	if ref.columns[0].localColumn != "tenant_id" || ref.columns[0].targetColumn != "tenant_id" ||
+		ref.columns[1].localColumn != "person_id" || ref.columns[1].targetColumn != "id" {
+		t.Fatalf("incoming composite mapping = %#v", ref.columns)
+	}
+}
+
+func TestRelationshipsForColumnIncludesBothDirections(t *testing.T) {
+	outgoing := []foreignKeyReference{{
+		name: "visits_room_fk", targetTable: "rooms",
+		columns: []foreignKeyColumnReference{{localColumn: "room_id", targetColumn: "id"}},
+	}}
+	incoming := []foreignKeyReference{{
+		name: "payments_visit_fk", sourceTable: "payments", targetTable: "visits",
+		columns: []foreignKeyColumnReference{{localColumn: "visit_id", targetColumn: "id"}},
+	}}
+
+	roomRelationships := relationshipsForColumn("visits", "room_id", outgoing, incoming)
+	if len(roomRelationships) != 1 || roomRelationships[0].direction != relationshipOutgoing || roomRelationships[0].targetTable != "rooms" {
+		t.Fatalf("room relationships = %#v, want outgoing rooms", roomRelationships)
+	}
+	visitRelationships := relationshipsForColumn("visits", "id", outgoing, incoming)
+	if len(visitRelationships) != 1 || visitRelationships[0].direction != relationshipIncoming || visitRelationships[0].sourceTable != "payments" {
+		t.Fatalf("visit relationships = %#v, want incoming payments", visitRelationships)
+	}
+}
+
+func TestIncomingForeignKeyPredicatesUseParentTargetColumns(t *testing.T) {
+	ref := foreignKeyReference{
+		name: "visits_person_fk", sourceTable: "visits", targetTable: "people",
+		columns: []foreignKeyColumnReference{
+			{localColumn: "tenant_id", targetColumn: "tenant_id", ordinal: 0},
+			{localColumn: "person_id", targetColumn: "id", ordinal: 1},
+		},
+	}
+	predicates, err := incomingForeignKeyPredicates(ref, map[string]foreignKeyRowValue{
+		"tenant_id": {value: int64(7)},
+		"id":        {value: int64(42)},
+	})
+	if err != nil {
+		t.Fatalf("build incoming predicates: %v", err)
+	}
+	if len(predicates) != 2 || predicates[0].column != "tenant_id" || predicates[0].value != int64(7) ||
+		predicates[1].column != "person_id" || predicates[1].value != int64(42) {
+		t.Fatalf("incoming predicates = %#v", predicates)
+	}
+}
+
+func TestSQLiteSameValueSearchFindsOnlyExactMatchesInSameNamedColumns(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	defer db.Close()
+	db.SetMaxOpenConns(1)
+
+	if _, err := db.Exec(`CREATE TABLE people (person_code TEXT PRIMARY KEY, name TEXT);
+CREATE TABLE visits (id INTEGER PRIMARY KEY, person_code TEXT);
+CREATE TABLE notes (id INTEGER PRIMARY KEY, person_code TEXT);
+INSERT INTO people VALUES ('P-42', 'Ada');
+INSERT INTO visits VALUES (1, 'P-42');
+INSERT INTO notes VALUES (1, 'P-99');`); err != nil {
+		t.Fatalf("seed sqlite: %v", err)
+	}
+
+	locations, err := loadSameNamedColumnLocations(context.Background(), db, config.SQLite, "person_code", []string{"people", "visits", "notes"})
+	if err != nil {
+		t.Fatalf("load column locations: %v", err)
+	}
+	matches, err := filterSameValueMatches(context.Background(), db, config.SQLite, locations, foreignKeyRowValue{value: "P-42"})
+	if err != nil {
+		t.Fatalf("filter same-value matches: %v", err)
+	}
+	if len(matches) != 2 || matches[0].table != "people" || matches[1].table != "visits" {
+		t.Fatalf("same-value matches = %#v, want people and visits", matches)
+	}
+}
