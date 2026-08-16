@@ -43,6 +43,11 @@ func main() {
 				fmt.Fprintf(os.Stderr, "\n  \033[31mConnections command failed:\033[0m %s\n\n", err)
 				os.Exit(1)
 			}
+		case arg == "mcp":
+			if err := runMCPCommand(os.Args[2:]); err != nil {
+				fmt.Fprintf(os.Stderr, "\n  \033[31mMCP command failed:\033[0m %s\n\n", err)
+				os.Exit(1)
+			}
 		case arg == "--update" || arg == "-u" || arg == "update":
 			requestedVersion := ""
 			if len(os.Args) > 2 {
@@ -103,6 +108,7 @@ func printHelp() {
     dbterm connections recover-sudo
                               Merge connections saved by older sudo launches
     dbterm backup --help      Backup jobs, agent, inspection & restore
+    dbterm mcp serve          Start the local read-only MCP server for agents
     dbterm --update           Update to latest release
     dbterm --update 0.3.4     Update to a specific version
     dbterm --uninstall        Uninstall dbterm binary

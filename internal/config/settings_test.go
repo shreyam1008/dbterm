@@ -96,6 +96,71 @@ func TestLoadSettingsIncludesDashboardHealthCheckDefault(t *testing.T) {
 	}
 }
 
+func TestLoadSettingsIncludesSafeAgentAccessDefaults(t *testing.T) {
+	useTestConfigDir(t)
+
+	settings, err := LoadSettings()
+	if err != nil {
+		t.Fatalf("LoadSettings() error = %v", err)
+	}
+
+	if settings.AgentAccess.ConnectionScope != AgentConnectionScopeActive {
+		t.Fatalf("agent connection scope = %q, want %q", settings.AgentAccess.ConnectionScope, AgentConnectionScopeActive)
+	}
+	if settings.AgentAccess.AllowProfileWrites {
+		t.Fatalf("agent access defaults must be read-only, got %+v", settings.AgentAccess)
+	}
+}
+
+func TestLoadSettingsNormalizesAgentAccess(t *testing.T) {
+	configDir := useTestConfigDir(t)
+	path := filepath.Join(configDir, "settings.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	data := []byte(`{
+  "agent_access": {
+    "connection_scope": "ALL",
+    "allow_profile_writes": true
+  },
+  "keymap": {}
+}
+`)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	settings, err := LoadSettings()
+	if err != nil {
+		t.Fatalf("LoadSettings() error = %v", err)
+	}
+	if settings.AgentAccess.ConnectionScope != AgentConnectionScopeAll || !settings.AgentAccess.AllowProfileWrites {
+		t.Fatalf("unexpected agent access settings: %+v", settings.AgentAccess)
+	}
+}
+
+func TestLoadSettingsRejectsUnknownAgentConnectionScope(t *testing.T) {
+	configDir := useTestConfigDir(t)
+	path := filepath.Join(configDir, "settings.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	data := []byte(`{"agent_access":{"connection_scope":"some-profile"},"keymap":{}}`)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	settings, err := LoadSettings()
+	if err != nil {
+		t.Fatalf("LoadSettings() error = %v", err)
+	}
+	if settings.AgentAccess.ConnectionScope != AgentConnectionScopeActive {
+		t.Fatalf("unknown agent scope should fail closed to active, got %q", settings.AgentAccess.ConnectionScope)
+	}
+}
+
 func TestLoadSettingsMergesDashboardHealthCheckOverride(t *testing.T) {
 	configDir := useTestConfigDir(t)
 	path := filepath.Join(configDir, "settings.json")

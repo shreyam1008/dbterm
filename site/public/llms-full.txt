@@ -44,6 +44,12 @@ Backup support covers PostgreSQL, MySQL/MariaDB, SQLite, Turso and Cloudflare D1
 - Go install: `go install github.com/shreyam1008/dbterm/cmd/dbterm@latest`
 - APT instructions and direct installers: https://dbterm.shreyam1008.com.np/guide/
 
+## Local MCP server
+
+`dbterm mcp serve` exposes a local STDIO MCP server for trusted agents. Its database tools list scoped profiles, inspect schemas and tables, run bounded read-only SQL, explain SELECT queries without ANALYZE, and follow records through declared foreign keys. Database writes are not exposed. Results have row, byte and time limits, and passwords or tokens are never returned.
+
+The default connection scope is the active saved profile. Exposing all saved profiles requires an explicit Settings or runtime choice. Creating or updating a connection profile is disabled by default and is exposed only after a separate profile-write opt-in.
+
 ## Authoritative pages
 
 - Feature map: https://dbterm.shreyam1008.com.np/features/
@@ -51,8 +57,10 @@ Backup support covers PostgreSQL, MySQL/MariaDB, SQLite, Turso and Cloudflare D1
 - Backup handbook: https://dbterm.shreyam1008.com.np/backup/
 - Factual comparison: https://dbterm.shreyam1008.com.np/compare/
 - Open-source architecture: https://dbterm.shreyam1008.com.np/open-source/
+- AI agent and MCP guide: https://dbterm.shreyam1008.com.np/agents/
+- Agent Skill index: https://dbterm.shreyam1008.com.np/.well-known/agent-skills/index.json
 - Source repository: https://github.com/shreyam1008/dbterm
 
 ## Discovery boundary
 
-The dbterm website documents downloadable open-source software. It does not currently operate a public API, OAuth or OpenID Connect authorization service, MCP server, commerce API or autonomous agent service. Discovery metadata for those services would be inaccurate and is intentionally not published.
+The dbterm website documents downloadable open-source software and its local STDIO MCP server. It does not operate a hosted API, OAuth or OpenID Connect authorization service, remote MCP endpoint, commerce API or autonomous agent service. Discovery metadata for those hosted services would be inaccurate and is intentionally not published.

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Use dbterm"
+  short_description: "Query databases safely through dbterm"
+  default_prompt: "Use $use-dbterm to inspect this database and answer my question safely."

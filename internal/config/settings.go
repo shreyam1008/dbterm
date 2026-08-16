@@ -13,6 +13,9 @@ import (
 const (
 	settingsFileName = "settings.json"
 
+	AgentConnectionScopeActive = "active"
+	AgentConnectionScopeAll    = "all"
+
 	ActionFocusTables    = "focus_tables"
 	ActionFocusQuery     = "focus_query"
 	ActionFocusResults   = "focus_results"
@@ -31,6 +34,14 @@ const (
 	ActionClearSelection = "clear_selection"
 	ActionCommandPalette = "command_palette"
 )
+
+// AgentAccessSettings controls the local, on-demand MCP server. Database
+// access is intentionally read-only by default. Profile writes are a separate
+// capability because a saved profile may contain credentials.
+type AgentAccessSettings struct {
+	ConnectionScope    string `json:"connection_scope"`
+	AllowProfileWrites bool   `json:"allow_profile_writes"`
+}
 
 var defaultKeymapBindings = map[string][]string{
 	ActionFocusTables:    {"alt+t"},
@@ -56,6 +67,7 @@ var defaultKeymapBindings = map[string][]string{
 type Settings struct {
 	Keymap                map[string][]string                  `json:"keymap"`
 	DashboardHealthChecks string                               `json:"dashboard_health_checks"`
+	AgentAccess           AgentAccessSettings                  `json:"agent_access"`
 	TableColumnWidths     map[string]map[string]map[string]int `json:"table_column_widths,omitempty"`
 	PinnedTables          map[string][]string                  `json:"pinned_tables,omitempty"`
 }
@@ -65,8 +77,11 @@ func DefaultSettings() *Settings {
 	return &Settings{
 		Keymap:                DefaultKeymapBindings(),
 		DashboardHealthChecks: "auto",
-		TableColumnWidths:     map[string]map[string]map[string]int{},
-		PinnedTables:          map[string][]string{},
+		AgentAccess: AgentAccessSettings{
+			ConnectionScope: AgentConnectionScopeActive,
+		},
+		TableColumnWidths: map[string]map[string]map[string]int{},
+		PinnedTables:      map[string][]string{},
 	}
 }
 
@@ -151,13 +166,17 @@ func mergeSettings(defaults, loaded *Settings) *Settings {
 	merged := &Settings{
 		Keymap:                map[string][]string{},
 		DashboardHealthChecks: "auto",
-		TableColumnWidths:     map[string]map[string]map[string]int{},
-		PinnedTables:          map[string][]string{},
+		AgentAccess: AgentAccessSettings{
+			ConnectionScope: AgentConnectionScopeActive,
+		},
+		TableColumnWidths: map[string]map[string]map[string]int{},
+		PinnedTables:      map[string][]string{},
 	}
 
 	if defaults != nil {
 		merged.Keymap = cloneKeymapBindings(defaults.Keymap)
 		merged.DashboardHealthChecks = normalizeDashboardHealthChecks(defaults.DashboardHealthChecks)
+		merged.AgentAccess = normalizeAgentAccess(defaults.AgentAccess)
 		merged.TableColumnWidths = cloneTableColumnWidths(defaults.TableColumnWidths)
 		merged.PinnedTables = clonePinnedTables(defaults.PinnedTables)
 	}
@@ -169,6 +188,7 @@ func mergeSettings(defaults, loaded *Settings) *Settings {
 	if mode := normalizeDashboardHealthChecks(loaded.DashboardHealthChecks); mode != "" {
 		merged.DashboardHealthChecks = mode
 	}
+	merged.AgentAccess = normalizeAgentAccess(loaded.AgentAccess)
 	merged.TableColumnWidths = cloneTableColumnWidths(loaded.TableColumnWidths)
 	merged.PinnedTables = clonePinnedTables(loaded.PinnedTables)
 
@@ -187,6 +207,18 @@ func mergeSettings(defaults, loaded *Settings) *Settings {
 	}
 
 	return merged
+}
+
+func normalizeAgentAccess(access AgentAccessSettings) AgentAccessSettings {
+	scope := strings.ToLower(strings.TrimSpace(access.ConnectionScope))
+	if scope != AgentConnectionScopeAll {
+		scope = AgentConnectionScopeActive
+	}
+
+	return AgentAccessSettings{
+		ConnectionScope:    scope,
+		AllowProfileWrites: access.AllowProfileWrites,
+	}
 }
 
 func clonePinnedTables(in map[string][]string) map[string][]string {

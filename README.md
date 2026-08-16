@@ -18,6 +18,7 @@ Save a PostgreSQL or MySQL server login once—without memorizing a database nam
 | **Connections** | PostgreSQL, MySQL/MariaDB, SQLite, Turso/LibSQL, and Cloudflare D1; server-first PostgreSQL/MySQL logins; database discovery; optional defaults; reusable prefilled local/cloud connection forms; one stable per-user profile even after an accidental `sudo dbterm` launch. |
 | **Data workspace** | Schema/object discovery, a command/object/recent-SQL palette, persistent table pins, query history, asynchronous cancellable execution, typed results, composable `AND` filters, sorting, first/last pagination, foreign-key navigation, schema inspection, and streamed CSV export. |
 | **Database operations** | PostgreSQL/MySQL SQL-dump import with progress and cancellation, plus local MySQL/PostgreSQL service status, start, stop, install guidance, saved-login connection, and server-wide database browsing. |
+| **Local agent access** | STDIO MCP server for scoped schema inspection, bounded read-only SQL, query plans, and declared relationship following; stored secrets stay hidden and profile changes require explicit opt-in. |
 | **Backup and recovery** | Instant or scheduled backups from local or remote sources to local/mounted or rclone destinations; native dumps, private staging, verification, compression, age encryption, SHA-256 history, retention, email alerts, native OS agents, content inspection, and guarded PostgreSQL/MySQL/SQLite restore. |
 
 The backup routing model covers all four combinations:
@@ -72,6 +73,7 @@ scoop install dbterm
 - Website: <https://dbterm.shreyam1008.com.np/>
 - Complete feature map: <https://dbterm.shreyam1008.com.np/features/>
 - Product guide: <https://dbterm.shreyam1008.com.np/guide/>
+- AI agent and MCP guide: <https://dbterm.shreyam1008.com.np/agents/>
 - Backup Center: <https://dbterm.shreyam1008.com.np/backup/>
 - Complete backup handbook: [docs/backup.md](docs/backup.md)
 - Marketing, domain, and search plan: [docs/marketing-plan.md](docs/marketing-plan.md)
@@ -101,6 +103,7 @@ dbterm keeps one connection profile for the signed-in OS user. Run the TUI norma
 | `dbterm --version` | Show version/build info |
 | `dbterm --info` | Show install/config/runtime info |
 | `sudo dbterm connections recover-sudo` | Non-destructively merge connections saved by older sudo-launched versions |
+| `dbterm mcp serve` | Start the local read-only MCP server for trusted agents |
 | `dbterm --update` | Update to latest release |
 | `dbterm --update X.Y.Z` | Update to a specific release |
 | `dbterm --uninstall` | Remove binary with confirmation |

@@ -1,0 +1,110 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+
+const title = "dbterm for AI Agents | Local Read-Only Database MCP Server";
+const description =
+  "Connect Codex, ChatGPT desktop, Claude Code, VS Code, and other MCP clients to dbterm for safe schema inspection, bounded read-only SQL, relationship navigation, and opted-in connection profile setup.";
+const keywords =
+  "dbterm MCP server, database MCP, read only SQL agent, PostgreSQL MCP, MySQL MCP, SQLite MCP, AI database tool";
+
+const toolRows = [
+  ["list_connections", "List allowed saved profiles with every password and token omitted."],
+  ["inspect_database", "Discover schemas and tables before an agent writes SQL."],
+  ["inspect_table", "Read columns, primary keys, and declared foreign keys."],
+  ["query_read_only", "Run one bounded read-only statement with a timeout and row cap."],
+  ["explain_query", "Inspect a query plan without ANALYZE or data mutation."],
+  ["follow_record", "Follow one record through declared parent and child relationships."],
+  ["save_connection_profile", "Create or update a profile only after explicit opt-in in Settings."]
+];
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  headline: "Use dbterm with AI agents through MCP",
+  description,
+  url: "https://dbterm.shreyam1008.com.np/agents/",
+  author: {
+    "@type": "Person",
+    name: "Shreyam Adhikari",
+    url: "https://shreyam1008.com.np/",
+    sameAs: "https://github.com/shreyam1008"
+  },
+  about: {
+    "@type": "SoftwareApplication",
+    name: "dbterm",
+    applicationCategory: "DeveloperApplication",
+    operatingSystem: "Linux, macOS, Windows",
+    codeRepository: "https://github.com/shreyam1008/dbterm"
+  }
+};
+---
+
+<BaseLayout title={title} description={description} keywords={keywords} jsonLd={jsonLd}>
+  <section class="hero-panel">
+    <p class="eyebrow">Local MCP · no hosted database proxy</p>
+    <h1>dbterm for agents</h1>
+    <p>
+      Point an MCP-capable agent at the dbterm already on your computer. It can inspect structure,
+      answer focused data questions, and follow a person or record across declared relationships
+      without receiving your saved credentials.
+    </p>
+    <div class="page-meta">
+      <span>STDIO only</span>
+      <span>Read-only SQL</span>
+      <span>Secrets redacted</span>
+    </div>
+  </section>
+
+  <section class="panel" id="connect">
+    <h2>Connect it</h2>
+    <p class="lead">Install dbterm, then register one local command in your agent client.</p>
+    <article class="copy-shell">
+      <header>
+        <h3>Codex CLI</h3>
+        <button class="button outline small copy-button" type="button" data-copy-target="agent-command" data-default-label="Copy">Copy</button>
+      </header>
+      <pre><code id="agent-command">codex mcp add dbterm -- dbterm mcp serve</code></pre>
+    </article>
+    <p>
+      In a graphical MCP client, choose <strong>STDIO</strong>, use <code>dbterm</code> as the command,
+      and add <code>mcp</code> and <code>serve</code> as arguments. dbterm opens no network port and
+      needs no API key in the client configuration.
+    </p>
+  </section>
+
+  <section class="panel" id="tools">
+    <h2>What an agent can do</h2>
+    <div class="resource-grid">
+      {toolRows.map(([name, detail]) => (
+        <article class="resource-item">
+          <h3><code>{name}</code></h3>
+          <p>{detail}</p>
+        </article>
+      ))}
+    </div>
+  </section>
+
+  <section class="panel" id="safety">
+    <h2>The safety boundary</h2>
+    <ul class="list-tight">
+      <li>Database execution accepts read-only statements and rejects INSERT, UPDATE, DELETE, DDL, grants, and multi-statement SQL.</li>
+      <li>Results have fixed row, size, and time bounds. An agent must narrow an oversized request.</li>
+      <li>Saved passwords and tokens are used locally for connection but never returned by MCP tools.</li>
+      <li>Connection-profile creation is disabled by default and must be enabled in dbterm Settings.</li>
+      <li>Access defaults to the active saved profile; exposing all saved profiles is a separate Settings or runtime choice.</li>
+    </ul>
+    <p class="notice">
+      An agent can draft write SQL for you to review in dbterm, but the MCP server will not execute it.
+    </p>
+  </section>
+
+  <section class="panel" id="discovery">
+    <h2>Machine-readable discovery</h2>
+    <p>
+      Agents can discover the public <a href="/.well-known/agent-skills/index.json">skill index</a>,
+      install <a href="/.well-known/agent-skills/use-dbterm/SKILL.md">Use dbterm</a>, or read the
+      compact <a href="/llms.txt">LLM index</a> and <a href="/product.md">product overview</a>.
+      These files describe a local tool; they do not advertise a hosted API or remote access to your databases.
+    </p>
+  </section>
+</BaseLayout>

@@ -14,6 +14,17 @@ import (
 
 const pageSettings = "settings"
 
+const (
+	settingsLabelAgentScope         = "Agent Connection Scope"
+	settingsLabelAgentProfileWrites = "Allow Agent Profile Writes"
+	pageAgentSetup                  = "agentSetup"
+)
+
+var agentConnectionScopeOptions = []string{
+	"Active connection only (recommended)",
+	"All saved connections",
+}
+
 type keymapFieldSpec struct {
 	Action string
 	Label  string
@@ -86,6 +97,7 @@ func cloneSettings(settings *config.Settings) *config.Settings {
 	cloned := &config.Settings{
 		Keymap:                make(map[string][]string, len(settings.Keymap)),
 		DashboardHealthChecks: settings.DashboardHealthChecks,
+		AgentAccess:           settings.AgentAccess,
 		TableColumnWidths:     make(map[string]map[string]map[string]int, len(settings.TableColumnWidths)),
 		PinnedTables:          make(map[string][]string, len(settings.PinnedTables)),
 	}
@@ -111,6 +123,50 @@ func cloneSettings(settings *config.Settings) *config.Settings {
 	return cloned
 }
 
+func agentConnectionScopeIndex(scope string) int {
+	if strings.EqualFold(strings.TrimSpace(scope), config.AgentConnectionScopeAll) {
+		return 1
+	}
+	return 0
+}
+
+func selectedAgentConnectionScope(form *tview.Form) string {
+	item := form.GetFormItemByLabel(settingsLabelAgentScope)
+	dropdown, ok := item.(*tview.DropDown)
+	if !ok {
+		return config.AgentConnectionScopeActive
+	}
+	index, _ := dropdown.GetCurrentOption()
+	if index == 1 {
+		return config.AgentConnectionScopeAll
+	}
+	return config.AgentConnectionScopeActive
+}
+
+func settingsFormCheckboxChecked(form *tview.Form, label string) bool {
+	item := form.GetFormItemByLabel(label)
+	checkbox, ok := item.(*tview.Checkbox)
+	return ok && checkbox.IsChecked()
+}
+
+func agentMCPSetupText() string {
+	return `LOCAL MCP · STDIO
+
+Command:   dbterm
+Arguments: mcp serve
+
+Codex CLI
+codex mcp add dbterm -- dbterm mcp serve
+
+Claude Code
+claude mcp add dbterm -- dbterm mcp serve
+
+VS Code · .vscode/mcp.json
+{"servers":{"dbterm":{"type":"stdio","command":"dbterm","args":["mcp","serve"]}}}
+
+No password, token, or DSN belongs in client config. dbterm reads its local saved profiles. Database tools stay read-only; profile creation is exposed only when explicitly allowed in Settings.`
+}
+
 func sortedFieldSpecs() []keymapFieldSpec {
 	sorted := make([]keymapFieldSpec, len(keymapFieldSpecs))
 	copy(sorted, keymapFieldSpecs)
@@ -132,7 +188,7 @@ func (a *App) showSettings() {
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignCenter)
 	header.SetBackgroundColor(bg)
-	header.SetText(fmt.Sprintf(" [::b][#cba6f7]%s Settings[-][-]  [#a6adc8]Keymap (backend config)[-]", iconDashboard))
+	header.SetText(fmt.Sprintf(" [::b][#cba6f7]%s Settings[-][-]  [#a6adc8]Agent access · keymap[-]", iconDashboard))
 
 	summary := tview.NewTextView().
 		SetDynamicColors(true).
@@ -142,11 +198,11 @@ func (a *App) showSettings() {
 	if configDir, err := appdirs.ConfigDir(); err == nil {
 		settingsPath = filepath.Join(configDir, "settings.json")
 	}
-	summary.SetText(fmt.Sprintf("[#6c7086]Use | to separate bindings. Dashboard health checks: auto or manual. Saved at %s[-]", tview.Escape(settingsPath)))
+	summary.SetText(fmt.Sprintf("[#89b4fa]MCP: dbterm mcp serve[-]  [#6c7086]Local stdio · database read-only · saved at %s[-]", tview.Escape(settingsPath)))
 
 	form := tview.NewForm()
 	form.SetBorder(true).
-		SetTitle(fmt.Sprintf(" %s Key Bindings ", iconDashboard)).
+		SetTitle(fmt.Sprintf(" %s Agent Access + Key Bindings ", iconDashboard)).
 		SetTitleColor(mauve).
 		SetBorderColor(surface1)
 	form.SetBackgroundColor(bg)
@@ -155,6 +211,35 @@ func (a *App) showSettings() {
 		SetButtonTextColor(green).
 		SetLabelColor(text).
 		SetFieldTextColor(text)
+
+	form.AddDropDown(settingsLabelAgentScope, agentConnectionScopeOptions, agentConnectionScopeIndex(settings.AgentAccess.ConnectionScope), nil)
+	form.AddCheckbox(settingsLabelAgentProfileWrites, settings.AgentAccess.AllowProfileWrites, func(allowed bool) {
+		if allowed {
+			a.ShowAlert(fmt.Sprintf("%s Agent profile writes can create or update saved connection profiles.\n\nProfiles may contain credentials. Only enable this for an agent you trust; database queries remain read-only.", iconWarn), pageSettings)
+		}
+	})
+	form.AddButton("Agent Setup / Copy", func() {
+		setup := agentMCPSetupText()
+		modal := tview.NewModal().
+			SetText(tview.Escape(setup)).
+			AddButtons([]string{" Copy instructions ", " Close "}).
+			SetDoneFunc(func(index int, _ string) {
+				a.pages.RemovePage(pageAgentSetup)
+				if index != 0 {
+					a.app.SetFocus(form)
+					return
+				}
+				a.copyValueAsync(setup, func(copyErr error) {
+					if copyErr != nil {
+						a.ShowAlert(fmt.Sprintf("%s Instructions are in dbterm's internal clipboard; system clipboard unavailable:\n\n%v", iconInfo, copyErr), pageSettings)
+						return
+					}
+					a.ShowAlert(fmt.Sprintf("%s MCP setup instructions copied. No credentials were included.", iconSuccess), pageSettings)
+				})
+			})
+		modal.SetBackgroundColor(bg).SetButtonBackgroundColor(surface1).SetButtonTextColor(green).SetTextColor(text)
+		a.pages.AddPage(pageAgentSetup, modal, true, true)
+	})
 
 	form.AddInputField("Dashboard Health Checks", settings.DashboardHealthChecks, 48, nil, nil)
 
@@ -192,6 +277,9 @@ func (a *App) showSettings() {
 			return
 		}
 
+		updated.AgentAccess.ConnectionScope = selectedAgentConnectionScope(form)
+		updated.AgentAccess.AllowProfileWrites = settingsFormCheckboxChecked(form, settingsLabelAgentProfileWrites)
+
 		for _, field := range fields {
 			bindings := parseBindingList(formInputValueByLabel(form, field.Label))
 			if len(bindings) == 0 {
@@ -215,11 +303,25 @@ func (a *App) showSettings() {
 		settings = updated
 		a.settings = cloneSettings(updated)
 		a.keymap = resolver
-		a.ShowAlert(fmt.Sprintf("%s Settings saved.\n\nKeymap updated in %s.", iconSuccess, settingsPath), pageSettings)
+		agentMode := "read-only"
+		if updated.AgentAccess.AllowProfileWrites {
+			agentMode = "read-only database + profile writes allowed"
+		}
+		a.ShowAlert(fmt.Sprintf("%s Settings saved.\n\nAgent access: %s, scope: %s.\nKeymap updated in %s.", iconSuccess, agentMode, updated.AgentAccess.ConnectionScope, settingsPath), pageSettings)
 	}
 
 	resetFunc := func() {
 		defaults := config.DefaultSettings()
+		if item := form.GetFormItemByLabel(settingsLabelAgentScope); item != nil {
+			if dropdown, ok := item.(*tview.DropDown); ok {
+				dropdown.SetCurrentOption(agentConnectionScopeIndex(defaults.AgentAccess.ConnectionScope))
+			}
+		}
+		if item := form.GetFormItemByLabel(settingsLabelAgentProfileWrites); item != nil {
+			if checkbox, ok := item.(*tview.Checkbox); ok {
+				checkbox.SetChecked(defaults.AgentAccess.AllowProfileWrites)
+			}
+		}
 		setFormInputValue(form, "Dashboard Health Checks", defaults.DashboardHealthChecks)
 		for _, field := range fields {
 			setFormInputValueByLabel(form, field.Label, keymapFieldValue(defaults, field.Action))

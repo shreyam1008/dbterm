@@ -57,6 +57,7 @@ modules provide focused infrastructure to both.
 | File | Responsibility |
 | --- | --- |
 | `main.go` | Parse top-level arguments, print help, or launch the TUI |
+| `mcp.go` | Parse and start the local STDIO MCP server |
 | `backup_cli.go` | Route and execute backup subcommands |
 | `backup_service_args.go` | Parse backup-agent service flags and scope |
 | `backup_agent_log.go` | Create and rotate backup-agent logs |
@@ -84,6 +85,7 @@ Tests live beside the implementation they exercise.
 | `folderpicker` | Native folder selection adapters | `picker.go` |
 | `format` | Shared human-readable value formatting | `bytes.go` |
 | `history` | Persist query history per saved connection | `manager.go` |
+| `mcpserver` | Local MCP tools, read-only SQL policy, metadata, and relationship following | `server.go`, then `service.go` |
 | `osservice` | Manage systemd, launchd, and Windows scheduled tasks | `osservice.go` |
 | `persist` | Atomically save JSON files | `jsonfile.go` |
 | `processinfo` | Inspect process state and resource usage | `processinfo.go` |
