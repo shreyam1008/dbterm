@@ -1,6 +1,6 @@
 pkgbase = dbterm-bin
 	pkgdesc = Keyboard-first terminal database client for PostgreSQL, MySQL, SQLite, Turso, and Cloudflare D1
-	pkgver = 0.6.4
+	pkgver = 0.7.0
 	pkgrel = 1
 	url = https://dbterm.shreyam1008.com.np/
 	arch = x86_64
@@ -9,11 +9,11 @@ pkgbase = dbterm-bin
 	provides = dbterm
 	conflicts = dbterm
 	conflicts = dbterm-git
-	source = LICENSE-0.6.4::https://raw.githubusercontent.com/shreyam1008/dbterm/v0.6.4/LICENSE
+	source = LICENSE-0.7.0::https://raw.githubusercontent.com/shreyam1008/dbterm/v0.7.0/LICENSE
 	sha256sums = a98cfa788e15cae19c08dad8d612c12f21f755d4ea2289b48e4d47ad236664f2
-	source_x86_64 = dbterm-linux-amd64::https://github.com/shreyam1008/dbterm/releases/download/v0.6.4/dbterm-linux-amd64
-	sha256sums_x86_64 = 9cda326f8a59926032b2fef6452dc6b6e74fc32f0cb476d86c3abff5634068c9
-	source_aarch64 = dbterm-linux-arm64::https://github.com/shreyam1008/dbterm/releases/download/v0.6.4/dbterm-linux-arm64
-	sha256sums_aarch64 = 8b3b7dd7ec24ecc97cbdcc010250c16583fdaeab0113f8ffd3f7ce803ab19edd
+	source_x86_64 = dbterm-linux-amd64::https://github.com/shreyam1008/dbterm/releases/download/v0.7.0/dbterm-linux-amd64
+	sha256sums_x86_64 = 5ef600ee272e4bc35cf7bce687499c43ff3e5c65e3320897542f9b350e56e963
+	source_aarch64 = dbterm-linux-arm64::https://github.com/shreyam1008/dbterm/releases/download/v0.7.0/dbterm-linux-arm64
+	sha256sums_aarch64 = 6e950907f2deaafd9437ce8332823008c4a21df28d7eaf2218c65dfda702b095
 
 pkgname = dbterm-bin

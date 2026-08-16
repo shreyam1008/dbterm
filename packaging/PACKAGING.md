@@ -1,7 +1,7 @@
 # dbterm — Packaging Guide
 
 Publisher: Shreyam Adhikari (shreyam1008@gmail.com)
-Version: 0.6.4
+Current release: 0.7.0
 
 ---
 
@@ -16,7 +16,7 @@ Version: 0.6.4
 
 ---
 
-## Publication status for v0.6.4
+## Publication status for v0.7.0
 
 | Ecosystem | Status |
 | --- | --- |
@@ -25,8 +25,8 @@ Version: 0.6.4
 | Go module / pkg.go.dev | Published |
 | Homebrew | Published in [`shreyam1008/homebrew-tap`](https://github.com/shreyam1008/homebrew-tap) |
 | Scoop | Published in [`shreyam1008/scoop-bucket`](https://github.com/shreyam1008/scoop-bucket) |
-| WinGet | [PR 418259](https://github.com/microsoft/winget-pkgs/pull/418259) pending CLA and review |
-| AUR | Prepared locally; publishing requires a configured AUR account and trusted SSH setup |
+| WinGet | [PR 418259](https://github.com/microsoft/winget-pkgs/pull/418259) for v0.6.4 passed validation and CLA; pending maintainer merge before a v0.7.0 update |
+| AUR | v0.7.0 prepared locally; publishing requires a configured AUR account and trusted SSH setup |
 
 ---
 
@@ -66,11 +66,11 @@ mkdir -p Formula
 cp /vsk/PM/dbterm/packaging/homebrew/dbterm.rb Formula/dbterm.rb
 
 # Fill in the real sha256 of the source tarball:
-curl -sL https://github.com/shreyam1008/dbterm/archive/refs/tags/v0.6.4.tar.gz | sha256sum
+curl -sL https://github.com/shreyam1008/dbterm/archive/refs/tags/v0.7.0.tar.gz | sha256sum
 # Paste result into dbterm.rb sha256 field
 
 git add Formula/dbterm.rb
-git commit -m "Add dbterm v0.6.4"
+git commit -m "Add dbterm v0.7.0"
 git push
 ```
 
@@ -88,8 +88,8 @@ brew install shreyam1008/tap/dbterm
 ### Get the binary sha256 values
 
 ```bash
-curl -sL https://github.com/shreyam1008/dbterm/releases/download/v0.6.4/dbterm-linux-amd64 | sha256sum
-curl -sL https://github.com/shreyam1008/dbterm/releases/download/v0.6.4/dbterm-linux-arm64 | sha256sum
+curl -sL https://github.com/shreyam1008/dbterm/releases/download/v0.7.0/dbterm-linux-amd64 | sha256sum
+curl -sL https://github.com/shreyam1008/dbterm/releases/download/v0.7.0/dbterm-linux-arm64 | sha256sum
 ```
 
 ### Publish
@@ -110,7 +110,7 @@ makepkg -si
 # 6. Generate .SRCINFO and push
 makepkg --printsrcinfo > .SRCINFO
 git add PKGBUILD .SRCINFO
-git commit -m "Initial release v0.6.4"
+git commit -m "Initial release v0.7.0"
 git push
 ```
 
@@ -161,7 +161,7 @@ cd scoop-bucket
 mkdir -p bucket
 cp /vsk/PM/dbterm/packaging/scoop/dbterm.json bucket/dbterm.json
 git add bucket/dbterm.json
-git commit -m "Add dbterm v0.6.4"
+git commit -m "Add dbterm v0.7.0"
 git push
 ```
 
