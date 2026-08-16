@@ -20,8 +20,11 @@ dbterm is created and maintained by Shreyam Adhikari (`shreyam1008`). It is an M
 - Backup Center: https://dbterm.shreyam1008.com.np/backup/
 - Comparison: https://dbterm.shreyam1008.com.np/compare/
 - Open-source handbook: https://dbterm.shreyam1008.com.np/open-source/
+- AI agent and MCP guide: https://dbterm.shreyam1008.com.np/agents/
+- Agent Skill index: https://dbterm.shreyam1008.com.np/.well-known/agent-skills/index.json
+- Use dbterm Agent Skill: https://dbterm.shreyam1008.com.np/.well-known/agent-skills/use-dbterm/SKILL.md
 - Go package: https://pkg.go.dev/github.com/shreyam1008/dbterm
 
 ## Scope boundary
 
-Backup supports PostgreSQL, MySQL/MariaDB, SQLite, Turso and Cloudflare D1. Restore currently supports PostgreSQL, MySQL/MariaDB and local SQLite. dbterm does not expose a hosted API, OAuth service, MCP server or autonomous agent endpoint.
+Backup supports PostgreSQL, MySQL/MariaDB, SQLite, Turso and Cloudflare D1. Restore currently supports PostgreSQL, MySQL/MariaDB and local SQLite. dbterm includes a local STDIO MCP server with read-only database tools; it does not expose a hosted API, OAuth service, remote MCP endpoint or autonomous agent endpoint.

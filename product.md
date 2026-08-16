@@ -11,6 +11,12 @@ dbterm is a keyboard-first database workbench created by [Shreyam Adhikari](http
 - Run SQL and use import, export and local-service workflows.
 - Work with PostgreSQL, MySQL/MariaDB, SQLite, Turso/LibSQL and Cloudflare D1.
 
+## Local access for AI agents
+
+`dbterm mcp serve` starts a local STDIO Model Context Protocol server. An MCP-capable agent can list allowed saved profiles, inspect schemas and tables, run bounded read-only SQL, explain a query, and follow one record across declared foreign keys. Saved passwords and tokens are never returned.
+
+Access defaults to the active connection. Database mutation is not exposed. Creating or updating a connection profile is a separate Settings opt-in because profiles can contain credentials.
+
 ## Verified backup routes
 
 dbterm separates the database source from the artifact destination. It supports local-to-local, local-to-remote, remote-to-local and remote-to-remote backups. Destinations may be absolute local folders, mounted volumes or configured `rclone://remote/path` locations.
@@ -23,6 +29,7 @@ Backup covers PostgreSQL, MySQL/MariaDB, SQLite, Turso and Cloudflare D1. Restor
 
 - [Feature map](https://dbterm.shreyam1008.com.np/features/)
 - [Product guide](https://dbterm.shreyam1008.com.np/guide/)
+- [AI agent and MCP guide](https://dbterm.shreyam1008.com.np/agents/)
 - [Backup Center](https://dbterm.shreyam1008.com.np/backup/)
 - [Source code](https://github.com/shreyam1008/dbterm)
 - [Go package](https://pkg.go.dev/github.com/shreyam1008/dbterm)

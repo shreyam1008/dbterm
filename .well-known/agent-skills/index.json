@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "skills": [
+    {
+      "name": "use-dbterm",
+      "type": "skill-md",
+      "description": "Inspect database schemas, query data, follow records across declared relationships, or create a saved dbterm connection profile through the local dbterm MCP server. Use for PostgreSQL, MySQL/MariaDB, SQLite, Turso/LibSQL, and Cloudflare D1 work when an agent needs bounded database context without receiving stored secrets. Database execution is read-only; connection-profile changes require explicit user opt-in.",
+      "url": "/.well-known/agent-skills/use-dbterm/SKILL.md",
+      "digest": "sha256:08d5f30ebf7c1077e174fc055c1e202f8ce532e9d7e4942f4e8fb6c2abcb18d8"
+    }
+  ]
+}
