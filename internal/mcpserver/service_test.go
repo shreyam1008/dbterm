@@ -267,7 +267,7 @@ func TestToolDiscoveryHidesProfileWriterByDefault(t *testing.T) {
 
 func TestNormalizeRunErrorTreatsClientCloseAsClean(t *testing.T) {
 	t.Parallel()
-	for _, err := range []error{nil, io.EOF, fmt.Errorf("server is closing: %w", io.EOF), context.Canceled} {
+	for _, err := range []error{nil, io.EOF, fmt.Errorf("server is closing: %w", io.EOF), errors.New("server is closing: EOF"), context.Canceled} {
 		if got := normalizeRunError(err); got != nil {
 			t.Fatalf("normalizeRunError(%v) = %v", err, got)
 		}

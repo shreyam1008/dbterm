@@ -10,6 +10,7 @@
 # 5) If that tag already exists, the workflow skips release creation safely.
 #
 # Newest entry first:
+0.7.1|Karnali|Clean local-agent shutdown handling for the dbterm MCP stdio server.
 0.7.0|Karnali|Local read-only MCP tools for trusted agents, scoped saved connections, relationship following, and opt-in connection profile setup.
 0.6.4|Bhagirathi|Persistent per-database table pins with a conflict-free Space shortcut, type-ahead search, command-palette access, and clear contextual guidance.
 0.6.3|Alaknanda|One canonical user profile across sudo and updates, plus server-first PostgreSQL/MySQL connections with accessible database browsing and safe legacy recovery.

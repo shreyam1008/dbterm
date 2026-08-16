@@ -94,6 +94,12 @@ func normalizeRunError(err error) error {
 	if err == nil || errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) {
 		return nil
 	}
+	// go-sdk v1.7.0 preserves its internal "server is closing" sentinel but
+	// formats the underlying read EOF with %v, so errors.Is cannot reach it.
+	// This exact error is the normal result of a stdio client closing stdin.
+	if err.Error() == "server is closing: EOF" {
+		return nil
+	}
 	return err
 }
 
