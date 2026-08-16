@@ -19,7 +19,7 @@ Supported database targets are PostgreSQL, MySQL/MariaDB, SQLite, Turso/LibSQL a
 
 ## Everyday workflow
 
-The read-focused workflow is optimized for quick data checks: browse a table, sort or refresh rows, copy an identifier, follow primary and foreign keys, filter a related table and run a small query. dbterm is not entirely read-only; it also includes broader query, data, import and export workflows.
+The read-focused workflow is optimized for quick data checks: browse a table, sort or refresh rows, copy an identifier, explore parent or child rows through declared keys, follow a multi-table chain, filter related data and run a small query. dbterm is not entirely read-only; it also includes broader query, data, import and export workflows.
 
 ## Backup model
 
