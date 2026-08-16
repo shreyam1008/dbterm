@@ -16,6 +16,20 @@ Version: 0.6.4
 
 ---
 
+## Publication status for v0.6.4
+
+| Ecosystem | Status |
+| --- | --- |
+| GitHub Releases | Published |
+| APT | Published |
+| Go module / pkg.go.dev | Published |
+| Homebrew | Published in [`shreyam1008/homebrew-tap`](https://github.com/shreyam1008/homebrew-tap) |
+| Scoop | Published in [`shreyam1008/scoop-bucket`](https://github.com/shreyam1008/scoop-bucket) |
+| WinGet | [PR 418259](https://github.com/microsoft/winget-pkgs/pull/418259) pending CLA and review |
+| AUR | Prepared locally; publishing requires a configured AUR account and trusted SSH setup |
+
+---
+
 ## Step 0: Prepare release binaries on GitHub
 
 Every packaging system below downloads binaries from GitHub Releases.
@@ -195,11 +209,11 @@ winget install ShreyamAdhikari.dbterm
 
 ## Release checklist
 
-- [ ] `go test ./...` passes
+- [x] `go test ./...` passes
 - [ ] `make release` builds all platform binaries
-- [ ] GitHub Release tag created with all binaries attached
-- [ ] Homebrew formula sha256 updated
-- [ ] AUR PKGBUILD sha256 updated and .SRCINFO regenerated
-- [ ] Scoop manifest hash updated
-- [ ] WinGet installer sha256 updated
-- [ ] `cmd/dbterm/releases.txt` updated with new version as first entry
+- [x] GitHub Release tag created with all binaries attached
+- [x] Homebrew formula sha256 updated
+- [x] AUR PKGBUILD sha256 updated and .SRCINFO regenerated
+- [x] Scoop manifest hash updated
+- [x] WinGet installer sha256 updated
+- [x] `cmd/dbterm/releases.txt` updated with new version as first entry

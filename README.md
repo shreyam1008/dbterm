@@ -53,6 +53,20 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubus
 go install github.com/shreyam1008/dbterm/cmd/dbterm@latest
 ```
 
+### Homebrew
+
+```bash
+brew tap shreyam1008/tap
+brew install shreyam1008/tap/dbterm
+```
+
+### Scoop
+
+```powershell
+scoop bucket add shreyam1008 https://github.com/shreyam1008/scoop-bucket
+scoop install dbterm
+```
+
 ## Documentation
 
 - Website: <https://dbterm.shreyam1008.com.np/>
