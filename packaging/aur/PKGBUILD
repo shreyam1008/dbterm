@@ -1,6 +1,6 @@
 # Maintainer: Shreyam Adhikari <shreyam1008@gmail.com>
 pkgname=dbterm-bin
-pkgver=0.7.0
+pkgver=0.7.1
 pkgrel=1
 pkgdesc="Keyboard-first terminal database client for PostgreSQL, MySQL, SQLite, Turso, and Cloudflare D1"
 arch=('x86_64' 'aarch64')
@@ -15,8 +15,8 @@ source_x86_64=("dbterm-linux-amd64::https://github.com/shreyam1008/dbterm/releas
 source_aarch64=("dbterm-linux-arm64::https://github.com/shreyam1008/dbterm/releases/download/v${pkgver}/dbterm-linux-arm64")
 
 sha256sums=('a98cfa788e15cae19c08dad8d612c12f21f755d4ea2289b48e4d47ad236664f2')
-sha256sums_x86_64=('5ef600ee272e4bc35cf7bce687499c43ff3e5c65e3320897542f9b350e56e963')
-sha256sums_aarch64=('6e950907f2deaafd9437ce8332823008c4a21df28d7eaf2218c65dfda702b095')
+sha256sums_x86_64=('4b8ba591a0f9be753d1cddea57f996f1161dc5aec90dfdc1bac2d59c17b71e7a')
+sha256sums_aarch64=('572e0682b4f9f547bd77c4e0ae81d2393b5594ad00d5ff17ca524bd6b2f87de8')
 
 package() {
     cd "$srcdir"
@@ -41,7 +41,7 @@ package() {
 #      makepkg --printsrcinfo > .SRCINFO
 # 6. Commit and push:
 #      git add PKGBUILD .SRCINFO
-#      git commit -m "Initial release v0.7.0"
+#      git commit -m "Initial release v0.7.1"
 #      git push
 # 7. Test install before pushing:
 #      makepkg -si
