@@ -1,8 +1,8 @@
 class Dbterm < Formula
   desc "Keyboard-first terminal database client for PostgreSQL, MySQL, SQLite, Turso, and Cloudflare D1"
   homepage "https://dbterm.shreyam1008.com.np/"
-  url "https://github.com/shreyam1008/dbterm/archive/refs/tags/v0.7.1.tar.gz"
-  sha256 "73df2a7db16fec82cf1d8306f74a1c7de881ee1ddde35c7b746df659d55650d2"
+  url "https://github.com/shreyam1008/dbterm/archive/refs/tags/v0.8.0.tar.gz"
+  sha256 "2c141c10e96c5b36dfd9ea32ee423537f80fcb918153b1a6f754c59905b0cb27"
   license "MIT"
   head "https://github.com/shreyam1008/dbterm.git", branch: "main"
 
