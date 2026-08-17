@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "screenshots": [
+    {
+      "path": "docs/images/main_ui.png",
+      "alt": "dbterm terminal workbench showing its database workflow interface",
+      "platform": "terminal",
+      "capturedVersion": "0.8.0",
+      "capturedAt": "2026-08-07",
+      "workflow": "Capture a real terminal session with a local sample database and remove credentials and private data before committing."
+    }
+  ]
+}

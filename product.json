@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "slug": "dbterm",
+  "name": "dbterm",
+  "summary": "A keyboard-first database workbench and verified backup tool for PostgreSQL, MySQL, SQLite, Turso, and Cloudflare D1.",
+  "visibility": "public",
+  "portfolioApproved": true,
+  "lifecycle": "released",
+  "repository": "https://github.com/shreyam1008/dbterm",
+  "canonicalUrl": "https://dbterm.shreyam1008.com.np/",
+  "creatorUrl": "https://shreyam1008.com.np/me",
+  "versionSource": "cmd/dbterm/releases.txt",
+  "verifyCommand": "go test ./... && (cd site && bun install --frozen-lockfile && bun run verify)",
+  "changelog": "cmd/dbterm/releases.txt",
+  "securityPolicy": "SECURITY.md",
+  "installDocs": "README.md",
+  "rollbackDocs": "docs/domain-release.md",
+  "screenshotManifest": "docs/screenshots.json",
+  "distributions": [
+    {
+      "channel": "Product website",
+      "status": "live",
+      "url": "https://dbterm.shreyam1008.com.np/",
+      "version": "0.9.1",
+      "verifiedAt": "2026-08-17"
+    },
+    {
+      "channel": "GitHub Releases",
+      "status": "live",
+      "url": "https://github.com/shreyam1008/dbterm/releases/tag/v0.9.1",
+      "version": "0.9.1",
+      "verifiedAt": "2026-08-17"
+    },
+    {
+      "channel": "APT repository",
+      "status": "live",
+      "url": "https://dbterm.shreyam1008.com.np/apt/",
+      "version": "0.9.1",
+      "verifiedAt": "2026-08-17"
+    },
+    {
+      "channel": "Homebrew tap",
+      "status": "live",
+      "url": "https://github.com/shreyam1008/homebrew-tap/blob/main/Formula/dbterm.rb",
+      "version": "0.8.0",
+      "verifiedAt": "2026-08-17"
+    },
+    {
+      "channel": "Scoop bucket",
+      "status": "live",
+      "url": "https://github.com/shreyam1008/scoop-bucket/blob/main/bucket/dbterm.json",
+      "version": "0.8.0",
+      "verifiedAt": "2026-08-17"
+    },
+    {
+      "channel": "WinGet",
+      "status": "submitted",
+      "url": "https://github.com/microsoft/winget-pkgs/pull/418259",
+      "version": "0.6.4",
+      "verifiedAt": "2026-08-17"
+    }
+  ]
+}
