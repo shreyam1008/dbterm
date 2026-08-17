@@ -78,6 +78,7 @@ scoop install dbterm
 - Complete backup handbook: [docs/backup.md](docs/backup.md)
 - Marketing, domain, and search plan: [docs/marketing-plan.md](docs/marketing-plan.md)
 - Distribution, submission, and promotion record: [docs/distribution-log.md](docs/distribution-log.md)
+- Product-domain and release contract: [docs/domain-release.md](docs/domain-release.md)
 - Open-source handbook: <https://dbterm.shreyam1008.com.np/open-source/>
 - Go package page: <https://pkg.go.dev/github.com/shreyam1008/dbterm>
 
