@@ -34,7 +34,7 @@
     {
       "channel": "APT repository",
       "status": "live",
-      "url": "https://dbterm.shreyam1008.com.np/apt/",
+      "url": "https://dbterm.shreyam1008.com.np/apt/dists/stable/Release",
       "version": "0.9.1",
       "verifiedAt": "2026-08-17"
     },
