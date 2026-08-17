@@ -29,7 +29,7 @@ jobs:
       skip_reason: ${{ steps.meta.outputs.skip_reason }}
     steps:
       - name: Checkout code (tags)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           fetch-tags: true
@@ -110,10 +110,10 @@ jobs:
     if: needs.release-meta.outputs.should_release == 'true'
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -124,22 +124,15 @@ jobs:
           set -euo pipefail
           VERSION="${{ needs.release-meta.outputs.version }}"
           COMMIT="${{ needs.release-meta.outputs.short_sha }}"
-          LDFLAGS="-s -w -buildid= -X main.version=${VERSION} -X main.commit=${COMMIT}"
-
-          mkdir -p dist
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags="$LDFLAGS" -o dist/dbterm-linux-amd64 ./cmd/dbterm
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -buildvcs=false -ldflags="$LDFLAGS" -o dist/dbterm-linux-arm64 ./cmd/dbterm
-          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags="$LDFLAGS" -o dist/dbterm-darwin-amd64 ./cmd/dbterm
-          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -buildvcs=false -ldflags="$LDFLAGS" -o dist/dbterm-darwin-arm64 ./cmd/dbterm
-          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags="$LDFLAGS" -o dist/dbterm-windows-amd64.exe ./cmd/dbterm
-          CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -trimpath -buildvcs=false -ldflags="$LDFLAGS" -o dist/dbterm-windows-arm64.exe ./cmd/dbterm
+          make release-core VERSION="$VERSION" COMMIT="$COMMIT"
 
       - name: Upload Core Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dist-core
           path: dist/*
           if-no-files-found: error
+          retention-days: 1
 
   quality:
     name: Release Quality Gate
@@ -148,10 +141,10 @@ jobs:
     if: needs.release-meta.outputs.should_release == 'true'
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -184,13 +177,13 @@ jobs:
     if: needs.release-meta.outputs.should_release == 'true'
     steps:
       - name: Checkout code (tags)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           fetch-tags: true
 
       - name: Download built artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: dist-*
           merge-multiple: true
@@ -203,7 +196,7 @@ jobs:
           sha256sum * > checksums.txt
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.release-meta.outputs.tag_name }}
           name: ${{ needs.release-meta.outputs.tag_name }} - ${{ needs.release-meta.outputs.release_name }}

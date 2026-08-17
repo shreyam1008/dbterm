@@ -6,9 +6,11 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	mysql "github.com/go-sql-driver/mysql"
+	"github.com/shreyam1008/dbterm/internal/persist"
 )
 
 func TestBuildMySQLConnStringPreservesTemporalLexemes(t *testing.T) {
@@ -71,8 +73,13 @@ func TestPostgreSQLServerProfileUsesMaintenanceDatabase(t *testing.T) {
 
 func useTestConfigDir(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
+	root := t.TempDir()
+	dir := filepath.Join(root, "config")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatalf("create test config directory: %v", err)
+	}
 	t.Setenv("DBTERM_CONFIG_DIR", dir)
+	t.Setenv("DBTERM_STATE_DIR", filepath.Join(root, "state"))
 	return dir
 }
 
@@ -189,5 +196,184 @@ func TestLoadStoreRejectsDuplicatePersistedConnectionIDs(t *testing.T) {
 	}
 	if store == nil || len(store.Connections) != 2 {
 		t.Fatalf("LoadStore() should retain decoded connections for diagnosis: %#v", store)
+	}
+}
+
+func TestStoreSaveMaintainsPrivateRecoveryGenerations(t *testing.T) {
+	dir := useTestConfigDir(t)
+	path := filepath.Join(dir, "connections.json")
+	store := &Store{configPath: path}
+
+	if err := store.Add(ConnectionConfig{ID: "one", Name: "primary", Type: PostgreSQL}); err != nil {
+		t.Fatalf("first Add() error = %v", err)
+	}
+	if err := store.Add(ConnectionConfig{ID: "two", Name: "analytics", Type: MySQL}); err != nil {
+		t.Fatalf("second Add() error = %v", err)
+	}
+
+	vault, err := connectionsRecoveryFilePath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var current, mirror, previous, vaultCurrent, vaultPrevious []ConnectionConfig
+	for candidate, target := range map[string]*[]ConnectionConfig{
+		path:                                   &current,
+		path + connectionsBackupSuffix:         &mirror,
+		path + connectionsPreviousBackupSuffix: &previous,
+		vault:                                  &vaultCurrent,
+		vault + ".previous":                    &vaultPrevious,
+	} {
+		data, err := os.ReadFile(candidate)
+		if err != nil {
+			t.Fatalf("read %s: %v", candidate, err)
+		}
+		if err := json.Unmarshal(data, target); err != nil {
+			t.Fatalf("decode %s: %v", candidate, err)
+		}
+		if runtime.GOOS != "windows" {
+			info, err := os.Stat(candidate)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := info.Mode().Perm(); got != 0o600 {
+				t.Fatalf("%s mode = %o, want 600", candidate, got)
+			}
+		}
+	}
+	if len(current) != 2 || len(mirror) != 2 {
+		t.Fatalf("primary/mirror counts = %d/%d, want 2/2", len(current), len(mirror))
+	}
+	if len(previous) != 1 || previous[0].ID != "one" {
+		t.Fatalf("previous generation = %#v, want first saved state", previous)
+	}
+	if len(vaultCurrent) != 2 || len(vaultPrevious) != 1 || vaultPrevious[0].ID != "one" {
+		t.Fatalf("state-vault generations = %#v / %#v", vaultCurrent, vaultPrevious)
+	}
+}
+
+func TestLoadStoreRestoresMissingPrimaryFromRecoveryCopy(t *testing.T) {
+	dir := useTestConfigDir(t)
+	path := filepath.Join(dir, "connections.json")
+	store := &Store{configPath: path}
+	if err := store.Add(ConnectionConfig{ID: "stable", Name: "production", Type: PostgreSQL}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+
+	reloaded, err := LoadStore()
+	if err != nil {
+		t.Fatalf("LoadStore() error = %v", err)
+	}
+	if len(reloaded.Connections) != 1 || reloaded.Connections[0].ID != "stable" {
+		t.Fatalf("recovered connections = %#v", reloaded.Connections)
+	}
+	if !strings.Contains(reloaded.RecoveryNotice(), connectionsBackupSuffix) {
+		t.Fatalf("recovery notice = %q", reloaded.RecoveryNotice())
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("primary was not restored: %v", err)
+	}
+}
+
+func TestLoadStoreRestoresAfterWholeConfigDirectoryDisappears(t *testing.T) {
+	dir := useTestConfigDir(t)
+	store, err := LoadStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Add(ConnectionConfig{ID: "stable", Name: "production", Type: PostgreSQL}); err != nil {
+		t.Fatal(err)
+	}
+	vault, err := connectionsRecoveryFilePath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(vault); err != nil {
+		t.Fatalf("state recovery vault missing: %v", err)
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	reloaded, err := LoadStore()
+	if err != nil {
+		t.Fatalf("LoadStore() error = %v", err)
+	}
+	if len(reloaded.Connections) != 1 || reloaded.Connections[0].ID != "stable" {
+		t.Fatalf("recovered connections = %#v", reloaded.Connections)
+	}
+	if !strings.Contains(reloaded.RecoveryNotice(), "profile-recovery") {
+		t.Fatalf("recovery notice = %q", reloaded.RecoveryNotice())
+	}
+	if _, err := os.Stat(filepath.Join(dir, "connections.json")); err != nil {
+		t.Fatalf("primary profile was not rebuilt: %v", err)
+	}
+}
+
+func TestLoadStoreRestoresCorruptPrimaryAndPreservesEvidence(t *testing.T) {
+	dir := useTestConfigDir(t)
+	path := filepath.Join(dir, "connections.json")
+	store := &Store{configPath: path}
+	if err := store.Add(ConnectionConfig{ID: "stable", Name: "production", Type: PostgreSQL}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("{broken"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	reloaded, err := LoadStore()
+	if err != nil {
+		t.Fatalf("LoadStore() error = %v", err)
+	}
+	if len(reloaded.Connections) != 1 || reloaded.Connections[0].ID != "stable" {
+		t.Fatalf("recovered connections = %#v", reloaded.Connections)
+	}
+	matches, err := filepath.Glob(path + ".corrupt-*")
+	if err != nil || len(matches) != 1 {
+		t.Fatalf("preserved corrupt files = %#v, %v", matches, err)
+	}
+	data, err := os.ReadFile(matches[0])
+	if err != nil || string(data) != "{broken" {
+		t.Fatalf("preserved corrupt data = %q, %v", data, err)
+	}
+}
+
+func TestLoadStoreKeepsIntentionalEmptyPrimary(t *testing.T) {
+	dir := useTestConfigDir(t)
+	path := filepath.Join(dir, "connections.json")
+	if err := persist.SaveJSON(path+connectionsBackupSuffix, []ConnectionConfig{{ID: "old", Name: "old", Type: PostgreSQL}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := persist.SaveJSON(path, []ConnectionConfig{}); err != nil {
+		t.Fatal(err)
+	}
+
+	store, err := LoadStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(store.Connections) != 0 || store.RecoveryNotice() != "" {
+		t.Fatalf("empty primary was not authoritative: %#v, notice %q", store.Connections, store.RecoveryNotice())
+	}
+}
+
+func TestLoadStoreDoesNotSilentlyIgnoreInvalidRecoveryCopy(t *testing.T) {
+	dir := useTestConfigDir(t)
+	path := filepath.Join(dir, "connections.json")
+	if err := os.WriteFile(path+connectionsBackupSuffix, []byte("{broken"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	store, err := LoadStore()
+	if err == nil {
+		t.Fatal("LoadStore() silently accepted an invalid recovery copy")
+	}
+	if store == nil || len(store.Connections) != 0 {
+		t.Fatalf("store = %#v", store)
+	}
+	if !strings.Contains(err.Error(), "no valid connection recovery copy") {
+		t.Fatalf("LoadStore() error = %v", err)
 	}
 }

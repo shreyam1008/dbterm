@@ -342,6 +342,7 @@ func TestRowSignatureUsesCompleteValuesInsteadOfTruncatedPreview(t *testing.T) {
 
 func TestColumnWidthsPersistPerConnectionAndTable(t *testing.T) {
 	t.Setenv("DBTERM_CONFIG_DIR", t.TempDir())
+	t.Setenv("DBTERM_STATE_DIR", t.TempDir())
 	connection := &config.ConnectionConfig{Type: config.SQLite, FilePath: filepath.Join(t.TempDir(), "test.db")}
 	settings := config.DefaultSettings()
 	app := &App{

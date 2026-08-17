@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/shreyam1008/dbterm/internal/persist"
 )
@@ -102,9 +103,22 @@ func LoadSettings() (*Settings, error) {
 		return defaults, err
 	}
 
+	recoveryPath, err := profileRecoveryFilePath(settingsFileName)
+	if err != nil {
+		return defaults, fmt.Errorf("resolve settings recovery vault: %w", err)
+	}
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
+			if recovered, recoveryErr := loadSettingsRecovery(recoveryPath); recoveryErr == nil {
+				if saveErr := persist.SaveJSON(path, recovered); saveErr != nil {
+					return recovered, fmt.Errorf("restore settings from %s: %w", recoveryPath, saveErr)
+				}
+				return recovered, nil
+			} else if !os.IsNotExist(recoveryErr) {
+				return defaults, fmt.Errorf("primary settings are missing and recovery failed: %w", recoveryErr)
+			}
 			if saveErr := writeSettings(path, defaults); saveErr != nil {
 				return defaults, fmt.Errorf("create default settings: %w", saveErr)
 			}
@@ -114,6 +128,16 @@ func LoadSettings() (*Settings, error) {
 	}
 
 	if len(bytes.TrimSpace(data)) == 0 {
+		recovered, recoveryErr := loadSettingsRecovery(recoveryPath)
+		if recoveryErr == nil {
+			if saveErr := persist.SaveJSON(path, recovered); saveErr != nil {
+				return recovered, fmt.Errorf("restore empty settings from %s: %w", recoveryPath, saveErr)
+			}
+			return recovered, fmt.Errorf("settings file was empty and was restored from %s", recoveryPath)
+		}
+		if !os.IsNotExist(recoveryErr) {
+			return defaults, fmt.Errorf("settings file is empty and recovery failed: %w", recoveryErr)
+		}
 		if saveErr := writeSettings(path, defaults); saveErr != nil {
 			return defaults, fmt.Errorf("write default settings: %w", saveErr)
 		}
@@ -122,10 +146,24 @@ func LoadSettings() (*Settings, error) {
 
 	var loaded Settings
 	if err := json.Unmarshal(data, &loaded); err != nil {
+		if recovered, recoveryErr := loadSettingsRecovery(recoveryPath); recoveryErr == nil {
+			preservedPath := fmt.Sprintf("%s.corrupt-%s", path, time.Now().Format("20060102-150405.000000000"))
+			if preserveErr := os.WriteFile(preservedPath, data, 0o600); preserveErr != nil {
+				return recovered, fmt.Errorf("parse settings: %w; additionally could not preserve unreadable file: %v", err, preserveErr)
+			}
+			if saveErr := persist.SaveJSON(path, recovered); saveErr != nil {
+				return recovered, fmt.Errorf("parse settings: %w; recovery restore failed: %v", err, saveErr)
+			}
+			return recovered, fmt.Errorf("settings were unreadable and restored from %s; original preserved at %s", recoveryPath, preservedPath)
+		}
 		return defaults, fmt.Errorf("parse settings: %w", err)
 	}
 
-	return mergeSettings(defaults, &loaded), nil
+	merged := mergeSettings(defaults, &loaded)
+	if err := persist.SaveJSON(recoveryPath, merged); err != nil {
+		return merged, fmt.Errorf("refresh settings recovery vault: %w", err)
+	}
+	return merged, nil
 }
 
 // SaveSettings saves settings to the OS-native dbterm config directory.
@@ -157,11 +195,33 @@ func writeSettings(path string, settings *Settings) error {
 	}
 
 	normalized := mergeSettings(DefaultSettings(), settings)
+	recoveryPath, err := profileRecoveryFilePath(settingsFileName)
+	if err != nil {
+		return fmt.Errorf("resolve settings recovery vault: %w", err)
+	}
+	if err := persist.SaveJSON(recoveryPath, normalized); err != nil {
+		return fmt.Errorf("write settings recovery vault: %w", err)
+	}
 	if err := persist.SaveJSON(path, normalized); err != nil {
 		return fmt.Errorf("write settings file: %w", err)
 	}
 
 	return nil
+}
+
+func loadSettingsRecovery(path string) (*Settings, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	if len(bytes.TrimSpace(data)) == 0 {
+		return nil, fmt.Errorf("settings recovery vault is empty: %s", path)
+	}
+	var recovered Settings
+	if err := json.Unmarshal(data, &recovered); err != nil {
+		return nil, fmt.Errorf("parse settings recovery vault %s: %w", path, err)
+	}
+	return mergeSettings(DefaultSettings(), &recovered), nil
 }
 
 func mergeSettings(defaults, loaded *Settings) *Settings {

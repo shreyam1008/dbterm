@@ -85,7 +85,12 @@ func main() {
 	fmt.Println("  \033[38;2;166;227;161mStarting...\033[0m Press \033[33mCtrl+P\033[0m for the palette or \033[33mAlt+H\033[0m for help.")
 	fmt.Println()
 
-	app := ui.NewApp()
+	app := ui.NewAppWithBuildInfo(ui.BuildInfo{
+		Version:     buildVersion(),
+		ReleaseName: buildReleaseName(buildVersion()),
+		Commit:      buildCommit(),
+		Repository:  defaultRepo,
+	})
 	if err := app.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "\n  \033[31mFatal error:\033[0m %s\n\n", err)
 		fmt.Fprintln(os.Stderr, "  If this keeps happening, try:")

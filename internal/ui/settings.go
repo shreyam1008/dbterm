@@ -355,6 +355,6 @@ func (a *App) showSettings() {
 	a.app.SetFocus(form)
 
 	if loadErr != nil {
-		a.ShowAlert(fmt.Sprintf("%s Loaded defaults because settings could not be read.\n\n%v", iconWarn, loadErr), pageSettings)
+		a.ShowAlert(fmt.Sprintf("%s Settings required recovery or attention. The safely loaded values are shown below.\n\n%v", iconWarn, loadErr), pageSettings)
 	}
 }

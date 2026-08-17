@@ -25,9 +25,9 @@ const (
 //
 // DBTERM_CONFIG_DIR takes precedence when set. Without an override, the path
 // follows the host OS convention. If the native directory does not yet exist
-// and the legacy ~/.config/dbterm directory does, dbterm attempts an atomic
-// directory rename. It never merges or overwrites two config trees; when an
-// atomic migration is unavailable, the legacy directory remains in use.
+// and the legacy ~/.config/dbterm directory does, dbterm keeps using that
+// existing directory in place. It never auto-moves, merges, or overwrites a
+// profile merely because HOME/XDG environment values changed for one process.
 func ConfigDir() (string, error) {
 	if override, ok, err := environmentDir(configDirEnvName); ok || err != nil {
 		return override, err
@@ -289,20 +289,10 @@ func selectConfigDir(native, legacy string) (string, error) {
 		return "", fmt.Errorf("legacy config path is not a directory: %s", legacy)
 	}
 
-	// Renaming the whole directory is atomic on a filesystem and avoids a
-	// partially copied or merged configuration. Failure is non-destructive:
-	// continue using the legacy tree instead.
-	if err := os.MkdirAll(filepath.Dir(native), 0o700); err != nil {
-		return legacy, nil
-	}
-	if err := os.Rename(legacy, native); err == nil {
-		_ = os.Chmod(native, 0o700)
-		return native, nil
-	}
-
-	// Another dbterm process may have completed the rename first.
-	if info, err := os.Stat(native); err == nil && info.IsDir() {
-		return native, nil
-	}
+	// Environment-scoped native roots can be temporary (tests, sudo, desktop
+	// launchers, containers). Moving a credential-bearing profile into one of
+	// them can make it disappear when that environment is cleaned up. Keep the
+	// already-established profile stable; explicit DBTERM_CONFIG_DIR remains
+	// available when a user intentionally wants another location.
 	return legacy, nil
 }

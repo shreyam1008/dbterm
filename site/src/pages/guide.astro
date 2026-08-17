@@ -349,7 +349,9 @@ dbterm backup restore --connection production --identity ./age-identity.txt --ye
 
   <section class="panel" id="cli">
     <h2>5. CLI maintenance reference</h2>
-    <p class="lead">Use CLI mode for updates, diagnostics, and uninstall operations.</p>
+    <p class="lead">Press <code>U</code> on the Dashboard for the in-app Version &amp; Update screen, or use CLI mode for updates, diagnostics, and uninstall operations.</p>
+
+    <p class="notice">Connection profiles are stored in a private primary file plus a current recovery mirror, one previous generation, and a separate state-directory vault; settings are mirrored into that vault too. A missing or unreadable primary is restored automatically. With <code>sudo dbterm --update</code>, elevation applies only to replacing the executable; the invoking user’s config, backup catalog, artifacts, and Change Profiler state are guarded in their normal user profile.</p>
 
     <article class="copy-shell">
       <header>

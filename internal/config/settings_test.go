@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -24,6 +25,13 @@ func TestLoadSettingsCreatesDefaultsWhenMissing(t *testing.T) {
 	path := filepath.Join(configDir, "settings.json")
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("default settings file not created at %s: %v", path, err)
+	}
+	vault, err := profileRecoveryFilePath(settingsFileName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(vault); err != nil {
+		t.Fatalf("default settings recovery vault not created at %s: %v", vault, err)
 	}
 }
 
@@ -224,5 +232,54 @@ func TestSaveSettingsPreservesPinnedTablesPerConnection(t *testing.T) {
 	}
 	if got := reloaded.PinnedTables["connection-b"]; len(got) != 1 || got[0] != "events" {
 		t.Fatalf("connection-b pins = %#v, want [events]", got)
+	}
+}
+
+func TestLoadSettingsRestoresAfterWholeConfigDirectoryDisappears(t *testing.T) {
+	configDir := useTestConfigDir(t)
+	settings := DefaultSettings()
+	settings.DashboardHealthChecks = "manual"
+	settings.PinnedTables["production"] = []string{"orders"}
+	if err := SaveSettings(settings); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(configDir); err != nil {
+		t.Fatal(err)
+	}
+
+	recovered, err := LoadSettings()
+	if err != nil {
+		t.Fatalf("LoadSettings() error = %v", err)
+	}
+	if recovered.DashboardHealthChecks != "manual" || len(recovered.PinnedTables["production"]) != 1 {
+		t.Fatalf("recovered settings = %#v", recovered)
+	}
+	if _, err := os.Stat(filepath.Join(configDir, settingsFileName)); err != nil {
+		t.Fatalf("primary settings were not rebuilt: %v", err)
+	}
+}
+
+func TestLoadSettingsRestoresCorruptPrimaryAndPreservesIt(t *testing.T) {
+	configDir := useTestConfigDir(t)
+	settings := DefaultSettings()
+	settings.DashboardHealthChecks = "manual"
+	if err := SaveSettings(settings); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(configDir, settingsFileName)
+	if err := os.WriteFile(path, []byte("{broken"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	recovered, err := LoadSettings()
+	if err == nil || !strings.Contains(err.Error(), "restored") {
+		t.Fatalf("LoadSettings() error = %v, want recovery notice", err)
+	}
+	if recovered.DashboardHealthChecks != "manual" {
+		t.Fatalf("recovered settings = %#v", recovered)
+	}
+	matches, globErr := filepath.Glob(path + ".corrupt-*")
+	if globErr != nil || len(matches) != 1 {
+		t.Fatalf("preserved corrupt settings = %#v, %v", matches, globErr)
 	}
 }

@@ -37,7 +37,8 @@ func TestMCPHelpStatesReadOnlyContract(t *testing.T) {
 }
 
 func TestMCPServeHelpDoesNotRequireSettingsOrStartServer(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("DBTERM_CONFIG_DIR", t.TempDir())
+	t.Setenv("DBTERM_STATE_DIR", t.TempDir())
 	if err := runMCPCommand([]string{"serve", "--help"}); err != nil {
 		t.Fatalf("serve help returned an error: %v", err)
 	}

@@ -32,6 +32,7 @@ const (
 	paletteActionFirstPage            keymapAction = "palette_first_page"
 	paletteActionLastPage             keymapAction = "palette_last_page"
 	paletteActionToggleTablePin       keymapAction = "palette_toggle_table_pin"
+	paletteActionUpdates              keymapAction = "palette_updates"
 )
 
 type commandPaletteItemKind string
@@ -94,6 +95,7 @@ var commandPaletteActionSpecs = []commandPaletteActionSpec{
 	{actionSelectAll, "Select All Displayed Rows", "Select every currently displayed data row for a bulk result action.", "mark rows bulk csv", ""},
 	{actionClearSelection, "Clear Result Row Selection", "Remove the selection marker from all currently displayed result rows.", "unselect deselect rows bulk", ""},
 	{actionSettings, "Open Settings", "Configure effective keyboard shortcuts and dashboard health-check behavior.", "preferences keymap bindings configuration", ""},
+	{paletteActionUpdates, "Version & Update", "Show the current build, check the latest GitHub release, and install it with checksum verification while preserving the user profile.", "about upgrade latest release current version", "U (Dashboard)"},
 	{paletteActionRunQuery, "Run Current SQL", "Execute the SQL currently in the Query editor against the active connection.", "execute statement editor", "Enter"},
 	{paletteActionRefreshTable, "Refresh Current Table", "Reload the active table page without blocking the interface; Esc cancels safely.", "reload data rows", "F5"},
 	{paletteActionRefreshDatabase, "Refresh Database Objects and Data", "Reload tables and objects, then reload the active table with cancellable progress.", "full reload schema sidebar", "Ctrl+F5"},
@@ -789,6 +791,8 @@ func (a *App) executeCommandPaletteAction(action keymapAction, title string) {
 		a.showHistoryModal()
 	case actionSettings:
 		a.showSettings()
+	case paletteActionUpdates:
+		a.showUpdates()
 	case actionImportDump:
 		a.pages.SwitchToPage("main")
 		a.showImportModal()

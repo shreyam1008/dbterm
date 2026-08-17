@@ -123,7 +123,8 @@ func TestPinnedTablesMoveToTopWithoutDuplication(t *testing.T) {
 }
 
 func TestTablePinShortcutTogglesAndPersistsPerConnection(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("DBTERM_CONFIG_DIR", t.TempDir())
+	t.Setenv("DBTERM_STATE_DIR", t.TempDir())
 	list := tview.NewList().ShowSecondaryText(false)
 	list.AddItem("users", "", 0, nil)
 	list.AddItem("orders", "", 0, nil)

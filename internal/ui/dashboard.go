@@ -38,7 +38,7 @@ func (a *App) showDashboardWithHealthChecks(forceHealthChecks bool) {
 ║           d b t e r m            ║
 ╚══════════════════════════════════╝[-][-]
 [#a6adc8]%s PostgreSQL  •  MySQL  •  SQLite[-]
-%s  %s   [#6c7086]B Backup Center  •  S %s[-]`, iconConnect, pgStatus, mysqlStatus, iconServices+" services")
+%s  %s   [#6c7086]v%s  •  B Backup Center  •  S %s  •  U Update[-]`, iconConnect, pgStatus, mysqlStatus, tview.Escape(a.buildInfo.Version), iconServices+" services")
 	header.SetText(headerText)
 
 	// ── Connection List ──
@@ -236,6 +236,9 @@ func (a *App) showDashboardWithHealthChecks(forceHealthChecks bool) {
 				return nil
 			case 'g', 'G':
 				a.showSettings()
+				return nil
+			case 'u', 'U':
+				a.showUpdates()
 				return nil
 			case 'i', 'I':
 				importSelectedConnection()
@@ -542,23 +545,23 @@ func dashboardFooterText(hasConnections, hasWorkspace bool, width int, paletteSh
 		if hasWorkspace {
 			short = fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [blue]A[-] All DBs  │  [green]B[-] Center  │  [yellow]W/Esc[-] Back %s", iconConnect, iconBack)
 			medium := fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [blue]A[-] All DBs  │  [yellow]N[-] New  │  [green]B[-] Center  │  [yellow]W/Esc[-] Back %s", iconConnect, iconBack)
-			full := fmt.Sprintf("  [green]Enter[-] Connect %s  │  [blue]A[-] All server DBs  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [yellow]I[-] Import  │  [green]Ctrl+B[-] Schedule selected  │  [green]B[-] Backup Center  │  [#94e2d5]S[-] Services %s  │  [yellow]R[-] Recheck %s  │  [yellow]%s[-] Palette  │  [yellow]G[-] Settings  │  [yellow]W/Esc[-] Back %s  │  [#cba6f7]Q[-] Quit",
+			full := fmt.Sprintf("  [green]Enter[-] Connect %s  │  [blue]A[-] All server DBs  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [yellow]I[-] Import  │  [green]Ctrl+B[-] Schedule selected  │  [green]B[-] Backup Center  │  [#94e2d5]S[-] Services %s  │  [yellow]R[-] Recheck %s  │  [yellow]%s[-] Palette  │  [yellow]G[-] Settings  │  [yellow]U[-] Update  │  [yellow]W/Esc[-] Back %s  │  [#cba6f7]Q[-] Quit",
 				iconConnect, iconServices, iconRefresh, paletteShortcut, iconBack)
 			return firstDashboardFooterThatFits(width, full, medium, short, minimal)
 		}
 		medium := fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [blue]A[-] All DBs  │  [green]B[-] Center  │  [yellow]G[-] Settings  │  [teal]H[-] Help %s", iconConnect, iconHelp)
-		full := fmt.Sprintf("  [green]Enter[-] Connect %s  │  [blue]A[-] All server DBs  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [yellow]I[-] Import  │  [green]Ctrl+B[-] Schedule selected  │  [green]B[-] Backup Center  │  [#94e2d5]S[-] Services %s  │  [yellow]R[-] Recheck %s  │  [yellow]%s[-] Palette  │  [yellow]G[-] Settings  │  [teal]H[-] Help %s  │  [#cba6f7]Q[-] Quit",
+		full := fmt.Sprintf("  [green]Enter[-] Connect %s  │  [blue]A[-] All server DBs  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [yellow]I[-] Import  │  [green]Ctrl+B[-] Schedule selected  │  [green]B[-] Backup Center  │  [#94e2d5]S[-] Services %s  │  [yellow]R[-] Recheck %s  │  [yellow]%s[-] Palette  │  [yellow]G[-] Settings  │  [yellow]U[-] Update  │  [teal]H[-] Help %s  │  [#cba6f7]Q[-] Quit",
 			iconConnect, iconServices, iconRefresh, paletteShortcut, iconHelp)
 		return firstDashboardFooterThatFits(width, full, medium, short, minimal)
 	}
 
 	if hasWorkspace {
 		short := fmt.Sprintf("  [yellow]N[-] New  │  [green]B[-] Backups  │  [yellow]W/Esc[-] Back %s  │  [#cba6f7]Q[-] Quit", iconBack)
-		full := fmt.Sprintf("  [yellow]N[-] New Connection  │  [green]B[-] Backups  │  [#94e2d5]S[-] Services %s  │  [yellow]%s[-] Palette  │  [yellow]G[-] Settings  │  [yellow]W/Esc[-] Back %s  │  [#cba6f7]Q[-] Quit", iconServices, paletteShortcut, iconBack)
+		full := fmt.Sprintf("  [yellow]N[-] New Connection  │  [green]B[-] Backups  │  [#94e2d5]S[-] Services %s  │  [yellow]%s[-] Palette  │  [yellow]G[-] Settings  │  [yellow]U[-] Update  │  [yellow]W/Esc[-] Back %s  │  [#cba6f7]Q[-] Quit", iconServices, paletteShortcut, iconBack)
 		return firstDashboardFooterThatFits(width, full, short, minimal)
 	}
 	short := fmt.Sprintf("  [yellow]N[-] New  │  [green]B[-] Backups  │  [teal]H[-] Help %s  │  [#cba6f7]Q[-] Quit", iconHelp)
-	full := fmt.Sprintf("  [yellow]N[-] New Connection  │  [green]B[-] Backups  │  [#94e2d5]S[-] Services %s  │  [yellow]%s[-] Palette  │  [yellow]G[-] Settings  │  [teal]H[-] Help %s  │  [#cba6f7]Q[-] Quit", iconServices, paletteShortcut, iconHelp)
+	full := fmt.Sprintf("  [yellow]N[-] New Connection  │  [green]B[-] Backups  │  [#94e2d5]S[-] Services %s  │  [yellow]%s[-] Palette  │  [yellow]G[-] Settings  │  [yellow]U[-] Update  │  [teal]H[-] Help %s  │  [#cba6f7]Q[-] Quit", iconServices, paletteShortcut, iconHelp)
 	return firstDashboardFooterThatFits(width, full, short, minimal)
 }
 

@@ -15,10 +15,10 @@ jobs:
     name: Test, Vet & Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -37,43 +37,20 @@ jobs:
         run: go build ./...
 
   cross-build:
-    name: Compile ${{ matrix.goos }}/${{ matrix.goarch }}
+    name: Compile All Release Targets
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - goos: linux
-            goarch: amd64
-            output: dbterm-linux-amd64
-          - goos: linux
-            goarch: arm64
-            output: dbterm-linux-arm64
-          - goos: darwin
-            goarch: amd64
-            output: dbterm-darwin-amd64
-          - goos: darwin
-            goarch: arm64
-            output: dbterm-darwin-arm64
-          - goos: windows
-            goarch: amd64
-            output: dbterm-windows-amd64.exe
-          - goos: windows
-            goarch: arm64
-            output: dbterm-windows-arm64.exe
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
           cache-dependency-path: go.sum
 
-      - name: Compile
-        env:
-          CGO_ENABLED: "0"
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-        run: go build -trimpath -o "$RUNNER_TEMP/${{ matrix.output }}" ./cmd/dbterm
+      # One cached runner avoids six independent checkouts, Go setups, cache
+      # restores, and billed runner startups. The release Make target is the
+      # canonical six-platform recipe used for publication too.
+      - name: Compile six release binaries
+        run: make release-core VERSION=ci COMMIT="${GITHUB_SHA::7}"

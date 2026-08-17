@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -49,9 +50,16 @@ type ConnectionConfig struct {
 
 // Store manages the collection of saved connections
 type Store struct {
-	Connections []ConnectionConfig `json:"connections"`
-	configPath  string
+	Connections   []ConnectionConfig `json:"connections"`
+	configPath    string
+	recoveryPath  string
+	recoveredFrom string
 }
+
+const (
+	connectionsBackupSuffix         = ".bak"
+	connectionsPreviousBackupSuffix = ".bak.previous"
+)
 
 // configDir returns the path to the dbterm config directory
 func configDir() (string, error) {
@@ -63,6 +71,18 @@ func configFilePath() (string, error) {
 	return persist.DefaultConfigFile("connections.json")
 }
 
+func connectionsRecoveryFilePath() (string, error) {
+	return profileRecoveryFilePath("connections.json")
+}
+
+func profileRecoveryFilePath(name string) (string, error) {
+	stateDir, err := appdirs.StateDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(stateDir, "profile-recovery", name), nil
+}
+
 // LoadStore reads saved connections from disk, or returns an empty store
 func LoadStore() (*Store, error) {
 	path, err := configFilePath()
@@ -70,18 +90,29 @@ func LoadStore() (*Store, error) {
 		return nil, err
 	}
 
-	s := &Store{configPath: path}
-
-	data, err := os.ReadFile(path)
+	recoveryPath, err := connectionsRecoveryFilePath()
 	if err != nil {
-		if os.IsNotExist(err) {
-			return s, nil // No config yet, that's fine
-		}
-		return nil, fmt.Errorf("could not read config: %w", err)
+		return nil, fmt.Errorf("resolve connection recovery vault: %w", err)
 	}
 
-	if err := json.Unmarshal(data, &s.Connections); err != nil {
-		return nil, fmt.Errorf("could not parse config: %w", err)
+	s := &Store{configPath: path, recoveryPath: recoveryPath}
+
+	data, readErr := os.ReadFile(path)
+	if readErr == nil {
+		if err := json.Unmarshal(data, &s.Connections); err != nil {
+			if recoveryErr := s.recoverConnections(data, true); recoveryErr != nil {
+				return s, fmt.Errorf("could not parse config: %w; automatic recovery failed: %v", err, recoveryErr)
+			}
+		}
+	} else if os.IsNotExist(readErr) {
+		if recoveryErr := s.recoverConnections(nil, false); recoveryErr != nil {
+			if !os.IsNotExist(recoveryErr) {
+				return s, recoveryErr
+			}
+			return s, nil // No primary or recovery copy yet, that's fine.
+		}
+	} else {
+		return nil, fmt.Errorf("could not read config: %w", readErr)
 	}
 
 	changed, err := s.ensureConnectionIDs()
@@ -91,6 +122,25 @@ func LoadStore() (*Store, error) {
 	if changed {
 		if err := s.Save(); err != nil {
 			return s, fmt.Errorf("persist generated connection identities: %w", err)
+		}
+	} else {
+		initializeRecovery := false
+		for _, recoveryFile := range []string{path + connectionsBackupSuffix, recoveryPath} {
+			_, backupErr := os.Stat(recoveryFile)
+			switch {
+			case backupErr == nil:
+			case os.IsNotExist(backupErr):
+				initializeRecovery = true
+			default:
+				return s, fmt.Errorf("inspect connection recovery copy %s: %w", recoveryFile, backupErr)
+			}
+		}
+		if initializeRecovery {
+			// Existing installations gain both mirrors on their first v0.9.1+
+			// load, without waiting for a connection edit.
+			if err := s.Save(); err != nil {
+				return s, fmt.Errorf("initialize connection recovery copies: %w", err)
+			}
 		}
 	}
 
@@ -109,13 +159,118 @@ func (s *Store) Save() error {
 		}
 		s.configPath = path
 	}
+	if strings.TrimSpace(s.recoveryPath) == "" {
+		path, err := connectionsRecoveryFilePath()
+		if err != nil {
+			return fmt.Errorf("resolve connection recovery vault: %w", err)
+		}
+		s.recoveryPath = path
+	}
 	if _, err := s.ensureConnectionIDs(); err != nil {
 		return fmt.Errorf("validate connection identities: %w", err)
 	}
-	if err := persist.SaveJSON(s.configPath, s.Connections); err != nil {
+	if err := saveConnectionsWithRecovery(s.configPath, s.recoveryPath, s.Connections); err != nil {
 		return fmt.Errorf("save connections: %w", err)
 	}
 	return nil
+}
+
+// RecoveryNotice reports when LoadStore restored the primary connection file
+// from a private recovery copy. It contains paths only, never connection data.
+func (s *Store) RecoveryNotice() string {
+	if s == nil || strings.TrimSpace(s.recoveredFrom) == "" {
+		return ""
+	}
+	return fmt.Sprintf("Saved connections were automatically restored from %s because %s was missing or unreadable.", s.recoveredFrom, s.configPath)
+}
+
+func saveConnectionsWithRecovery(path, recoveryPath string, connections []ConnectionConfig) error {
+	mirrors := []struct {
+		current  string
+		previous string
+	}{
+		{current: path + connectionsBackupSuffix, previous: path + connectionsPreviousBackupSuffix},
+		{current: recoveryPath, previous: recoveryPath + ".previous"},
+	}
+
+	for _, mirror := range mirrors {
+		// Keep the last valid mirror as a second generation before replacing
+		// it. Invalid recovery files are never promoted over a known-good one.
+		var previous []ConnectionConfig
+		if err := persist.LoadJSON(mirror.current, &previous); err == nil {
+			if _, statErr := os.Stat(mirror.current); statErr == nil {
+				if err := persist.SaveJSON(mirror.previous, previous); err != nil {
+					return fmt.Errorf("rotate previous recovery copy %s: %w", mirror.previous, err)
+				}
+			}
+		}
+	}
+
+	// Write both recovery mirrors first and the primary last. The state vault
+	// is outside the config directory, so whole-directory loss can self-heal.
+	for _, mirror := range mirrors {
+		if err := persist.SaveJSON(mirror.current, connections); err != nil {
+			return fmt.Errorf("write recovery copy %s: %w", mirror.current, err)
+		}
+	}
+	if err := persist.SaveJSON(path, connections); err != nil {
+		return fmt.Errorf("write primary file: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) recoverConnections(corruptPrimary []byte, preserveCorrupt bool) error {
+	if s == nil || strings.TrimSpace(s.configPath) == "" {
+		return fmt.Errorf("connection store path is required")
+	}
+
+	foundRecoveryFile := false
+	candidates := []string{
+		s.configPath + connectionsBackupSuffix,
+		s.configPath + connectionsPreviousBackupSuffix,
+	}
+	if strings.TrimSpace(s.recoveryPath) != "" {
+		candidates = append(candidates, s.recoveryPath, s.recoveryPath+".previous")
+	}
+	for _, candidate := range candidates {
+		if _, err := os.Stat(candidate); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			foundRecoveryFile = true
+			continue
+		}
+		foundRecoveryFile = true
+		var recovered []ConnectionConfig
+		if err := persist.LoadJSON(candidate, &recovered); err != nil {
+			continue
+		}
+		probe := &Store{Connections: append([]ConnectionConfig(nil), recovered...)}
+		if _, err := probe.ensureConnectionIDs(); err != nil {
+			continue
+		}
+
+		if preserveCorrupt && len(corruptPrimary) > 0 {
+			preservedPath := fmt.Sprintf("%s.corrupt-%s", s.configPath, time.Now().Format("20060102-150405.000000000"))
+			if err := os.MkdirAll(filepath.Dir(preservedPath), 0o700); err != nil {
+				return fmt.Errorf("prepare corrupt-file preservation: %w", err)
+			}
+			if err := os.WriteFile(preservedPath, corruptPrimary, 0o600); err != nil {
+				return fmt.Errorf("preserve unreadable primary at %s: %w", preservedPath, err)
+			}
+		}
+		if err := persist.SaveJSON(s.configPath, recovered); err != nil {
+			return fmt.Errorf("restore primary connections from %s: %w", candidate, err)
+		}
+		s.Connections = recovered
+		s.recoveredFrom = candidate
+		return nil
+	}
+
+	if foundRecoveryFile {
+		return fmt.Errorf("no valid connection recovery copy was found beside %s", s.configPath)
+	}
+	return os.ErrNotExist
 }
 
 // Add appends a new connection and saves

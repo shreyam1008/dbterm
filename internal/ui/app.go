@@ -44,15 +44,18 @@ var (
 
 // App holds all TUI state for the dbterm application
 type App struct {
-	app           *tview.Application
-	db            *sql.DB
-	pages         *tview.Pages
-	store         *config.Store
-	settings      *config.Settings
-	keymap        *actionKeymap
-	historyMgr    *history.Manager
-	backupStore   *backupcore.Store
-	profilerStore *profiler.Store
+	app                    *tview.Application
+	db                     *sql.DB
+	pages                  *tview.Pages
+	store                  *config.Store
+	settings               *config.Settings
+	keymap                 *actionKeymap
+	historyMgr             *history.Manager
+	backupStore            *backupcore.Store
+	profilerStore          *profiler.Store
+	buildInfo              BuildInfo
+	startupNotice          string
+	startupNoticeRecovered bool
 
 	// Backup Center keeps its original caller across internal refreshes and
 	// nested forms so Esc returns to the exact panel that opened it.
@@ -148,14 +151,36 @@ type App struct {
 	colWidthOverrides map[string]int // per-column widths (column name → width)
 }
 
+// BuildInfo is immutable metadata shown by the in-app Version & Update page.
+type BuildInfo struct {
+	Version     string
+	ReleaseName string
+	Commit      string
+	Repository  string
+}
+
 // NewApp creates a new dbterm application instance
 func NewApp() *App {
+	return NewAppWithBuildInfo(BuildInfo{
+		Version:    "dev",
+		Commit:     "dev",
+		Repository: "shreyam1008/dbterm",
+	})
+}
+
+// NewAppWithBuildInfo creates an application with release metadata supplied by
+// the main package, which owns the embedded release manifest and linker values.
+func NewAppWithBuildInfo(buildInfo BuildInfo) *App {
 	store, err := config.LoadStore()
 	if store == nil {
 		store = &config.Store{}
-		if err != nil {
-			fmt.Printf("⚠ Warning: could not load saved connections: %v\n", err)
-		}
+	}
+	startupNotice := store.RecoveryNotice()
+	startupNoticeRecovered := startupNotice != ""
+	if err != nil {
+		fmt.Printf("⚠ Warning: could not safely load saved connections: %v\n", err)
+		startupNotice = fmt.Sprintf("Saved connections need attention: %v", err)
+		startupNoticeRecovered = false
 	}
 
 	historyMgr, historyErr := history.NewManager(history.DefaultMaxEntriesPerConnection)
@@ -165,7 +190,7 @@ func NewApp() *App {
 
 	settings, settingsErr := config.LoadSettings()
 	if settingsErr != nil {
-		fmt.Printf("⚠ Warning: settings load failed, using defaults: %v\n", settingsErr)
+		fmt.Printf("⚠ Warning: settings required attention: %v\n", settingsErr)
 	}
 	if settings == nil {
 		settings = config.DefaultSettings()
@@ -182,13 +207,16 @@ func NewApp() *App {
 	}
 
 	return &App{
-		app:           tview.NewApplication(),
-		store:         store,
-		settings:      settings,
-		keymap:        keymap,
-		historyMgr:    historyMgr,
-		resultLimit:   defaultTablePreviewLimit,
-		totalRowCount: -1,
+		app:                    tview.NewApplication(),
+		store:                  store,
+		settings:               settings,
+		keymap:                 keymap,
+		historyMgr:             historyMgr,
+		resultLimit:            defaultTablePreviewLimit,
+		totalRowCount:          -1,
+		buildInfo:              normalizeBuildInfo(buildInfo),
+		startupNotice:          startupNotice,
+		startupNoticeRecovered: startupNoticeRecovered,
 	}
 }
 
@@ -1524,6 +1552,16 @@ func (a *App) Run() error {
 	a.setupUI()
 	a.setupKeyBindings()
 	a.showDashboard()
+	if strings.TrimSpace(a.startupNotice) != "" {
+		icon := iconWarn
+		suffix := "\n\nThe unreadable file was not silently discarded. Open an issue if you need help recovering it."
+		if a.startupNoticeRecovered {
+			icon = iconSuccess
+			suffix = "\n\nA new private recovery mirror is already in place."
+		}
+		a.ShowAlert(fmt.Sprintf("%s %s%s", icon, tview.Escape(a.startupNotice), suffix), "dashboard")
+		a.startupNotice = ""
+	}
 
 	a.app.SetBeforeDrawFunc(func(screen tcell.Screen) bool {
 		w, h := screen.Size()

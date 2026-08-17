@@ -66,6 +66,7 @@ func TestRunAgentReconcilesStaleRunsOnStartup(t *testing.T) {
 func TestRunDueClaimsEachJobImmediatelyBeforeExecution(t *testing.T) {
 	t.Setenv("DBTERM_CONFIG_DIR", t.TempDir())
 	t.Setenv("DBTERM_STATE_DIR", t.TempDir())
+	t.Setenv("DBTERM_STATE_DIR", t.TempDir())
 	connectionStore, err := config.LoadStore()
 	if err != nil {
 		t.Fatal(err)

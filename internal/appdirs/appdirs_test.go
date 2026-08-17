@@ -127,7 +127,7 @@ func TestLinuxUsesXDGDirectories(t *testing.T) {
 	}
 }
 
-func TestConfigDirMigratesLegacyDirectoryAtomically(t *testing.T) {
+func TestConfigDirKeepsLegacyDirectoryInPlaceWhenNativeMissing(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("uses Linux XDG_CONFIG_HOME to exercise distinct native and legacy paths")
 	}
@@ -151,14 +151,14 @@ func TestConfigDirMigratesLegacyDirectoryAtomically(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ConfigDir() error = %v", err)
 	}
-	if got != native {
-		t.Fatalf("ConfigDir() = %q, want migrated path %q", got, native)
+	if got != legacy {
+		t.Fatalf("ConfigDir() = %q, want stable legacy path %q", got, legacy)
 	}
-	if _, err := os.Stat(filepath.Join(native, "connections.json")); err != nil {
-		t.Fatalf("migrated connections file missing: %v", err)
+	if _, err := os.Stat(legacyFile); err != nil {
+		t.Fatalf("legacy connections file was moved or removed: %v", err)
 	}
-	if _, err := os.Lstat(legacy); !os.IsNotExist(err) {
-		t.Fatalf("legacy directory still exists after atomic rename: %v", err)
+	if _, err := os.Lstat(native); !os.IsNotExist(err) {
+		t.Fatalf("temporary native directory was created unexpectedly: %v", err)
 	}
 }
 

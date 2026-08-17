@@ -279,7 +279,8 @@ func TestNormalizeRunErrorTreatsClientCloseAsClean(t *testing.T) {
 }
 
 func TestSaveProfileDefaultsReadOnlyAndNeverEchoesSecrets(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("DBTERM_CONFIG_DIR", t.TempDir())
+	t.Setenv("DBTERM_STATE_DIR", t.TempDir())
 	store := &config.Store{}
 	service := newService(Options{
 		AllowProfileWrites: true, ConnectionScope: "all", AuditWriter: &bytes.Buffer{},
@@ -309,7 +310,8 @@ func TestSaveProfileDefaultsReadOnlyAndNeverEchoesSecrets(t *testing.T) {
 }
 
 func TestSaveD1ProfileDefaultsReadOnlyAndKeepsTokenWriteOnly(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("DBTERM_CONFIG_DIR", t.TempDir())
+	t.Setenv("DBTERM_STATE_DIR", t.TempDir())
 	store := &config.Store{}
 	service := newService(Options{
 		AllowProfileWrites: true, ConnectionScope: "all", AuditWriter: &bytes.Buffer{},

@@ -78,6 +78,15 @@ func runUpdate(requestedVersion string) error {
 		return nil
 	}
 
+	sudoInvoker := interactiveSudoInvoker()
+	dataGuard, err := captureUpdateDataGuard(sudoInvoker)
+	if err != nil {
+		return fmt.Errorf("could not establish the user-data safety guard: %w", err)
+	}
+	if profile := dataGuard.profilePath(); profile != "" {
+		fmt.Printf("  Data profile  %s (guarded, never replaced)\n", profile)
+	}
+
 	baseURL := releaseBaseURL(repo, versionSpec)
 
 	tmpDir, err := os.MkdirTemp("", "dbterm-update-*")
@@ -122,7 +131,6 @@ func runUpdate(requestedVersion string) error {
 		return fmt.Errorf("could not locate current binary: %w", err)
 	}
 
-	sudoInvoker := interactiveSudoInvoker()
 	manageBackupAgent := shouldManageBackupAgentDuringUpdate(sudoInvoker)
 	agent := backupAgentLifecycle{}
 	if manageBackupAgent {
@@ -131,12 +139,15 @@ func runUpdate(requestedVersion string) error {
 			return err
 		}
 	} else {
-		fmt.Printf("  Data profile  %s (left untouched)\n", sudoInvoker)
+		fmt.Printf("  Privilege     sudo only replaces the executable; %s's profile stays in user scope\n", sudoInvoker)
 	}
 
 	if runtime.GOOS == "windows" {
 		if err := replaceWindowsBinary(exePath, downloadPath, oldVersion, resolvedVersion, agent.stopped); err != nil {
 			return restoreBackupAgentAfterUpdateFailure(agent, err)
+		}
+		if err := dataGuard.verify(); err != nil {
+			return fmt.Errorf("binary update was scheduled, but the data guard failed: %w", err)
 		}
 		if agent.stopped {
 			fmt.Println("  \033[33mBackup agent\033[0m Will restart after the delayed Windows replacement.")
@@ -145,6 +156,9 @@ func runUpdate(requestedVersion string) error {
 	}
 	if err := replaceUnixBinary(exePath, downloadPath, oldVersion, resolvedVersion); err != nil {
 		return restoreBackupAgentAfterUpdateFailure(agent, err)
+	}
+	if err := dataGuard.verify(); err != nil {
+		return fmt.Errorf("binary was updated, but the data guard failed: %w", err)
 	}
 	if !manageBackupAgent {
 		fmt.Println("  \033[38;2;166;227;161m✓\033[0m Saved connections, backup state/artifacts, and Change Profiler anchors were not opened or modified")

@@ -70,3 +70,31 @@ func TestUnixBinaryReplacementLeavesPerUserDataUntouched(t *testing.T) {
 		}
 	}
 }
+
+func TestUpdateDataGuardDetectsOnlyDisappearingExistingData(t *testing.T) {
+	root := t.TempDir()
+	existing := filepath.Join(root, "connections.json")
+	absent := filepath.Join(root, "settings.json")
+	if err := os.WriteFile(existing, []byte("protected"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	guard := &updateDataGuard{
+		profile: root,
+		files: map[string]bool{
+			existing: true,
+			absent:   false,
+		},
+	}
+	if err := os.WriteFile(absent, []byte("created concurrently"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := guard.verify(); err != nil {
+		t.Fatalf("newly created file should not fail guard: %v", err)
+	}
+	if err := os.Remove(existing); err != nil {
+		t.Fatal(err)
+	}
+	if err := guard.verify(); err == nil {
+		t.Fatal("guard did not report disappearing protected data")
+	}
+}
