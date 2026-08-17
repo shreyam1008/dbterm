@@ -74,6 +74,7 @@ func TestNewActionKeymapRejectsTypingAndReservedBindings(t *testing.T) {
 		{name: "result resize equals alias", binding: "ctrl+="},
 		{name: "preview rows equals alias", binding: "alt+="},
 		{name: "settings save is hard coded", binding: "ctrl+s"},
+		{name: "SQL autocomplete is contextual", binding: "ctrl+space"},
 		{name: "escape is contextual", binding: "alt+esc"},
 		{name: "tab is contextual", binding: "ctrl+tab"},
 		{name: "shifted runes normalize ambiguously", binding: "alt+shift+p"},

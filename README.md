@@ -16,7 +16,7 @@ Save a PostgreSQL or MySQL server login once—without memorizing a database nam
 | Area | Current capabilities |
 | --- | --- |
 | **Connections** | PostgreSQL, MySQL/MariaDB, SQLite, Turso/LibSQL, and Cloudflare D1; server-first PostgreSQL/MySQL logins; database discovery; optional defaults; reusable prefilled local/cloud connection forms; one stable per-user profile even after an accidental `sudo dbterm` launch. |
-| **Data workspace** | Schema/object discovery, named Change Profiler anchors with row/cell/schema diffs, a command/object/recent-SQL palette, persistent table pins, query history, asynchronous cancellable execution, typed results, composable `AND` filters, sorting, first/last pagination, bidirectional related-row navigation, same-value discovery, schema inspection, and streamed CSV export. |
+| **Data workspace** | Local schema-aware SQL autocomplete, schema/object discovery, named Change Profiler anchors with row/cell/schema diffs, a command/object/recent-SQL palette, persistent table pins, query history, asynchronous cancellable execution, typed results, composable `AND` filters, sorting, first/last pagination, bidirectional related-row navigation, same-value discovery, schema inspection, and streamed CSV export. |
 | **Database operations** | PostgreSQL/MySQL SQL-dump import with progress and cancellation, plus local MySQL/PostgreSQL service status, start, stop, install guidance, saved-login connection, and server-wide database browsing. |
 | **Local agent access** | STDIO MCP server for scoped schema inspection, bounded read-only SQL, query plans, and declared relationship following; stored secrets stay hidden and profile changes require explicit opt-in. |
 | **Backup and recovery** | Instant or scheduled backups from local or remote sources to local/mounted or rclone destinations; native dumps, private staging, verification, compression, age encryption, SHA-256 history, retention, email alerts, native OS agents, content inspection, and guarded PostgreSQL/MySQL/SQLite restore. |
@@ -123,6 +123,8 @@ dbterm keeps one connection profile for the signed-in OS user. Run the TUI norma
 | `dbterm backup logs` | Print a bounded tail of the rolling agent log |
 | `dbterm backup status` | Show agent heartbeat and configured jobs |
 
+Updating replaces only the dbterm executable. Saved connections, settings, query history, backup plans/run history, completed backup artifacts, and Change Profiler anchors remain in their per-user config/state locations. When `sudo dbterm --update` is needed for a system-installed binary, dbterm deliberately leaves the invoking user's data and running backup agent untouched instead of resolving a root-owned profile. Run `dbterm --info` without sudo before or after an update to see the exact connection, backup-catalog, and Change Profiler paths.
+
 ## Core shortcuts
 
 | Shortcut | Action |
@@ -133,6 +135,7 @@ dbterm keeps one connection profile for the signed-in OS user. Run the TUI norma
 | Type while Tables is focused | Jump to and highlight the first matching table; Enter opens it and clears the search |
 | `Enter` | Execute query (in Query panel) |
 | `Shift + Enter` | New line in Query panel |
+| `Ctrl + Space` | Open SQL suggestions; use Up/Down and `Tab` to insert |
 | `Alt + Y` | Open query history (newest first) |
 | `Alt + W` | Open Change Profiler; create a named anchor, scan/finish it, and inspect saved before/after changes |
 | `Alt + , / Alt + G` | Open Settings page |
@@ -161,6 +164,10 @@ dbterm keeps one connection profile for the signed-in OS user. Run the TUI norma
 | `>` / `<` / `0` (Results) | Terminal-safe all-column resize / reset fallback |
 | `F5 / Ctrl + F5` | Refresh table / full refresh |
 | `Ctrl + C` | Cancel an active query/import/export; otherwise quit |
+
+## SQL autocomplete
+
+Autocomplete runs entirely inside dbterm. Typing a prefix such as `sel` opens ranked SQL keywords; relation contexts such as `FROM` and `JOIN` prioritize live tables and views; `alias.` prioritizes columns from the referenced relation. The metadata catalog is refreshed off the typing path, so accepting a suggestion never performs a network or database query. Use Up/Down to choose, `Tab` to insert, `Esc` to dismiss, and `Ctrl+Space` to open suggestions explicitly. `Enter` keeps its existing behavior and executes the query.
 
 ## Change Profiler
 
@@ -286,6 +293,7 @@ Turso logical exports keep schema and data reads on one source transaction. Virt
 - Open settings with `G` from Dashboard or `Alt + ,` / `Alt + G` in workspace.
 - Settings use OS-native per-user config directories. Run `dbterm backup paths` to print config, state, logs, catalog, and private-staging locations.
 - Key bindings are validated before save (duplicate/invalid mappings are blocked).
+- `Ctrl+Space` is reserved for contextual SQL autocomplete in the Query panel.
 - Query history remains enabled per connection; saved-query snippet library is intentionally not included.
 
 ## Performance footprint

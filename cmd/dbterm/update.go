@@ -122,9 +122,16 @@ func runUpdate(requestedVersion string) error {
 		return fmt.Errorf("could not locate current binary: %w", err)
 	}
 
-	agent, err := prepareBackupAgentForUpdate()
-	if err != nil {
-		return err
+	sudoInvoker := interactiveSudoInvoker()
+	manageBackupAgent := shouldManageBackupAgentDuringUpdate(sudoInvoker)
+	agent := backupAgentLifecycle{}
+	if manageBackupAgent {
+		agent, err = prepareBackupAgentForUpdate()
+		if err != nil {
+			return err
+		}
+	} else {
+		fmt.Printf("  Data profile  %s (left untouched)\n", sudoInvoker)
 	}
 
 	if runtime.GOOS == "windows" {
@@ -139,6 +146,11 @@ func runUpdate(requestedVersion string) error {
 	if err := replaceUnixBinary(exePath, downloadPath, oldVersion, resolvedVersion); err != nil {
 		return restoreBackupAgentAfterUpdateFailure(agent, err)
 	}
+	if !manageBackupAgent {
+		fmt.Println("  \033[38;2;166;227;161m✓\033[0m Saved connections, backup state/artifacts, and Change Profiler anchors were not opened or modified")
+		fmt.Println("  \033[38;2;166;227;161m✓\033[0m The per-user backup agent was left running; it will use the new binary on its next start")
+		return nil
+	}
 	if agent.stopped {
 		if err := refreshAndStartBackupAgent(agent.manager); err != nil {
 			return fmt.Errorf("dbterm was updated, but the backup agent registration could not be refreshed/restarted: %w (run `dbterm backup service install`)", err)
@@ -146,6 +158,15 @@ func runUpdate(requestedVersion string) error {
 		fmt.Println("  \033[38;2;166;227;161m✓\033[0m Backup agent registration refreshed and restarted")
 	}
 	return nil
+}
+
+// A sudo update needs elevation only to replace the installed executable.
+// Inspecting or restarting a user service from that root process resolves the
+// wrong HOME/systemd context and risks creating a second root-owned dbterm
+// profile. Unix replaces the binary atomically, so the invoking user's running
+// agent can safely keep its old executable mapping until its next normal start.
+func shouldManageBackupAgentDuringUpdate(sudoInvoker string) bool {
+	return strings.TrimSpace(sudoInvoker) == ""
 }
 
 func restoreBackupAgentAfterUpdateFailure(agent backupAgentLifecycle, updateErr error) error {

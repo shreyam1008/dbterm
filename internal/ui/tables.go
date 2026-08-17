@@ -124,6 +124,7 @@ func (a *App) applyTableListSnapshot(snapshot *tableListSnapshot) {
 	a.objectGeneration.Add(1)
 	a.tables.Clear()
 	a.databaseObjects = map[int]databaseObjectListItem{}
+	a.sqlCompletionRoutines = nil
 	a.tableIdentifiers = map[int]string{}
 	a.tableSearch = ""
 	a.databaseObjectCount = 0
@@ -131,6 +132,7 @@ func (a *App) applyTableListSnapshot(snapshot *tableListSnapshot) {
 	a.tableOrder = nil
 	a.tableSidebarItems = 0
 	if snapshot == nil {
+		a.reloadSQLCompletionCatalog()
 		return
 	}
 
@@ -191,6 +193,7 @@ func (a *App) applyTableListSnapshot(snapshot *tableListSnapshot) {
 			},
 		})
 	})
+	a.reloadSQLCompletionCatalog()
 }
 
 func (a *App) orderedTableSidebarItems() []tableListSnapshotItem {

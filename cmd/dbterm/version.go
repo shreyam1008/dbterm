@@ -46,8 +46,10 @@ func printInfo() {
 	stateDir, stateDirErr := appdirs.StateDir()
 	logDir, logDirErr := appdirs.LogDir()
 	catalogPath := "unavailable"
+	profilerPath := "unavailable"
 	if stateDirErr == nil {
 		catalogPath = filepath.Join(stateDir, "backup", "backups.db")
+		profilerPath = filepath.Join(stateDir, "change-profiler", "change-profiler.db")
 	}
 
 	binSize := "unknown"
@@ -91,6 +93,11 @@ func printInfo() {
 		fmt.Println("  Backup catalog unavailable")
 	} else {
 		fmt.Printf("  Backup catalog %s (%s)\n", catalogPath, pathStatus(catalogPath, true))
+	}
+	if profilerPath == "unavailable" {
+		fmt.Println("  Change anchors unavailable")
+	} else {
+		fmt.Printf("  Change anchors %s (%s)\n", profilerPath, pathStatus(profilerPath, true))
 	}
 	fmt.Println()
 	fmt.Println("  \033[33mBACKUP AGENT\033[0m")

@@ -127,6 +127,7 @@ func printHelp() {
   ` + "\033[33m" + `KEY BINDINGS` + "\033[0m" + `
     Ctrl+P     Search commands, objects, and recent SQL
     Alt+Q/T/R  Focus Query/Tables/Results
+    Ctrl+Space SQL autocomplete; Up/Down choose, Tab inserts
     Enter      Execute query          F5 / Ctrl+F5  Refresh table / database
     C, V, /    Copy cell / clipboard filter / filter builder (Results)
     F / Bksp   Follow foreign key / return    Alt+E  Scoped CSV export

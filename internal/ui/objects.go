@@ -110,6 +110,10 @@ func (a *App) loadDatabaseObjects() {
 			}
 			a.databaseObjectCount = totalObjects
 			a.updateTableListTitle()
+			a.sqlCompletionRoutines = sqlCompletionRoutinesFromObjects(a.databaseObjects)
+			if a.focusedPanel == a.queryInput {
+				a.refreshSQLCompletions(false)
+			}
 		})
 	}()
 }

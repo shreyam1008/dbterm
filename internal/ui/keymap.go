@@ -154,6 +154,9 @@ func validateGlobalActionBinding(binding string) error {
 	if hasCtrl && key == "s" {
 		return fmt.Errorf("Ctrl+S is reserved for saving Settings")
 	}
+	if hasCtrl && key == "space" {
+		return fmt.Errorf("Ctrl+Space is reserved for SQL autocomplete")
+	}
 	if hasCtrl != hasAlt && (key == "+" || key == "=" || key == "-" || key == "_" || key == "0") {
 		return fmt.Errorf("Ctrl/Alt sizing aliases are reserved for result columns and preview rows")
 	}

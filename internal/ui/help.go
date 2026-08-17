@@ -57,6 +57,8 @@ func keyboardHelpText() string {
 
 [#a6e3a1]QUERY[-]
   [yellow]Enter[-]            Execute SQL             [yellow]Shift+Enter[-] Insert newline
+  [yellow]Ctrl+Space[-]        Open local SQL suggestions (keywords, databases, schemas, tables, views, columns, routines)
+  [yellow]↑ / ↓, Tab[-]        Choose a suggestion / insert it; [yellow]Esc[-] closes suggestions without leaving Query
   [yellow]Alt+Y[-]            Query history
   [yellow]Alt+I[-]            Import SQL dump          [yellow]Esc[-] Cancel a running import
 

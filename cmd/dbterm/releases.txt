@@ -10,6 +10,7 @@
 # 5) If that tag already exists, the workflow skips release creation safely.
 #
 # Newest entry first:
+0.9.0|Chenab|Instant local schema-aware SQL autocomplete, stable top-row result navigation, and sudo-update protection for per-user connections, backups, and Change Profiler anchors.
 0.8.0|Sutlej|Named Change Profiler anchors with compressed whole-database tracking, live progress, and bidirectional relationship navigation.
 0.7.1|Karnali|Clean local-agent shutdown handling for the dbterm MCP stdio server.
 0.7.0|Karnali|Local read-only MCP tools for trusted agents, scoped saved connections, relationship following, and opt-in connection profile setup.

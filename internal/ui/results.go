@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	"github.com/shreyam1008/dbterm/internal/config"
 )
@@ -24,6 +25,21 @@ const (
 )
 
 var tablePreviewSteps = []int{50, 100, 250, 500, 1000}
+
+func resultSelectionAtTop(table *tview.Table, event *tcell.EventKey) bool {
+	if table == nil || event == nil {
+		return false
+	}
+
+	movingUp := event.Key() == tcell.KeyUp ||
+		(event.Key() == tcell.KeyRune && event.Rune() == 'k')
+	if !movingUp {
+		return false
+	}
+
+	row, _ := table.GetSelection()
+	return row == 1 // Row 0 is the fixed, non-selectable header.
+}
 
 type resultCellReference struct {
 	// value remains the complete, lossless string representation used by

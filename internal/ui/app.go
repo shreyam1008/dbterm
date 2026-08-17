@@ -71,48 +71,54 @@ type App struct {
 	activeConn              *config.ConnectionConfig
 
 	// Main UI components
-	tables              *tview.List
-	databaseObjects     map[int]databaseObjectListItem
-	tableIdentifiers    map[int]string
-	tableOrder          []string
-	tableSidebarItems   int
-	tableSearch         string
-	databaseObjectCount int
-	selectedTable       string
-	activeTable         string          // table whose rows are currently visible
-	visitedTables       map[string]bool // tables opened during the active connection
-	tableResultsActive  bool
-	resultFilter        *resultValueFilter
-	resultFilters       map[string]*resultValueFilter // remembered per table for the active connection
-	copiedCellValue     string
-	hasCopiedCellValue  bool
-	copiedCellSystem    bool
-	copiedCellIsNull    bool
-	clipboardGeneration atomic.Uint64
-	objectGeneration    atomic.Uint64
-	loadingGeneration   atomic.Uint64
-	loadingMu           sync.Mutex
-	loadingReturns      map[uint64]loadingReturnState
-	results             *tview.Table
-	queryInput          *tview.TextArea
-	statusBar           *tview.TextView
-	tableCount          int
-	queryStart          time.Time
-	queryMu             sync.Mutex
-	queryRunning        bool
-	queryStartedAt      time.Time
-	queryCancel         context.CancelFunc
-	resultLimit         int // >0 preview rows, -1 means adaptive safe max
-	resultExportMu      sync.Mutex
-	resultExportRunning bool
-	resultExportCancel  context.CancelFunc
+	tables                *tview.List
+	databaseObjects       map[int]databaseObjectListItem
+	tableIdentifiers      map[int]string
+	tableOrder            []string
+	tableSidebarItems     int
+	tableSearch           string
+	databaseObjectCount   int
+	selectedTable         string
+	activeTable           string          // table whose rows are currently visible
+	visitedTables         map[string]bool // tables opened during the active connection
+	tableResultsActive    bool
+	resultFilter          *resultValueFilter
+	resultFilters         map[string]*resultValueFilter // remembered per table for the active connection
+	copiedCellValue       string
+	hasCopiedCellValue    bool
+	copiedCellSystem      bool
+	copiedCellIsNull      bool
+	clipboardGeneration   atomic.Uint64
+	objectGeneration      atomic.Uint64
+	loadingGeneration     atomic.Uint64
+	loadingMu             sync.Mutex
+	loadingReturns        map[uint64]loadingReturnState
+	results               *tview.Table
+	queryInput            *tview.TextArea
+	sqlCompletionView     *tview.Table
+	sqlCompletionState    sqlCompletionState
+	sqlCompletionCatalog  sqlCompletionCatalog
+	sqlCompletionRoutines []sqlCompletionRoutine
+	sqlCompletionApplying bool
+	statusBar             *tview.TextView
+	tableCount            int
+	queryStart            time.Time
+	queryMu               sync.Mutex
+	queryRunning          bool
+	queryStartedAt        time.Time
+	queryCancel           context.CancelFunc
+	resultLimit           int // >0 preview rows, -1 means adaptive safe max
+	resultExportMu        sync.Mutex
+	resultExportRunning   bool
+	resultExportCancel    context.CancelFunc
 
 	// Pagination state
-	pageOffset       int           // current OFFSET for paginated table browsing
-	pageSize         int           // actual rows shown per page after safety limits
-	totalRowCount    int           // cached COUNT(*) for the selected table (-1 = unknown)
-	resultGeneration atomic.Uint64 // invalidates async result metadata updates
-	resultNavStack   []resultNavigationState
+	pageOffset              int           // current OFFSET for paginated table browsing
+	pageSize                int           // actual rows shown per page after safety limits
+	totalRowCount           int           // cached COUNT(*) for the selected table (-1 = unknown)
+	resultGeneration        atomic.Uint64 // invalidates async result metadata updates
+	sqlCompletionGeneration atomic.Uint64 // invalidates async autocomplete metadata
+	resultNavStack          []resultNavigationState
 
 	// Layout components for scaling
 	rightFlex *tview.Flex
@@ -221,6 +227,7 @@ func (a *App) setupUI() {
 		SetTitle(fmt.Sprintf(" %s Query [yellow](Alt+Q)[-] ", iconQuery)).
 		SetBorderColor(surface1).
 		SetTitleColor(peach)
+	a.sqlCompletionView = newSQLCompletionView()
 
 	// ── Status Bar ──
 	a.statusBar = tview.NewTextView().
@@ -235,6 +242,7 @@ func (a *App) setupUI() {
 	a.rightFlex = tview.NewFlex().
 		SetDirection(tview.FlexRow).
 		AddItem(a.queryInput, 0, 1, false).
+		AddItem(a.sqlCompletionView, 0, 0, false).
 		AddItem(a.results, 0, 4, false) // Results get 80% vertical space
 
 	a.mainFlex = tview.NewFlex().
@@ -251,6 +259,14 @@ func (a *App) setupUI() {
 
 	// ── Results table input: sort on 's', key navigation, column width ──
 	a.results.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		// tview scans backwards through the non-selectable header when Up is
+		// pressed on the first data row. From columns after the first, that scan
+		// restarts the selection at column 0. Treat the top row as a hard
+		// vertical boundary so the selected column is preserved.
+		if resultSelectionAtTop(a.results, event) {
+			return nil
+		}
+
 		switch event.Rune() {
 		case 'c', 'C':
 			a.copyCurrentResultCell()
@@ -340,6 +356,7 @@ func (a *App) setupUI() {
 				return event
 			}
 			// Plain Enter = execute query
+			a.hideSQLCompletions()
 			query := a.queryInput.GetText()
 			if query == "" {
 				a.ShowAlert(fmt.Sprintf("%s No query to execute.\n\nType a SQL query and press Enter.", iconInfo), "main")
@@ -350,6 +367,8 @@ func (a *App) setupUI() {
 		}
 		return event
 	})
+	a.queryInput.SetChangedFunc(func() { a.refreshSQLCompletions(false) })
+	a.queryInput.SetMovedFunc(func() { a.refreshSQLCompletions(false) })
 }
 
 // updateStatusBar refreshes the bottom status bar with current state
@@ -462,6 +481,11 @@ func (a *App) setFocusWithColor(target tview.Primitive) {
 
 	a.app.SetFocus(target)
 	a.focusedPanel = target
+	if target == a.queryInput {
+		a.refreshSQLCompletions(false)
+	} else {
+		a.hideSQLCompletions()
+	}
 	// Refresh status bar so context-sensitive footer hints update
 	a.updateStatusBar("", a.currentResultRowCount())
 }
@@ -950,6 +974,9 @@ func (a *App) setupKeyBindings() {
 			}
 
 			current := a.app.GetFocus()
+			if page == "main" && current == a.queryInput && a.handleSQLCompletionKey(event) {
+				return nil
+			}
 			// Let the Tables list clear an active type-ahead search first.
 			if current == a.tables && a.hasActiveTableSearch() {
 				return event
@@ -1003,6 +1030,10 @@ func (a *App) setupKeyBindings() {
 		// page opened on top of the operation.
 		if page == "loading" || page == instantBackupPage || page == pageBackupForm || page == pageBackupConnectionPicker || page == pageImportProgressModal || page == pageResultExport || page == pageResultExportProgress {
 			return event
+		}
+
+		if page == "main" && a.app.GetFocus() == a.queryInput && a.handleSQLCompletionKey(event) {
+			return nil
 		}
 
 		// F5 — Refresh currently selected table results (preserve selection/sort)
@@ -1435,6 +1466,7 @@ func (a *App) persistColumnWidths() error {
 func (a *App) cleanup() {
 	a.advanceResultGeneration()
 	a.objectGeneration.Add(1)
+	a.resetSQLCompletionCatalog()
 	a.requestActiveQueryCancel()
 	a.cancelActiveResultExport()
 	a.clearTableSessionState()
@@ -1529,12 +1561,17 @@ func (a *App) applyResponsiveLayout(width, height int) {
 
 	a.rightFlex.SetDirection(tview.FlexRow)
 	a.rightFlex.AddItem(a.queryInput, queryHeight, 0, false)
+	completionHeight := 0
+	if a.sqlCompletionState.visible && a.sqlCompletionView != nil {
+		completionHeight = a.sqlCompletionPopupHeight()
+	}
+	a.rightFlex.AddItem(a.sqlCompletionView, completionHeight, 0, false)
 	a.rightFlex.AddItem(a.results, 0, 1, false)
 
 	if width < 110 {
 		tablesHeight := clamp(height/4, 4, 10)
 		minResultsHeight := 8
-		usedHeight := tablesHeight + queryHeight
+		usedHeight := tablesHeight + queryHeight + completionHeight
 		if remaining := (height - 1) - usedHeight; remaining < minResultsHeight {
 			reduceBy := min(minResultsHeight-remaining, tablesHeight-4)
 			if reduceBy > 0 {
@@ -1563,6 +1600,9 @@ func (a *App) statusActionText(width int) string {
 	filterActive := a.isTableResultActive() && a.activeResultFilter(a.selectedTable) != nil
 	tableActive := a.isTableResultActive()
 	paletteKey := tview.Escape(a.commandPaletteShortcutHint())
+	if inQuery && a.sqlCompletionState.visible {
+		return "[yellow]↑/↓[-] Choose  │  [yellow]Tab[-] Insert  │  [yellow]Esc[-] Close  │  [yellow]Enter[-] Run"
+	}
 	if inTables {
 		if width < 100 {
 			return "[yellow]Space[-] Pin/unpin  │  [yellow]Enter[-] Open  │  [yellow]Esc[-] Back"

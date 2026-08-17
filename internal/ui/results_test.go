@@ -146,6 +146,33 @@ func TestResultSizeShortcutsSeparateColumnZoomAndRows(t *testing.T) {
 	}
 }
 
+func TestResultSelectionStaysInColumnAtTopRow(t *testing.T) {
+	table := newResultTable()
+	for col := 0; col < 3; col++ {
+		table.SetCell(0, col, tview.NewTableCell("header").SetSelectable(false))
+		table.SetCell(1, col, tview.NewTableCell("value"))
+		table.SetCell(2, col, tview.NewTableCell("value"))
+	}
+
+	table.Select(1, 2)
+	up := tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
+	if !resultSelectionAtTop(table, up) {
+		t.Fatal("Up on the first data row should be consumed")
+	}
+	if row, col := table.GetSelection(); row != 1 || col != 2 {
+		t.Fatalf("selection = (%d, %d), want (1, 2)", row, col)
+	}
+
+	table.Select(2, 2)
+	if resultSelectionAtTop(table, up) {
+		t.Fatal("Up below the first data row should reach the table navigation handler")
+	}
+	table.InputHandler()(up, func(tview.Primitive) {})
+	if row, col := table.GetSelection(); row != 1 || col != 2 {
+		t.Fatalf("selection after moving up = (%d, %d), want (1, 2)", row, col)
+	}
+}
+
 func TestPreparedTableResultRequestsHaveUniqueGenerations(t *testing.T) {
 	app := &App{
 		db:            &sql.DB{},

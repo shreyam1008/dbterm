@@ -25,7 +25,7 @@ const quickStartSteps = [
   },
   {
     step: "Run your first query",
-    detail: "Focus Query panel (Alt+Q), type SQL, and press Enter to run."
+    detail: "Focus Query (Alt+Q), type sel to see local SQL suggestions, press Tab to insert, and press Enter to run."
   },
   {
     step: "Inspect and iterate",
@@ -41,8 +41,8 @@ const workspacePanels = [
   },
   {
     panel: "Query",
-    behavior: "Write SQL and execute it directly against the current database session.",
-    keys: "Alt+Q, Enter, Shift+Enter"
+    behavior: "Write SQL with local context-aware keyword and schema autocomplete, then execute it directly against the current database session.",
+    keys: "Alt+Q, Ctrl+Space, ↑/↓, Tab, Enter, Shift+Enter"
   },
   {
     panel: "Tables",
@@ -62,6 +62,7 @@ const shortcutRows = [
   { combo: "Space (Tables)", action: "Pin or unpin the highlighted table at the top for this database connection" },
   { combo: "Enter", action: "Execute query (in Query panel)" },
   { combo: "Shift + Enter", action: "New line in query (multiline SQL)" },
+  { combo: "Ctrl + Space / ↑ / ↓ / Tab", action: "Open, navigate, and insert local SQL suggestions" },
   { combo: "Alt + Y", action: "Open per-connection query history" },
   { combo: "Alt + W", action: "Open Change Profiler; A selects the whole database and live progress shows percent/rate/ETA" },
   { combo: "Alt + A / Alt + C", action: "Select all result rows / clear selection" },
