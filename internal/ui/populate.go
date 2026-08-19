@@ -55,7 +55,7 @@ func populateTableWithLimit(results *tview.Table, rows *sql.Rows, maxRows int) (
 		cell := tview.NewTableCell(tview.Escape(strings.ToUpper(name))).
 			SetReference(name).
 			SetTextColor(peach).
-			SetSelectable(false).
+			SetSelectable(true).
 			SetBackgroundColor(mantle).
 			SetExpansion(expansion)
 

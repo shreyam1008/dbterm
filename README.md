@@ -130,13 +130,15 @@ Updating replaces only the dbterm executable. Saved connections, settings, query
 
 | Shortcut | Action |
 | --- | --- |
-| `Ctrl + P` (default) | Search commands, database objects, and recent queries in the command palette |
+| `Ctrl + P` (default) | Search commands, tables, collapsed columns, database objects, and recent queries in the command palette |
 | `Alt + Q / T / R` | Focus Query / Tables / Results |
+| `Tab / Shift + Tab` | Cycle workspace panels forward / backward without losing each table, row, column, or active type-ahead position |
 | `Space` (Tables) | Pin or unpin the highlighted table at the top; saved separately for each database connection |
-| Type while Tables is focused | Jump to and highlight the first matching table; Enter opens it and clears the search |
+| `Right / Left` or click `▸ / ▾` (Tables) | Expand or enter columns / return to the parent or collapse it; another expansion replaces the previous one |
+| Type while Tables is focused | Search every table and collapsed column; the best match is highlighted and a matching column expands automatically |
 | `Enter` | Execute query (in Query panel) |
 | `Shift + Enter` | New line in Query panel |
-| `Ctrl + Space` | Open SQL suggestions; use Up/Down and `Tab` to insert |
+| `Ctrl + Space` | Open smart SQL suggestions and selected-table templates; use Up/Down and `Tab` or `Enter` to insert |
 | `Alt + Y` | Open query history (newest first) |
 | `Alt + W` | Open Change Profiler; create a named anchor, scan/finish it, and inspect saved before/after changes |
 | `Alt + , / Alt + G` | Open Settings page |
@@ -155,6 +157,9 @@ Updating replaces only the dbterm executable. Saved connections, settings, query
 | `I` (Dashboard) | Import SQL dump into selected saved PostgreSQL/MySQL connection |
 | `Alt + E` | Export selected rows, current page, or all matching table rows to CSV |
 | `C` (Results) | Copy only the selected cell |
+| `↑` from first result row | Enter the selectable header row; type to jump to and highlight a column, use Left/Right to move, and Down/Enter to return to its data |
+| `Shift + C` (result headers) | Copy the complete selected column name |
+| `Shift + C` / right-click (Tables) | Copy the selected table or expanded column name; expanded columns show `PK`, `FK`, `NN`, and a lazily loaded data type |
 | `/` / `V` (Results) | Build typed filters with optional `AND` conditions / apply clipboard equality (`Enter` applies, `Tab` changes controls); remembered per table for the current connection |
 | `F` / `Backspace` (Results) | Explore declared relationships in both directions / return one step through the table chain |
 | `V` (inside Related Data) | Find the selected exact value in same-named columns across tables; open any match as a typed filter |
@@ -168,7 +173,9 @@ Updating replaces only the dbterm executable. Saved connections, settings, query
 
 ## SQL autocomplete
 
-Autocomplete runs entirely inside dbterm. Typing a prefix such as `sel` opens ranked SQL keywords; relation contexts such as `FROM` and `JOIN` prioritize live tables and views; `alias.` prioritizes columns from the referenced relation. The metadata catalog is refreshed off the typing path, so accepting a suggestion never performs a network or database query. Use Up/Down to choose, `Tab` to insert, `Esc` to dismiss, and `Ctrl+Space` to open suggestions explicitly. `Enter` keeps its existing behavior and executes the query.
+Autocomplete runs entirely inside dbterm. Typing a prefix such as `sel` opens ranked SQL keywords; relation contexts such as `FROM` and `JOIN` prioritize live tables and views and tolerate small spelling mistakes; `alias.` and column contexts prioritize columns from referenced or selected tables. On an empty query, `Ctrl+Space` offers ready, read-only queries for the selected table—including preview, row count, named-column, newest-row, and useful grouped summaries when matching columns exist. After a complete table name it offers safe next clauses such as a row limit, recent-first ordering, and a non-NULL filter. The metadata catalog is refreshed off the typing path, so opening or accepting a suggestion never performs a network or database query. Use Up/Down to choose, `Tab` or `Enter` to insert, and `Esc` to dismiss. Enter executes the query when suggestions are closed.
+
+The Tables sidebar reuses that local catalog as a searchable schema tree. Right expands a table and then enters its first column; Left returns to the parent and then collapses it. Only one table is expanded at a time. Column names appear immediately; key/nullability badges and types are loaded asynchronously for the expanded table. Sidebar type-ahead and the command palette both search columns even when their tables are collapsed. Choosing a palette column expands it in the sidebar, opens its table, and selects the corresponding Results header.
 
 ## Change Profiler
 

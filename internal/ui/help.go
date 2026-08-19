@@ -17,6 +17,7 @@ func keyboardHelpTextFor(a *App) string {
 
 [#f9e2af]START HERE — COMMON WORKFLOWS[-]
   [#89b4fa]Find a table[-]       [yellow]{{focus_tables}}[-] → type its name → [yellow]Enter[-]
+  [#89b4fa]Find a column[-]      In Results press [yellow]↑[-] from the first row → type its name → [yellow]↓/Enter[-]
   [#89b4fa]Cross-table lookup[-] Select a cell → [yellow]C[-] → open another table/column → [yellow]V[-]
   [#89b4fa]Filter a column[-]    Select column → [yellow]/[-] → choose operator/value → [yellow]Enter[-]; Add AND composes
   [#89b4fa]Follow related rows[-] Select a key cell → [yellow]F[-] → choose [#a6e3a1]→ parent[-] or [#89b4fa]← children[-]; repeat for a chain
@@ -27,22 +28,30 @@ func keyboardHelpTextFor(a *App) string {
 
 [#a6e3a1]SHORTCUT CONVENTIONS[-]
   [yellow]Enter[-]            Open or run the focused item     [yellow]Esc[-] Back, close, or safely cancel
-  [yellow]↑/↓ and Tab[-]      Navigate lists / move through form fields
+  [yellow]↑/↓ and Tab[-]      Navigate lists / move through form fields; [yellow]Shift+Tab[-] reverses panel focus
   [yellow]C[-]                Copy in views that offer copying; the focused page's footer names the exact target
   [yellow]Plain letters[-]    Act only on the focused page     [yellow]Alt/Ctrl keys[-] Global actions from Settings
   [yellow]{{command_palette}}[-] Search global/workspace actions; local modal actions remain visible in their footer or title
 
 [#a6e3a1]TABLES[-]
   [#6c7086]Markers[-]          [#a6e3a1]▶[-] currently shown  [#6c7086]•[-] opened this connection  [#cba6f7]/[-] remembered filter  [#f9e2af]` + iconPin + `[-] pinned
+  [yellow]→ / ←[-]            Expand or enter children / return to parent or collapse it; one table stays expanded
+  [yellow]Click ▸ / ▾[-]      Mouse-expand or collapse without opening table rows
+  [#6c7086]Column badges[-]    [#f9e2af]PK[-] primary key  [#cba6f7]FK[-] foreign key  [#89b4fa]NN[-] not null; types load lazily without blocking input
   [yellow]Space[-]            Pin/unpin the selected table at the top (saved per database connection)
-  [yellow]Type[-]             Jump to the first matching table and highlight the match
+  [yellow]Type[-]             Search every table and collapsed column; the best column match expands and highlights
   [yellow]Backspace[-]        Edit the table search
-  [yellow]Enter[-]            Open the match and clear the search
-  [yellow]Shift+C / Right-click[-] Copy the selected table name (lowercase letters remain type-to-find)
+  [yellow]Enter[-]            Open a table, or open a child column directly in the Results header
+  [yellow]Shift+C / Right-click[-] Copy the selected table or column name (lowercase letters remain type-to-find)
   [yellow]Esc[-]              Clear an active search; press again for Dashboard
   [yellow]{{inspect_schema}}[-]            Inspect the selected table schema
 
 [#a6e3a1]RESULTS — CELLS & FILTERS[-]
+  [yellow]↑ from first row[-] Enter the selectable column-header row without losing the current column
+  [yellow]Type (headers)[-]   Jump to and highlight the first matching column; Backspace edits, Esc clears
+  [yellow]←/→, ↓/Enter[-]     Move across headers / return to the same column's data
+  [yellow]Shift+C (headers)[-] Copy the complete selected column name
+  [yellow]Tab / Shift+Tab[-]  Hop between column search and table search while both retain their position/text
   [yellow]C[-]                Copy only the selected cell (full value, even if preview is shortened)
   [yellow]V[-]                Apply/update equality from the clipboard (real NULL uses IS NULL)
   [yellow]/[-]                Open filters; Enter applies, Add AND composes, Tab / Shift+Tab moves; remembered per table
@@ -71,15 +80,16 @@ func keyboardHelpTextFor(a *App) string {
 
 [#a6e3a1]QUERY[-]
   [yellow]Enter[-]            Execute SQL             [yellow]Shift+Enter[-] Insert newline
-  [yellow]Ctrl+Space[-]        Open local SQL suggestions (keywords, databases, schemas, tables, views, columns, routines)
-  [yellow]↑ / ↓, Tab[-]        Choose a suggestion / insert it; [yellow]Esc[-] closes suggestions without leaving Query
+  [yellow]Ctrl+Space[-]        Smart local suggestions plus ready read-only queries for the selected table
+  [yellow]↑ / ↓, Tab/Enter[-]  Choose / insert; context ranks typo fixes, tables, columns, clauses, functions, and routines
+  [yellow]Esc[-]               Close suggestions without leaving Query; Enter runs when suggestions are closed
   [yellow]{{history}}[-]            Query history
   [yellow]{{import_dump}}[-]            Import SQL dump          [yellow]Esc[-] Cancel a running import
 
 [#a6e3a1]NAVIGATION & APP[-]
-  [yellow]{{command_palette}}[-] Search documented actions, database objects, and recent queries
+  [yellow]{{command_palette}}[-] Search documented actions, tables, collapsed columns, database objects, and recent queries
   [yellow]{{focus_tables}} / {{focus_query}} / {{focus_results}}[-]    Focus Tables / Query / Results
-  [yellow]Tab[-]              Cycle Tables → Query → Results
+  [yellow]Tab / Shift+Tab[-]  Cycle Tables → Query → Results forward / backward
   [yellow]{{backup}}[-]            Instant backup from any workspace panel
   [yellow]{{dashboard}}[-]            Dashboard                [yellow]{{backup_center}}[-] Backup Center
   [yellow]{{change_profiler}}[-]            Change Profiler: named before/after anchors and saved reports

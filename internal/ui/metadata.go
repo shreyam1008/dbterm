@@ -18,12 +18,14 @@ func (a *App) showSelectedTableMetadata() {
 		a.ShowAlert(fmt.Sprintf("%s Connect to a database first.", iconInfo), "main")
 		return
 	}
-	if strings.TrimSpace(a.selectedTable) == "" {
+	tableName := strings.TrimSpace(a.selectedTable)
+	if selection := a.currentSidebarSelection(); selection.table != "" {
+		tableName = selection.table
+	}
+	if tableName == "" {
 		a.ShowAlert(fmt.Sprintf("%s Select a table first, then inspect its schema.", iconInfo), "main")
 		return
 	}
-
-	tableName := a.selectedTable
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	var canceled atomic.Bool
 	loadingToken := a.showLoadingModal(fmt.Sprintf("%s Inspecting %s...", iconTables, tableName),

@@ -17,6 +17,9 @@ import (
 type tableListSnapshotItem struct {
 	label      string
 	identifier string
+	parent     string
+	column     string
+	lastColumn bool
 }
 
 type tableListSnapshot struct {
@@ -126,7 +129,14 @@ func (a *App) applyTableListSnapshot(snapshot *tableListSnapshot) {
 	a.databaseObjects = map[int]databaseObjectListItem{}
 	a.sqlCompletionRoutines = nil
 	a.tableIdentifiers = map[int]string{}
+	a.tableColumnItems = map[int]sidebarColumnRef{}
 	a.tableSearch = ""
+	a.expandedSidebarTable = ""
+	a.sidebarColumnMetadata = nil
+	a.sidebarMetadataLoads = nil
+	a.sidebarSearchIndex = nil
+	a.sidebarSearchLookup = sidebarSearchLookup{}
+	a.sidebarRenderedSearch = sidebarSelection{}
 	a.databaseObjectCount = 0
 	a.tableCount = 0
 	a.tableOrder = nil
@@ -146,10 +156,7 @@ func (a *App) applyTableListSnapshot(snapshot *tableListSnapshot) {
 		items = snapshot.items
 	}
 	for index, item := range items {
-		a.tables.AddItem(item.label, "", 0, nil)
-		if item.identifier != "" {
-			a.tableIdentifiers[index] = item.identifier
-		}
+		a.addTableSidebarItem(index, item)
 	}
 	a.tableSidebarItems = len(items)
 
@@ -166,6 +173,10 @@ func (a *App) applyTableListSnapshot(snapshot *tableListSnapshot) {
 	a.refreshTableSidebarState()
 
 	a.tables.SetSelectedFunc(func(index int, _ string, _ string, _ rune) {
+		if column, ok := a.tableColumnItems[index]; ok {
+			a.openSidebarColumn(column)
+			return
+		}
 		if obj, ok := a.databaseObjects[index]; ok {
 			a.clearResultNavigation()
 			a.onDatabaseObjectSelected(obj.objType, obj.name)
@@ -175,23 +186,7 @@ func (a *App) applyTableListSnapshot(snapshot *tableListSnapshot) {
 		if !ok {
 			return
 		}
-		previous := a.captureResultNavigationState()
-		previousStack := append([]resultNavigationState(nil), a.resultNavStack...)
-		a.selectTableWithRememberedFilter(selectedTable)
-		a.clearResultNavigation()
-		a.resetSort()
-		a.resetPagination()
-		a.loadCurrentTableAsync(tableLoadOptions{
-			loadingText:  fmt.Sprintf("Loading %s...", selectedTable),
-			cancelText:   "Press Esc to cancel opening this table.",
-			canceledText: "Table loading canceled",
-			errorText:    fmt.Sprintf("Could not load table %q", selectedTable),
-			rollback: func() {
-				a.restoreResultNavigationState(previous)
-				a.resultNavStack = previousStack
-				a.selectTableListIdentifier(previous.table)
-			},
-		})
+		a.openSidebarTable(selectedTable, nil)
 	})
 	a.reloadSQLCompletionCatalog()
 }
@@ -221,6 +216,7 @@ func (a *App) orderedTableSidebarItems() []tableListSnapshotItem {
 		})
 		for _, table := range pinned {
 			items = append(items, tableListSnapshotItem{label: table, identifier: table})
+			items = a.appendExpandedSidebarColumns(items, table)
 		}
 	}
 
@@ -237,6 +233,7 @@ func (a *App) orderedTableSidebarItems() []tableListSnapshotItem {
 			lastNamespace = namespace
 		}
 		items = append(items, tableListSnapshotItem{label: table, identifier: table})
+		items = a.appendExpandedSidebarColumns(items, table)
 	}
 	return items
 }
@@ -248,40 +245,7 @@ type preservedSidebarItem struct {
 }
 
 func (a *App) rebuildTableSidebarForPins(selectedTable string) {
-	if a == nil || a.tables == nil {
-		return
-	}
-	preserved := make([]preservedSidebarItem, 0, max(0, a.tables.GetItemCount()-a.tableSidebarItems))
-	for index := a.tableSidebarItems; index < a.tables.GetItemCount(); index++ {
-		mainText, secondaryText := a.tables.GetItemText(index)
-		item := preservedSidebarItem{mainText: mainText, secondaryText: secondaryText}
-		if object, ok := a.databaseObjects[index]; ok {
-			objectCopy := object
-			item.object = &objectCopy
-		}
-		preserved = append(preserved, item)
-	}
-
-	a.tables.Clear()
-	a.tableIdentifiers = map[int]string{}
-	a.databaseObjects = map[int]databaseObjectListItem{}
-	items := a.orderedTableSidebarItems()
-	for index, item := range items {
-		a.tables.AddItem(item.label, "", 0, nil)
-		if item.identifier != "" {
-			a.tableIdentifiers[index] = item.identifier
-		}
-	}
-	a.tableSidebarItems = len(items)
-	for _, item := range preserved {
-		index := a.tables.GetItemCount()
-		a.tables.AddItem(item.mainText, item.secondaryText, 0, nil)
-		if item.object != nil {
-			a.databaseObjects[index] = *item.object
-		}
-	}
-	a.selectTableListIdentifier(selectedTable)
-	a.refreshTableSidebarState()
+	a.rebuildTableSidebar(sidebarSelection{table: selectedTable})
 }
 
 func (a *App) pinnedTablesForConnection() []string {
@@ -308,7 +272,11 @@ func (a *App) selectedSidebarTable() (string, bool) {
 	if a == nil || a.tables == nil {
 		return "", false
 	}
-	table, ok := a.tableIdentifiers[a.tables.GetCurrentItem()]
+	index := a.tables.GetCurrentItem()
+	if column, ok := a.tableColumnItems[index]; ok {
+		return column.table, column.table != ""
+	}
+	table, ok := a.tableIdentifiers[index]
 	return table, ok && table != ""
 }
 
@@ -424,6 +392,10 @@ func isSelectableTableLabel(label string) bool {
 	trimmed := strings.TrimSpace(label)
 	if strings.HasPrefix(trimmed, "[#a6e3a1]▶[-]") ||
 		strings.HasPrefix(trimmed, "[#6c7086]•[-]") ||
+		strings.HasPrefix(trimmed, "[#6c7086]▸[-]") ||
+		strings.HasPrefix(trimmed, "[#a6adc8]▾[-]") ||
+		strings.HasPrefix(trimmed, "[#6c7086]├─[-]") ||
+		strings.HasPrefix(trimmed, "[#6c7086]└─[-]") ||
 		strings.HasPrefix(trimmed, "[#cba6f7]/[-]") ||
 		strings.HasPrefix(trimmed, "[#f9e2af]"+iconPin+"[-]") ||
 		strings.HasPrefix(trimmed, "[green]+[-]") ||
@@ -440,11 +412,47 @@ func (a *App) handleTableListInput(event *tcell.EventKey) *tcell.EventKey {
 		return nil
 	}
 	if !a.hasActiveTableSearch() && isTableNameCopyKey(event) {
-		a.copySelectedTableName()
+		if column, ok := a.tableColumnItems[a.tables.GetCurrentItem()]; ok {
+			a.copyColumnName(column.column)
+		} else {
+			a.copySelectedTableName()
+		}
 		return nil
 	}
 
 	switch event.Key() {
+	case tcell.KeyUp:
+		a.moveSidebarSelection(-1)
+		return nil
+	case tcell.KeyDown:
+		a.moveSidebarSelection(1)
+		return nil
+	case tcell.KeyHome:
+		a.selectSidebarBoundary(1)
+		return nil
+	case tcell.KeyEnd:
+		a.selectSidebarBoundary(-1)
+		return nil
+	case tcell.KeyRight:
+		index := a.tables.GetCurrentItem()
+		if table, ok := a.tableIdentifiers[index]; ok {
+			if a.expandedSidebarTable == table {
+				a.selectFirstSidebarColumn(table)
+			} else {
+				a.toggleSidebarTable(table)
+			}
+			return nil
+		}
+	case tcell.KeyLeft:
+		index := a.tables.GetCurrentItem()
+		if column, ok := a.tableColumnItems[index]; ok {
+			a.focusSidebarColumnParent(column)
+			return nil
+		}
+		if table, ok := a.tableIdentifiers[index]; ok && a.expandedSidebarTable == table {
+			a.toggleSidebarTable(table)
+			return nil
+		}
 	case tcell.KeyEnter:
 		if !a.hasActiveTableSearch() {
 			return event
@@ -469,7 +477,9 @@ func (a *App) handleTableListInput(event *tcell.EventKey) *tcell.EventKey {
 		}
 	case tcell.KeyRune:
 		if event.Modifiers()&(tcell.ModCtrl|tcell.ModAlt|tcell.ModMeta) == 0 && !a.hasActiveTableSearch() && event.Rune() == ' ' {
-			a.toggleSelectedTablePin()
+			if _, columnSelected := a.tableColumnItems[a.tables.GetCurrentItem()]; !columnSelected {
+				a.toggleSelectedTablePin()
+			}
 			return nil
 		}
 		if event.Modifiers()&(tcell.ModCtrl|tcell.ModAlt|tcell.ModMeta) == 0 && unicode.IsPrint(event.Rune()) {
@@ -490,23 +500,96 @@ func isTableNameCopyKey(event *tcell.EventKey) bool {
 }
 
 func (a *App) handleTableListMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
-	if a == nil || a.tables == nil || event == nil || action != tview.MouseRightClick {
+	if a == nil || a.tables == nil || event == nil {
 		return action, event
 	}
 
 	x, y := event.Position()
 	index := tableListIndexAtPoint(a.tables, x, y)
-	table, ok := a.tableIdentifiers[index]
-	if !ok || table == "" {
+	if index < 0 {
+		return action, event
+	}
+	if action == tview.MouseLeftClick {
+		innerX, _, _, _ := a.tables.GetInnerRect()
+		if table, ok := a.tableIdentifiers[index]; ok && table != "" && x < innerX+8 {
+			a.tables.SetCurrentItem(index)
+			if a.app != nil {
+				a.setFocusWithColor(a.tables)
+			}
+			a.toggleSidebarTable(table)
+			return tview.MouseConsumed, nil
+		}
+		if !a.sidebarIndexSelectable(index) {
+			return tview.MouseConsumed, nil
+		}
+		return action, event
+	}
+	if action != tview.MouseRightClick {
 		return action, event
 	}
 
+	if column, ok := a.tableColumnItems[index]; ok {
+		a.tables.SetCurrentItem(index)
+		if a.app != nil {
+			a.setFocusWithColor(a.tables)
+		}
+		a.copyColumnName(column.column)
+		return tview.MouseConsumed, nil
+	}
+	table, ok := a.tableIdentifiers[index]
+	if !ok || table == "" {
+		return tview.MouseConsumed, nil
+	}
 	a.tables.SetCurrentItem(index)
 	if a.app != nil {
 		a.setFocusWithColor(a.tables)
 	}
 	a.copyTableName(table)
 	return tview.MouseConsumed, nil
+}
+
+func (a *App) sidebarIndexSelectable(index int) bool {
+	if a == nil || a.tables == nil || index < 0 || index >= a.tables.GetItemCount() {
+		return false
+	}
+	if _, ok := a.tableIdentifiers[index]; ok {
+		return true
+	}
+	if _, ok := a.tableColumnItems[index]; ok {
+		return true
+	}
+	_, ok := a.databaseObjects[index]
+	return ok
+}
+
+func (a *App) moveSidebarSelection(direction int) bool {
+	if a == nil || a.tables == nil || direction == 0 {
+		return false
+	}
+	for index := a.tables.GetCurrentItem() + direction; index >= 0 && index < a.tables.GetItemCount(); index += direction {
+		if a.sidebarIndexSelectable(index) {
+			a.tables.SetCurrentItem(index)
+			return true
+		}
+	}
+	return false
+}
+
+func (a *App) selectSidebarBoundary(direction int) bool {
+	if a == nil || a.tables == nil || direction == 0 {
+		return false
+	}
+	start, end := 0, a.tables.GetItemCount()
+	if direction < 0 {
+		start, end = a.tables.GetItemCount()-1, -1
+	}
+	for index := start; index != end; index += direction {
+		if a.sidebarIndexSelectable(index) {
+			a.tables.SetCurrentItem(index)
+			return true
+		}
+	}
+	return false
 }
 
 func tableListIndexAtPoint(list *tview.List, x, y int) int {
@@ -546,6 +629,65 @@ func (a *App) copyTableName(table string) {
 	a.flashStatus(fmt.Sprintf("[green]Copied table %s[-]", tview.Escape(table)), a.currentResultRowCount(), 1600*time.Millisecond)
 }
 
+func (a *App) copyColumnName(column string) {
+	if a == nil || strings.TrimSpace(column) == "" {
+		return
+	}
+	a.copyValueAsync(column, func(err error) {
+		if err != nil {
+			a.flashStatus(fmt.Sprintf("[yellow]Copied column %s inside dbterm (system clipboard unavailable)[-]", tview.Escape(column)), a.currentResultRowCount(), 2200*time.Millisecond)
+		}
+	})
+	a.flashStatus(fmt.Sprintf("[green]Copied column %s[-]", tview.Escape(column)), a.currentResultRowCount(), 1600*time.Millisecond)
+}
+
+func (a *App) openSidebarTable(selectedTable string, onSuccess func()) {
+	if a == nil || strings.TrimSpace(selectedTable) == "" {
+		return
+	}
+	previous := a.captureResultNavigationState()
+	previousStack := append([]resultNavigationState(nil), a.resultNavStack...)
+	a.selectTableWithRememberedFilter(selectedTable)
+	a.clearResultNavigation()
+	a.resetSort()
+	a.resetPagination()
+	a.loadCurrentTableAsync(tableLoadOptions{
+		loadingText:  fmt.Sprintf("Loading %s...", selectedTable),
+		cancelText:   "Press Esc to cancel opening this table.",
+		canceledText: "Table loading canceled",
+		errorText:    fmt.Sprintf("Could not load table %q", selectedTable),
+		onSuccess:    onSuccess,
+		rollback: func() {
+			a.restoreResultNavigationState(previous)
+			a.resultNavStack = previousStack
+			a.selectTableListIdentifier(previous.table)
+		},
+	})
+}
+
+func (a *App) openSidebarColumn(column sidebarColumnRef) {
+	if a == nil || column.table == "" || column.column == "" {
+		return
+	}
+	if a.tableResultsActive && a.activeTable == column.table {
+		a.focusSidebarResultColumn(column)
+		return
+	}
+	a.openSidebarTable(column.table, func() {
+		a.focusSidebarResultColumn(column)
+	})
+}
+
+func (a *App) focusSidebarResultColumn(column sidebarColumnRef) {
+	if a == nil || a.focusResultColumnByName(column.column) {
+		return
+	}
+	a.flashStatus(
+		fmt.Sprintf("[yellow]Column %s is no longer in %s — refresh database objects and try again[-]", tview.Escape(column.column), tview.Escape(column.table)),
+		a.currentResultRowCount(), 2600*time.Millisecond,
+	)
+}
+
 func (a *App) hasActiveTableSearch() bool {
 	return a != nil && a.tableSearch != ""
 }
@@ -562,30 +704,84 @@ func (a *App) applyTableSearch() {
 	if a == nil || a.tables == nil {
 		return
 	}
+	a.ensureSidebarSearchIndex()
 
-	firstMatch := -1
-	for index := 0; index < a.tables.GetItemCount(); index++ {
-		identifier, ok := a.tableIdentifiers[index]
-		if !ok {
+	match, matched := a.bestSidebarSearchMatch(a.tableSearch)
+	if matched && match.column != "" && a.expandedSidebarTable != match.table {
+		a.expandedSidebarTable = match.table
+		a.rebuildTableSidebarItems(sidebarSelection{table: match.table, column: match.column})
+		a.renderTableSidebarSearchMatch(match, true)
+		a.scheduleSidebarMetadataLoad(match.table)
+		return
+	}
+	a.renderTableSidebarSearchMatch(match, matched)
+	if matched {
+		a.selectSidebarSelection(sidebarSelection{table: match.table, column: match.column})
+	}
+}
+
+func (a *App) renderTableSidebarSearch() {
+	if a == nil || a.tables == nil {
+		return
+	}
+	a.ensureSidebarSearchIndex()
+	match, matched := a.bestSidebarSearchMatch(a.tableSearch)
+	a.renderTableSidebarSearchMatch(match, matched)
+	if matched {
+		a.selectSidebarSelection(sidebarSelection{table: match.table, column: match.column})
+	}
+}
+
+func (a *App) renderTableSidebarSearchMatch(match sidebarSearchEntry, matched bool) {
+	if a == nil || a.tables == nil {
+		return
+	}
+	next := sidebarSelection{}
+	if matched && strings.TrimSpace(a.tableSearch) != "" {
+		next = sidebarSelection{table: match.table, column: match.column}
+	}
+	if a.sidebarRenderedSearch != next {
+		a.setSidebarSearchItemLabel(a.sidebarRenderedSearch, "")
+	}
+	query := strings.TrimSpace(a.tableSearch)
+	if next.table != "" {
+		if next.column != "" {
+			if dot := strings.LastIndex(query, "."); dot >= 0 {
+				query = query[dot+1:]
+			}
+		}
+		a.setSidebarSearchItemLabel(next, query)
+	}
+	a.sidebarRenderedSearch = next
+	a.updateTableListTitle()
+}
+
+func (a *App) setSidebarSearchItemLabel(selection sidebarSelection, query string) {
+	if selection.column != "" {
+		for index, column := range a.tableColumnItems {
+			if column.table == selection.table && strings.EqualFold(column.column, selection.column) {
+				a.tables.SetItemText(index, a.sidebarColumnLabel(column, column.last, query), "")
+				return
+			}
+		}
+		return
+	}
+	if selection.table == "" {
+		return
+	}
+	for index, identifier := range a.tableIdentifiers {
+		if identifier != selection.table {
 			continue
 		}
-
 		identifierLabel := tview.Escape(identifier)
-		if a.tableSearch != "" {
-			if highlighted, matched := highlightTableSearchMatch(identifier, a.tableSearch); matched {
+		if query != "" {
+			if highlighted, ok := highlightTableSearchMatch(identifier, query); ok {
 				identifierLabel = highlighted
-				if firstMatch < 0 {
-					firstMatch = index
-				}
 			}
 		}
 		a.tables.SetItemText(index, a.tableSidebarLabel(identifier, identifierLabel), "")
+		return
 	}
-
-	if firstMatch >= 0 {
-		a.tables.SetCurrentItem(firstMatch)
-	}
-	a.updateTableListTitle()
 }
 
 // refreshTableSidebarState redraws table-only rows without disturbing schema
@@ -596,7 +792,14 @@ func (a *App) refreshTableSidebarState() {
 	if a == nil || a.tables == nil {
 		return
 	}
-	a.applyTableSearch()
+	for index, identifier := range a.tableIdentifiers {
+		a.tables.SetItemText(index, a.tableSidebarLabel(identifier, tview.Escape(identifier)), "")
+	}
+	for index, column := range a.tableColumnItems {
+		a.tables.SetItemText(index, a.sidebarColumnLabel(column, column.last, ""), "")
+	}
+	a.sidebarRenderedSearch = sidebarSelection{}
+	a.renderTableSidebarSearch()
 }
 
 func (a *App) tableSidebarLabel(identifier, identifierLabel string) string {
@@ -615,10 +818,14 @@ func (a *App) tableSidebarLabel(identifier, identifierLabel string) string {
 	if a.tableIsPinned(identifier) {
 		pinMarker = "[#f9e2af]" + iconPin + "[-]"
 	}
-	if summary, ok := a.profilerTableChanges[identifier]; ok {
-		return fmt.Sprintf("%s%s%s%s %s", stateMarker, filterMarker, pinMarker, profilerTableMarker(summary), identifierLabel)
+	disclosure := "[#6c7086]▸[-]"
+	if a.expandedSidebarTable == identifier {
+		disclosure = "[#a6adc8]▾[-]"
 	}
-	return fmt.Sprintf("%s%s%s %s", stateMarker, filterMarker, pinMarker, identifierLabel)
+	if summary, ok := a.profilerTableChanges[identifier]; ok {
+		return fmt.Sprintf("%s%s%s%s%s %s", stateMarker, filterMarker, pinMarker, profilerTableMarker(summary), disclosure, identifierLabel)
+	}
+	return fmt.Sprintf("%s%s%s%s %s", stateMarker, filterMarker, pinMarker, disclosure, identifierLabel)
 }
 
 func (a *App) tableHasRememberedFilter(identifier string) bool {
@@ -632,14 +839,24 @@ func (a *App) tableHasRememberedFilter(identifier string) bool {
 }
 
 func (a *App) firstTableSearchMatch(query string) int {
-	if a == nil || query == "" {
+	if a == nil || query == "" || a.tables == nil {
 		return -1
 	}
-	for index := 0; a.tables != nil && index < a.tables.GetItemCount(); index++ {
-		if identifier, ok := a.tableIdentifiers[index]; ok {
-			if _, _, matched := tableSearchMatchRange(identifier, query); matched {
+	a.ensureSidebarSearchIndex()
+	match, ok := a.bestSidebarSearchMatch(query)
+	if !ok {
+		return -1
+	}
+	if match.column != "" {
+		for index, column := range a.tableColumnItems {
+			if column.table == match.table && strings.EqualFold(column.column, match.column) {
 				return index
 			}
+		}
+	}
+	for index, table := range a.tableIdentifiers {
+		if table == match.table {
+			return index
 		}
 	}
 	return -1
@@ -692,6 +909,6 @@ func (a *App) updateTableListTitle() {
 	if a.tableSearch != "" {
 		search = fmt.Sprintf(" [#a6adc8]find:[-] [#f9e2af]%s[-]", tview.Escape(a.tableSearch))
 	}
-	legend := fmt.Sprintf(" [yellow]Space[-] pin %s  [#6c7086]▶ • /[-]", iconPin)
+	legend := fmt.Sprintf(" [yellow]→/←[-] schema  [yellow]Space[-] pin %s  [#6c7086]▶ • /  PK FK NN[-]", iconPin)
 	a.tables.SetTitle(fmt.Sprintf(" %s %s%s%s [yellow](%s)[-] ", iconTables, count, search, legend, a.escapedActionShortcut(actionFocusTables)))
 }

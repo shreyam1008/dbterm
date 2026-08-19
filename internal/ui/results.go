@@ -8,7 +8,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	"github.com/shreyam1008/dbterm/internal/config"
 )
@@ -25,20 +24,6 @@ const (
 )
 
 var tablePreviewSteps = []int{50, 100, 250, 500, 1000}
-
-func resultSelectionAtTop(table *tview.Table, event *tcell.EventKey) bool {
-	if table == nil || event == nil {
-		return false
-	}
-
-	movingUp := event.Key() == tcell.KeyUp || matchesPlainShortcut(event, 'k')
-	if !movingUp {
-		return false
-	}
-
-	row, _ := table.GetSelection()
-	return row == 1 // Row 0 is the fixed, non-selectable header.
-}
 
 type resultCellReference struct {
 	// value remains the complete, lossless string representation used by
@@ -278,6 +263,9 @@ func (a *App) applyTableResultSnapshot(snapshot *tableResultSnapshot) bool {
 		return false
 	}
 
+	if request.selectedTable != a.activeTable {
+		a.resultColumnSearch = ""
+	}
 	a.results.Clear()
 	for row := 0; row < snapshot.results.GetRowCount(); row++ {
 		for col := 0; col < snapshot.results.GetColumnCount(); col++ {
@@ -568,7 +556,9 @@ func (a *App) restoreResultSelection(state resultSelectionState, rowCount int) {
 	targetRow := 1
 	targetCol := clamp(state.col, 0, colCount-1)
 
-	if state.hasDataRow {
+	if state.row == 0 && !state.hasDataRow {
+		targetRow = 0
+	} else if state.hasDataRow {
 		targetRow = clamp(state.row, 1, rowCount)
 		if len(state.selectedRowText) > 0 {
 			if matched := findMatchingRow(a.results, state.selectedRowText, rowCount, colCount); matched > 0 {

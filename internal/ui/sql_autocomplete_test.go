@@ -3,6 +3,7 @@ package ui
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
@@ -94,6 +95,150 @@ func TestSQLCompletionUsesDatabaseContext(t *testing.T) {
 	}
 	if result.items[0].kind != sqlCompletionDatabase {
 		t.Fatalf("database completion kind = %d", result.items[0].kind)
+	}
+}
+
+func TestSQLCompletionUsesSelectedTableColumns(t *testing.T) {
+	query := "SELECT "
+	result := completeSQL(sqlCompletionInput{
+		text: query, cursor: len(query), dbType: config.PostgreSQL,
+		catalog: testSQLCompletionCatalog(), activeTable: "public.users", limit: 6,
+	})
+	columns := make(map[string]bool)
+	for _, item := range result.items {
+		if item.kind == sqlCompletionColumn {
+			columns[item.label] = true
+		}
+	}
+	for _, expected := range []string{"id", "name", "email"} {
+		if !columns[expected] {
+			t.Errorf("selected-table completions are missing column %q: %#v", expected, result.items)
+		}
+	}
+}
+
+func TestSQLCompletionKeepsColumnsRankedInsideExpressionsAndInsertLists(t *testing.T) {
+	queries := []string{
+		"SELECT COUNT(",
+		"INSERT INTO users (",
+		"INSERT INTO users (id, ",
+	}
+	for _, query := range queries {
+		result := completeSQL(sqlCompletionInput{
+			text: query, cursor: len(query), dbType: config.PostgreSQL,
+			catalog: testSQLCompletionCatalog(), activeTable: "public.users", limit: 6,
+		})
+		foundColumn := false
+		for _, item := range result.items {
+			if item.kind == sqlCompletionColumn {
+				foundColumn = true
+				break
+			}
+		}
+		if !foundColumn {
+			t.Errorf("query %q did not prioritize table columns: %#v", query, result.items)
+		}
+	}
+}
+
+func TestSQLCompletionCorrectsSmallTableTypos(t *testing.T) {
+	query := "SELECT * FROM usres"
+	result := completeSQL(sqlCompletionInput{
+		text: query, cursor: len(query), dbType: config.PostgreSQL,
+		catalog: testSQLCompletionCatalog(), limit: 6,
+	})
+	if len(result.items) == 0 {
+		t.Fatal("misspelled table returned no completions")
+	}
+	if got := result.items[0].label; got != "public.users" {
+		t.Fatalf("first typo correction = %q, want public.users", got)
+	}
+}
+
+func TestSQLCompletionOffersReadyQueriesForSelectedTable(t *testing.T) {
+	result := completeSQL(sqlCompletionInput{
+		manual: true, dbType: config.PostgreSQL,
+		catalog: testSQLCompletionCatalog(), activeTable: "public.users", limit: 6,
+	})
+	if len(result.items) < 3 {
+		t.Fatalf("ready query count = %d, want at least 3: %#v", len(result.items), result.items)
+	}
+	if result.items[0].kind != sqlCompletionTemplate || result.items[0].label != "Preview rows · public.users" {
+		t.Fatalf("first ready query = %#v", result.items[0])
+	}
+	if got := result.items[0].insertText; got != "SELECT * FROM public.users LIMIT 100;" {
+		t.Fatalf("preview query = %q", got)
+	}
+	for _, item := range result.items {
+		if item.kind == sqlCompletionTemplate && !strings.HasPrefix(item.insertText, "SELECT ") {
+			t.Errorf("ready query is not read-only SELECT: %#v", item)
+		}
+	}
+}
+
+func TestSQLCompletionAfterCompleteTableOffersReadyClauses(t *testing.T) {
+	query := "SELECT * FROM users"
+	result := completeSQL(sqlCompletionInput{
+		text: query, cursor: len(query), manual: true, dbType: config.PostgreSQL,
+		catalog: testSQLCompletionCatalog(), activeTable: "public.users", limit: 6,
+	})
+	if len(result.items) == 0 || result.items[0].label != "Limit to 100 rows" {
+		t.Fatalf("next-clause suggestions = %#v", result.items)
+	}
+	if result.replaceStart != len(query) || result.replaceEnd != len(query) || !result.prependSpace {
+		t.Fatalf("next-clause replacement = (%d, %d, prepend=%v)", result.replaceStart, result.replaceEnd, result.prependSpace)
+	}
+
+	queryInput := tview.NewTextArea().SetText(query, true)
+	app := &App{
+		queryInput: queryInput,
+		sqlCompletionState: sqlCompletionState{
+			visible: true, items: result.items,
+			replaceStart: result.replaceStart, replaceEnd: result.replaceEnd,
+			prependSpace: result.prependSpace,
+		},
+	}
+	if !app.handleSQLCompletionKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)) {
+		t.Fatal("Enter did not accept the ready clause")
+	}
+	if got := queryInput.GetText(); got != "SELECT * FROM users LIMIT 100;" {
+		t.Fatalf("query after accepting ready clause = %q", got)
+	}
+}
+
+func TestSQLMissingRelationSuggestionUnderstandsEngineErrors(t *testing.T) {
+	for _, message := range []string{
+		`ERROR: relation "usres" does not exist`,
+		`no such table: usres`,
+		`Error 1146: Table 'app.usres' doesn't exist`,
+	} {
+		got, ok := sqlMissingRelationSuggestion(message, testSQLCompletionCatalog())
+		if !ok || got != "public.users" {
+			t.Errorf("sqlMissingRelationSuggestion(%q) = (%q, %v)", message, got, ok)
+		}
+	}
+}
+
+func TestSQLMissingRelationSuggestionAvoidsAmbiguousNames(t *testing.T) {
+	catalog := testSQLCompletionCatalog()
+	catalog.relations = append(catalog.relations,
+		sqlCompletionRelation{name: "audit.users", kind: sqlCompletionTable, columns: []string{"id"}})
+	if got, ok := sqlMissingRelationSuggestion(`relation "usres" does not exist`, catalog); ok {
+		t.Fatalf("ambiguous typo suggestion = %q, want none", got)
+	}
+}
+
+func TestSQLMissingColumnSuggestionUsesReferencedTable(t *testing.T) {
+	query := "SELECT nmae FROM users"
+	for _, message := range []string{
+		`column "nmae" does not exist`,
+		`no such column: nmae`,
+		`Unknown column 'nmae' in 'field list'`,
+	} {
+		got, ok := sqlMissingColumnSuggestion(message, query, testSQLCompletionCatalog(), "public.orders")
+		if !ok || got != "name" {
+			t.Errorf("sqlMissingColumnSuggestion(%q) = (%q, %v)", message, got, ok)
+		}
 	}
 }
 
@@ -232,5 +377,40 @@ func BenchmarkSQLCompletionLargeCatalog(b *testing.B) {
 	b.ResetTimer()
 	for range b.N {
 		_ = completeSQL(input)
+	}
+}
+
+func BenchmarkSQLCompletionLargeCatalogTypo(b *testing.B) {
+	catalog := sqlCompletionCatalog{relations: make([]sqlCompletionRelation, 5000)}
+	for index := range catalog.relations {
+		catalog.relations[index] = sqlCompletionRelation{
+			name:    fmt.Sprintf("public.table_%04d", index),
+			kind:    sqlCompletionTable,
+			columns: []string{"id", "created_at", "updated_at", "display_name"},
+		}
+	}
+	input := sqlCompletionInput{
+		text: "SELECT * FROM talbe_0499", cursor: len("SELECT * FROM talbe_0499"),
+		dbType: config.PostgreSQL, catalog: catalog, limit: 6,
+	}
+	b.ResetTimer()
+	for range b.N {
+		_ = completeSQL(input)
+	}
+}
+
+func TestSQLCompletionLargeCatalogKeepsBestTypoCandidate(t *testing.T) {
+	catalog := sqlCompletionCatalog{relations: make([]sqlCompletionRelation, 5000)}
+	for index := range catalog.relations {
+		catalog.relations[index] = sqlCompletionRelation{
+			name: fmt.Sprintf("public.table_%04d", index), kind: sqlCompletionTable,
+		}
+	}
+	query := "SELECT * FROM talbe_0499"
+	result := completeSQL(sqlCompletionInput{
+		text: query, cursor: len(query), dbType: config.PostgreSQL, catalog: catalog, limit: 6,
+	})
+	if len(result.items) == 0 || result.items[0].label != "public.table_0499" {
+		t.Fatalf("large-catalog typo result = %#v, want public.table_0499 first", result.items)
 	}
 }

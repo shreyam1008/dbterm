@@ -32,6 +32,7 @@ const (
 	sqlCompletionDatabase
 	sqlCompletionFunction
 	sqlCompletionProcedure
+	sqlCompletionTemplate
 )
 
 type sqlCompletionItem struct {
@@ -49,6 +50,7 @@ type sqlCompletionState struct {
 	selected     int
 	replaceStart int
 	replaceEnd   int
+	prependSpace bool
 }
 
 type sqlCompletionRelation struct {
@@ -83,6 +85,7 @@ type sqlCompletionResult struct {
 	items        []sqlCompletionItem
 	replaceStart int
 	replaceEnd   int
+	prependSpace bool
 }
 
 type sqlCompletionExpectation uint8
@@ -93,6 +96,7 @@ const (
 	sqlCompletionRelationExpected
 	sqlCompletionColumnExpected
 	sqlCompletionDatabaseExpected
+	sqlCompletionClauseExpected
 )
 
 type sqlLexeme struct {
@@ -122,6 +126,10 @@ var sqlCommonFunctions = []string{
 	"COUNT", "SUM", "AVG", "MIN", "MAX", "COALESCE", "NULLIF", "CAST", "LOWER",
 	"UPPER", "LENGTH", "SUBSTRING", "TRIM", "ROUND", "ABS", "CURRENT_DATE",
 	"CURRENT_TIME", "CURRENT_TIMESTAMP",
+}
+
+var sqlNextClauseKeywords = []string{
+	"WHERE", "JOIN", "LEFT JOIN", "GROUP BY", "ORDER BY", "HAVING", "LIMIT", "OFFSET", "RETURNING",
 }
 
 var sqlDialectKeywords = map[config.DBType][]string{
@@ -185,7 +193,7 @@ func newSQLCompletionView() *tview.Table {
 		SetSelectable(true, false).
 		SetSelectedStyle(tcell.StyleDefault.Background(blue).Foreground(crust))
 	view.SetBorder(true).
-		SetTitle(" SQL suggestions  ↑/↓ choose  Tab insert  Esc close ").
+		SetTitle(" SQL suggestions  ↑/↓ choose  Tab/Enter insert  Esc close ").
 		SetBorderColor(surface1).
 		SetTitleColor(teal).
 		SetBackgroundColor(mantle)
@@ -231,6 +239,7 @@ func (a *App) refreshSQLCompletions(manual bool) {
 		items:        result.items,
 		replaceStart: result.replaceStart,
 		replaceEnd:   result.replaceEnd,
+		prependSpace: result.prependSpace,
 	}
 	for index, item := range result.items {
 		if item.label == selectedLabel {
@@ -295,9 +304,9 @@ func (a *App) renderSQLCompletions() {
 	}
 	a.sqlCompletionView.Select(a.sqlCompletionState.selected, 0)
 	if a.lastScreenW > 0 && a.lastScreenW < 80 {
-		a.sqlCompletionView.SetTitle(" Suggestions  ↑/↓  Tab insert ")
+		a.sqlCompletionView.SetTitle(" Suggestions  ↑/↓  Tab/Enter insert ")
 	} else {
-		a.sqlCompletionView.SetTitle(" SQL suggestions  ↑/↓ choose  Tab insert  Esc close ")
+		a.sqlCompletionView.SetTitle(" SQL suggestions  ↑/↓ choose  Tab/Enter insert  Esc close ")
 	}
 	if a.rightFlex != nil {
 		a.rightFlex.ResizeItem(a.sqlCompletionView, a.sqlCompletionPopupHeight(), 0)
@@ -353,6 +362,9 @@ func (a *App) acceptSQLCompletion() bool {
 	item := a.sqlCompletionState.items[index]
 	replacement := item.insertText
 	query := a.queryInput.GetText()
+	if a.sqlCompletionState.prependSpace && shouldPrependSQLCompletionSpace(query, a.sqlCompletionState.replaceStart) {
+		replacement = " " + replacement
+	}
 	if item.appendSpace && shouldAppendSQLCompletionSpace(query, a.sqlCompletionState.replaceEnd) {
 		replacement += " "
 	}
@@ -362,6 +374,14 @@ func (a *App) acceptSQLCompletion() bool {
 	a.sqlCompletionApplying = false
 	a.hideSQLCompletions()
 	return true
+}
+
+func shouldPrependSQLCompletionSpace(text string, start int) bool {
+	if start <= 0 || start > len(text) {
+		return false
+	}
+	r, _ := utf8.DecodeLastRuneInString(text[:start])
+	return !unicode.IsSpace(r) && !strings.ContainsRune("(,.;", r)
 }
 
 func shouldAppendSQLCompletionSpace(text string, end int) bool {
@@ -392,7 +412,7 @@ func (a *App) handleSQLCompletionKey(event *tcell.EventKey) bool {
 		return a.moveSQLCompletion(-1)
 	case tcell.KeyDown:
 		return a.moveSQLCompletion(1)
-	case tcell.KeyTab:
+	case tcell.KeyTab, tcell.KeyEnter:
 		return a.acceptSQLCompletion()
 	case tcell.KeyEscape:
 		return a.hideSQLCompletions()
@@ -420,6 +440,8 @@ func sqlCompletionKindLabel(kind sqlCompletionKind) string {
 		return " FUNC "
 	case sqlCompletionProcedure:
 		return " PROC "
+	case sqlCompletionTemplate:
+		return " READY "
 	default:
 		return " SQL "
 	}
@@ -435,6 +457,8 @@ func sqlCompletionKindColor(kind sqlCompletionKind) tcell.Color {
 		return mauve
 	case sqlCompletionFunction, sqlCompletionProcedure:
 		return green
+	case sqlCompletionTemplate:
+		return teal
 	default:
 		return yellow
 	}
@@ -449,6 +473,7 @@ func completeSQL(input sqlCompletionInput) sqlCompletionResult {
 	}
 
 	replaceStart, replaceEnd := sqlIdentifierFragmentRange(input.text, input.cursor)
+	prependSpace := false
 	prefix := input.text[replaceStart:input.cursor]
 	statementStart, statementEnd := sqlStatementBounds(input.text, input.cursor)
 	before := input.text[statementStart:replaceStart]
@@ -457,8 +482,7 @@ func completeSQL(input sqlCompletionInput) sqlCompletionResult {
 		return sqlCompletionResult{}
 	}
 
-	statementWithoutFragment := input.text[statementStart:replaceStart] + " " + input.text[replaceEnd:statementEnd]
-	statementTokens, _ := lexSQLCompletion(statementWithoutFragment)
+	statementTokens, _ := lexSQLCompletion(input.text[statementStart:statementEnd])
 	expectation := sqlCompletionExpectationFor(beforeTokens)
 	qualified := strings.Contains(prefix, ".")
 	if !input.manual && !qualified && len([]rune(prefix)) < 2 &&
@@ -468,13 +492,25 @@ func completeSQL(input sqlCompletionInput) sqlCompletionResult {
 
 	aliases, referencedRelations := sqlCompletionAliases(statementTokens, input.catalog)
 	if sqlCompletionPrefixIsComplete(input, prefix, expectation, aliases) {
-		return sqlCompletionResult{replaceStart: replaceStart, replaceEnd: replaceEnd}
+		if !input.manual {
+			return sqlCompletionResult{replaceStart: replaceStart, replaceEnd: replaceEnd}
+		}
+		// Ctrl+Space after an already-complete identifier means "what can I do
+		// next?". Insert at the cursor instead of replacing that identifier.
+		replaceStart, replaceEnd = input.cursor, input.cursor
+		prependSpace = true
+		prefix = ""
+		beforeTokens, safe = lexSQLCompletion(input.text[statementStart:input.cursor])
+		if !safe {
+			return sqlCompletionResult{}
+		}
+		expectation = sqlCompletionExpectationAfterComplete(beforeTokens, input.catalog)
 	}
 	items := buildSQLCompletionItems(input, prefix, expectation, aliases, referencedRelations, beforeTokens)
 	if len(items) > input.limit {
 		items = items[:input.limit]
 	}
-	return sqlCompletionResult{items: items, replaceStart: replaceStart, replaceEnd: replaceEnd}
+	return sqlCompletionResult{items: items, replaceStart: replaceStart, replaceEnd: replaceEnd, prependSpace: prependSpace}
 }
 
 func sqlCompletionPrefixIsComplete(input sqlCompletionInput, prefix string, expectation sqlCompletionExpectation, aliases map[string]string) bool {
@@ -701,6 +737,9 @@ func sqlCompletionExpectationFor(tokens []sqlLexeme) sqlCompletionExpectation {
 	if len(words) == 0 {
 		return sqlCompletionStatementStart
 	}
+	if sqlCompletionInsideSelectList(words) || sqlCompletionInsideInsertColumnList(tokens, words) {
+		return sqlCompletionColumnExpected
+	}
 	last := words[len(words)-1]
 	switch last {
 	case "FROM", "JOIN", "UPDATE", "INTO", "TABLE", "REFERENCES", "TRUNCATE":
@@ -711,6 +750,87 @@ func sqlCompletionExpectationFor(tokens []sqlLexeme) sqlCompletionExpectation {
 		return sqlCompletionColumnExpected
 	}
 	return sqlCompletionGeneral
+}
+
+func sqlCompletionInsideSelectList(words []string) bool {
+	lastSelect := -1
+	for index, word := range words {
+		if word == "SELECT" {
+			lastSelect = index
+		}
+	}
+	if lastSelect < 0 {
+		return false
+	}
+	for _, word := range words[lastSelect+1:] {
+		if word == "FROM" {
+			return false
+		}
+	}
+	return true
+}
+
+func sqlCompletionInsideInsertColumnList(tokens []sqlLexeme, words []string) bool {
+	hasInsert, hasInto := false, false
+	for _, word := range words {
+		switch word {
+		case "INSERT":
+			hasInsert = true
+		case "INTO":
+			hasInto = hasInsert
+		case "VALUES", "SELECT":
+			if hasInto {
+				return false
+			}
+		}
+	}
+	if !hasInto {
+		return false
+	}
+	depth := 0
+	for _, token := range tokens {
+		if !token.symbol {
+			continue
+		}
+		switch token.text {
+		case "(":
+			depth++
+		case ")":
+			depth--
+		}
+	}
+	return depth > 0
+}
+
+func sqlCompletionExpectationAfterComplete(tokens []sqlLexeme, catalog sqlCompletionCatalog) sqlCompletionExpectation {
+	expectation := sqlCompletionExpectationFor(tokens)
+	if expectation != sqlCompletionGeneral {
+		return expectation
+	}
+	for index := len(tokens) - 1; index >= 0; index-- {
+		if tokens[index].symbol {
+			continue
+		}
+		switch strings.ToUpper(tokens[index].text) {
+		case "FROM", "JOIN":
+			name, next := readSQLIdentifierPath(tokens, index+1)
+			if next == len(tokens) {
+				if _, ok := findSQLCompletionRelation(catalog, name); ok {
+					return sqlCompletionClauseExpected
+				}
+			}
+			return expectation
+		case "UPDATE":
+			name, next := readSQLIdentifierPath(tokens, index+1)
+			if next == len(tokens) {
+				if _, ok := findSQLCompletionRelation(catalog, name); ok {
+					return sqlCompletionClauseExpected
+				}
+			}
+			return expectation
+		}
+	}
+	return expectation
 }
 
 func sqlCompletionAliases(tokens []sqlLexeme, catalog sqlCompletionCatalog) (map[string]string, []string) {
@@ -776,18 +896,24 @@ func isSQLAliasStopWord(word string) bool {
 type sqlCompletionCollector struct {
 	prefix        string
 	prefixFolded  string
+	typoPrefix    []rune
 	previousWords []string
 	dbType        config.DBType
 	limit         int
 	items         []sqlCompletionItem
 	worst         int
+	allowTypos    bool
 }
 
 func buildSQLCompletionItems(input sqlCompletionInput, prefix string, expectation sqlCompletionExpectation, aliases map[string]string, referenced []string, beforeTokens []sqlLexeme) []sqlCompletionItem {
 	collector := sqlCompletionCollector{
 		prefix: prefix, prefixFolded: strings.ToLower(prefix), dbType: input.dbType,
 		previousWords: sqlCompletionWords(beforeTokens), limit: input.limit,
-		items: make([]sqlCompletionItem, 0, input.limit),
+		items:      make([]sqlCompletionItem, 0, input.limit),
+		allowTypos: input.manual || expectation == sqlCompletionRelationExpected,
+	}
+	if collector.allowTypos {
+		collector.typoPrefix = []rune(collector.prefixFolded)
 	}
 
 	if qualifier, partial, ok := strings.Cut(prefix, "."); ok {
@@ -803,6 +929,10 @@ func buildSQLCompletionItems(input sqlCompletionInput, prefix string, expectatio
 			collector.addSchemaRelations(qualifier, partial, input.catalog, 0)
 		}
 		return collector.sorted()
+	}
+
+	if input.manual && expectation == sqlCompletionStatementStart {
+		collector.addReadyQueryTemplates(input, -30)
 	}
 
 	switch expectation {
@@ -829,6 +959,10 @@ func buildSQLCompletionItems(input sqlCompletionInput, prefix string, expectatio
 		collector.addFunctions(sqlDialectFunctions[input.dbType], 20)
 		collector.addKeywords(sqlCommonKeywords, 30)
 		collector.addRelations(input.catalog.relations, 55)
+	case sqlCompletionClauseExpected:
+		collector.addReadyClauseTemplates(referenced, input.catalog, -15)
+		collector.addKeywords(sqlNextClauseKeywords, 0)
+		collector.addColumnsForRelations(referenced, input.catalog, 20)
 	default:
 		collector.addKeywords(sqlCommonKeywords, 0)
 		collector.addKeywords(sqlDialectKeywords[input.dbType], 3)
@@ -907,13 +1041,35 @@ func (c *sqlCompletionCollector) addFunctions(functions []string, priority int) 
 }
 
 func (c *sqlCompletionCollector) addRelations(relations []sqlCompletionRelation, priority int) {
+	matched := false
 	for _, relation := range relations {
-		detail := "table"
-		if relation.kind == sqlCompletionView {
-			detail = "view"
+		if c.addRelation(relation, priority) {
+			matched = true
 		}
-		c.add(relation.name, sqlCompletionIdentifier(c.dbType, relation.name), relation.kind, detail, priority, true, relation.name)
 	}
+	// Fuzzy matching is deliberately a second pass. Nearly every keystroke has
+	// a prefix/substring match, so edit-distance work should only run when the
+	// cheaper relation search found nothing at all.
+	if matched || !c.allowTypos || len(c.typoPrefix) < 3 {
+		return
+	}
+	c.addRelationTypos(relations, priority)
+}
+
+func (c *sqlCompletionCollector) addRelation(relation sqlCompletionRelation, priority int) bool {
+	matchScore, ok := sqlCompletionMatchScoreFolded(relation.name, c.prefix, c.prefixFolded)
+	if !ok {
+		return false
+	}
+	if c.prefix != "" && strings.EqualFold(relation.name, c.prefix) {
+		return true
+	}
+	detail := "table"
+	if relation.kind == sqlCompletionView {
+		detail = "view"
+	}
+	c.addScored(relation.name, sqlCompletionIdentifier(c.dbType, relation.name), relation.kind, detail, priority, matchScore, true)
+	return true
 }
 
 func (c *sqlCompletionCollector) addNames(names []string, kind sqlCompletionKind, detail string, priority int, appendSpace bool) {
@@ -947,17 +1103,20 @@ func (c *sqlCompletionCollector) addRelationColumns(relationName, qualifier, par
 	}
 	originalPrefix, originalFolded := c.prefix, c.prefixFolded
 	c.prefix, c.prefixFolded = partial, strings.ToLower(partial)
+	c.typoPrefix = []rune(c.prefixFolded)
 	for _, column := range relation.columns {
 		label := qualifier + "." + column
 		insert := qualifier + "." + sqlCompletionIdentifier(c.dbType, column)
 		c.add(label, insert, sqlCompletionColumn, relation.name, priority, false, column)
 	}
 	c.prefix, c.prefixFolded = originalPrefix, originalFolded
+	c.typoPrefix = []rune(originalFolded)
 }
 
 func (c *sqlCompletionCollector) addSchemaRelations(schema, partial string, catalog sqlCompletionCatalog, priority int) {
 	originalPrefix, originalFolded := c.prefix, c.prefixFolded
 	c.prefix, c.prefixFolded = partial, strings.ToLower(partial)
+	c.typoPrefix = []rune(c.prefixFolded)
 	for _, relation := range catalog.relations {
 		namespace, name := splitQualifiedIdentifier(relation.name)
 		if !strings.EqualFold(namespace, schema) {
@@ -967,13 +1126,22 @@ func (c *sqlCompletionCollector) addSchemaRelations(schema, partial string, cata
 		c.add(label, sqlCompletionIdentifier(c.dbType, relation.name), relation.kind, "relation in "+schema, priority, true, name)
 	}
 	c.prefix, c.prefixFolded = originalPrefix, originalFolded
+	c.typoPrefix = []rune(originalFolded)
 }
 
-func (c *sqlCompletionCollector) add(label, insert string, kind sqlCompletionKind, detail string, priority int, appendSpace bool, matchText string) {
+func (c *sqlCompletionCollector) add(label, insert string, kind sqlCompletionKind, detail string, priority int, appendSpace bool, matchText string) bool {
 	matchScore, ok := sqlCompletionMatchScoreFolded(matchText, c.prefix, c.prefixFolded)
-	if !ok || (c.prefix != "" && strings.EqualFold(matchText, c.prefix)) {
-		return
+	if !ok {
+		return false
 	}
+	if c.prefix != "" && strings.EqualFold(matchText, c.prefix) {
+		return true
+	}
+	c.addScored(label, insert, kind, detail, priority, matchScore, appendSpace)
+	return true
+}
+
+func (c *sqlCompletionCollector) addScored(label, insert string, kind sqlCompletionKind, detail string, priority, matchScore int, appendSpace bool) {
 	item := sqlCompletionItem{
 		label: label, insertText: insert, kind: kind, detail: detail,
 		score: priority*100 + matchScore, appendSpace: appendSpace,
@@ -1024,6 +1192,26 @@ func sqlCompletionMatchScoreFolded(candidate, prefix, prefixFolded string) (int,
 	}
 	if strings.HasPrefix(candidate, prefix) {
 		return len(candidate) - len(prefix), true
+	}
+	if isASCIIString(candidate) && isASCIIString(prefixFolded) {
+		if len(candidate) >= len(prefixFolded) && asciiEqualFold(candidate[:len(prefixFolded)], prefixFolded) {
+			return 20 + len(candidate) - len(prefixFolded), true
+		}
+		if index := asciiIndexFold(candidate, prefixFolded); index >= 0 {
+			return 50 + index, true
+		}
+		matchAt, gaps := 0, 0
+		for index := 0; index < len(candidate) && matchAt < len(prefixFolded); index++ {
+			if asciiLower(candidate[index]) == prefixFolded[matchAt] {
+				matchAt++
+			} else if matchAt > 0 {
+				gaps++
+			}
+		}
+		if matchAt == len(prefixFolded) {
+			return 90 + gaps, true
+		}
+		return 0, false
 	}
 	if len(candidate) >= len(prefix) && strings.EqualFold(candidate[:len(prefix)], prefix) {
 		return 20 + len(candidate) - len(prefix), true
@@ -1260,6 +1448,7 @@ func (a *App) reloadSQLCompletionCatalog() {
 	tables := append([]string(nil), a.tableOrder...)
 	builder := newSQLCompletionCatalogBuilder(tables, databaseName)
 	a.sqlCompletionCatalog = builder.catalog()
+	a.updateSidebarSearchIndex(a.sqlCompletionCatalog)
 
 	db := a.db
 	dbType := a.dbType
@@ -1278,11 +1467,17 @@ func (a *App) reloadSQLCompletionCatalog() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		catalog := loadSQLCompletionCatalog(ctx, db, dbType, tables, databaseName)
+		// Large schemas can contain hundreds of thousands of searchable columns.
+		// Build immutable search structures off the UI goroutine, then swap them
+		// in together with the catalog.
+		searchIndex := buildSidebarSearchIndex(tables, catalog, nil)
+		searchLookup := buildSidebarSearchLookup(searchIndex)
 		a.queueUpdateDraw(func() {
 			if a.db != db || a.dbType != dbType || a.sqlCompletionGeneration.Load() != generation {
 				return
 			}
 			a.sqlCompletionCatalog = catalog
+			a.applySidebarSearchState(searchIndex, searchLookup)
 			if a.focusedPanel == a.queryInput {
 				a.refreshSQLCompletions(false)
 			}
@@ -1297,6 +1492,12 @@ func (a *App) resetSQLCompletionCatalog() {
 	a.sqlCompletionGeneration.Add(1)
 	a.sqlCompletionCatalog = sqlCompletionCatalog{}
 	a.sqlCompletionRoutines = nil
+	a.sidebarSearchIndex = nil
+	a.sidebarSearchLookup = sidebarSearchLookup{}
+	a.sidebarRenderedSearch = sidebarSelection{}
+	a.sidebarColumnMetadata = nil
+	a.sidebarMetadataLoads = nil
+	a.expandedSidebarTable = ""
 	a.hideSQLCompletions()
 }
 

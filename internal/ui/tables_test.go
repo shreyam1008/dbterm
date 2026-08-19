@@ -1,6 +1,9 @@
 package ui
 
 import (
+	"context"
+	"database/sql"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -8,6 +11,319 @@ import (
 	"github.com/rivo/tview"
 	"github.com/shreyam1008/dbterm/internal/config"
 )
+
+func testExpandableSidebarApp() *App {
+	tables := tview.NewList().ShowSecondaryText(false)
+	app := &App{
+		tables: tables, tableOrder: []string{"users", "orders"}, tableCount: 2,
+		tableIdentifiers: map[int]string{}, tableColumnItems: map[int]sidebarColumnRef{},
+		databaseObjects: map[int]databaseObjectListItem{}, sortColumn: -1,
+		sqlCompletionCatalog: sqlCompletionCatalog{relations: []sqlCompletionRelation{
+			{name: "users", kind: sqlCompletionTable, columns: []string{"id", "email", "account_id"}},
+			{name: "orders", kind: sqlCompletionTable, columns: []string{"id", "total"}},
+		}},
+	}
+	app.sidebarSearchIndex = buildSidebarSearchIndex(app.tableOrder, app.sqlCompletionCatalog, nil)
+	app.rebuildTableSidebar(sidebarSelection{table: "users"})
+	return app
+}
+
+func TestSidebarRightLeftUsesAccordionTableExpansion(t *testing.T) {
+	app := testExpandableSidebarApp()
+	if got := app.tables.GetItemCount(); got != 2 {
+		t.Fatalf("collapsed sidebar items = %d, want 2", got)
+	}
+
+	if event := app.handleTableListInput(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone)); event != nil {
+		t.Fatal("Right expansion was not consumed")
+	}
+	if app.expandedSidebarTable != "users" || len(app.tableColumnItems) != 3 {
+		t.Fatalf("expanded users state = %q, columns=%#v", app.expandedSidebarTable, app.tableColumnItems)
+	}
+	app.handleTableListInput(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone))
+	if column, ok := app.tableColumnItems[app.tables.GetCurrentItem()]; !ok || column.table != "users" || column.column != "id" {
+		t.Fatalf("second Right did not enter the first child: %#v", column)
+	}
+
+	app.selectTableListIdentifier("orders")
+	app.handleTableListInput(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone))
+	if app.expandedSidebarTable != "orders" || len(app.tableColumnItems) != 2 {
+		t.Fatalf("accordion did not replace users with orders: expanded=%q columns=%#v", app.expandedSidebarTable, app.tableColumnItems)
+	}
+	for _, column := range app.tableColumnItems {
+		if column.table != "orders" {
+			t.Fatalf("stale expanded column remained: %#v", column)
+		}
+	}
+
+	for index, column := range app.tableColumnItems {
+		if column.column == "total" {
+			app.tables.SetCurrentItem(index)
+			break
+		}
+	}
+	app.handleTableListInput(tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModNone))
+	if app.expandedSidebarTable != "orders" {
+		t.Fatalf("Left on child unexpectedly collapsed table: %q", app.expandedSidebarTable)
+	}
+	if table, ok := app.selectedSidebarTable(); !ok || table != "orders" {
+		t.Fatalf("Left did not return to parent table: %q, %v", table, ok)
+	}
+	app.handleTableListInput(tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModNone))
+	if app.expandedSidebarTable != "" {
+		t.Fatalf("Left on parent did not collapse table: %q", app.expandedSidebarTable)
+	}
+}
+
+func TestSidebarSearchFindsColumnInsideCollapsedTable(t *testing.T) {
+	app := testExpandableSidebarApp()
+	for _, r := range "EMAIL" {
+		app.handleTableListInput(tcell.NewEventKey(tcell.KeyRune, r, tcell.ModNone))
+	}
+	if app.expandedSidebarTable != "users" {
+		t.Fatalf("column search expanded %q, want users", app.expandedSidebarTable)
+	}
+	index := app.tables.GetCurrentItem()
+	column, ok := app.tableColumnItems[index]
+	if !ok || column.table != "users" || column.column != "email" {
+		t.Fatalf("column search selection = %#v, want users.email", column)
+	}
+	label, _ := app.tables.GetItemText(index)
+	if !strings.Contains(label, "[black:#f9e2af:b]email[-:-:-]") {
+		t.Fatalf("column search match is not highlighted: %q", label)
+	}
+}
+
+func TestSidebarMetadataRefreshPreservesColumnSelectionAndSearchIndex(t *testing.T) {
+	app := testExpandableSidebarApp()
+	app.toggleSidebarTable("users")
+	for index, column := range app.tableColumnItems {
+		if column.column == "email" {
+			app.tables.SetCurrentItem(index)
+			break
+		}
+	}
+	app.ensureSidebarSearchIndex()
+	indexBacking := &app.sidebarSearchIndex[0]
+	app.applySidebarColumnMetadata("users", []sidebarColumnMeta{
+		{name: "id", dataType: "integer", primaryKey: true},
+		{name: "email", dataType: "text", notNull: true},
+		{name: "account_id", dataType: "integer", foreignKey: true, target: "accounts.id"},
+	})
+
+	selected := app.currentSidebarSelection()
+	if selected.table != "users" || selected.column != "email" {
+		t.Fatalf("metadata refresh selection = %#v, want users.email", selected)
+	}
+	if &app.sidebarSearchIndex[0] != indexBacking {
+		t.Fatal("metadata-only refresh rebuilt the full sidebar search index")
+	}
+	label, _ := app.tables.GetItemText(app.tables.GetCurrentItem())
+	if !strings.Contains(label, "email") || !strings.Contains(label, "NN") || !strings.Contains(label, "text") {
+		t.Fatalf("refreshed metadata label = %q", label)
+	}
+}
+
+func TestSidebarChevronClickTogglesExpansionWithoutOpeningRows(t *testing.T) {
+	app := testExpandableSidebarApp()
+	app.tables.SetBorder(true).SetRect(4, 3, 40, 10)
+	innerX, innerY, _, _ := app.tables.GetInnerRect()
+	event := tcell.NewEventMouse(innerX+4, innerY, tcell.Button1, tcell.ModNone)
+	action, returned := app.handleTableListMouse(tview.MouseLeftClick, event)
+	if action != tview.MouseConsumed || returned != nil {
+		t.Fatalf("chevron click = (%v, %#v), want consumed", action, returned)
+	}
+	if app.expandedSidebarTable != "users" || len(app.tableColumnItems) != 3 {
+		t.Fatalf("chevron did not expand users: expanded=%q columns=%d", app.expandedSidebarTable, len(app.tableColumnItems))
+	}
+}
+
+func TestSidebarNavigationAndMouseSkipDecorativeRows(t *testing.T) {
+	list := tview.NewList().ShowSecondaryText(false)
+	list.AddItem("users", "", 0, nil)
+	list.AddItem("[#6c7086]── Schema (audit) ──[-]", "", 0, nil)
+	list.AddItem("audit.events", "", 0, nil)
+	app := &App{
+		tables: list, tableIdentifiers: map[int]string{0: "users", 2: "audit.events"},
+		tableColumnItems: map[int]sidebarColumnRef{}, databaseObjects: map[int]databaseObjectListItem{},
+	}
+	list.SetCurrentItem(0)
+	if event := app.handleTableListInput(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)); event != nil {
+		t.Fatal("Down navigation was not consumed")
+	}
+	if got := list.GetCurrentItem(); got != 2 {
+		t.Fatalf("Down selected decorative row %d, want actionable row 2", got)
+	}
+	app.handleTableListInput(tcell.NewEventKey(tcell.KeyHome, 0, tcell.ModNone))
+	if got := list.GetCurrentItem(); got != 0 {
+		t.Fatalf("Home selection = %d, want first actionable row", got)
+	}
+	app.handleTableListInput(tcell.NewEventKey(tcell.KeyEnd, 0, tcell.ModNone))
+	if got := list.GetCurrentItem(); got != 2 {
+		t.Fatalf("End selection = %d, want last actionable row", got)
+	}
+
+	list.SetBorder(true).SetRect(2, 2, 40, 8)
+	innerX, innerY, _, _ := list.GetInnerRect()
+	list.SetCurrentItem(0)
+	action, returned := app.handleTableListMouse(
+		tview.MouseLeftClick,
+		tcell.NewEventMouse(innerX+12, innerY+1, tcell.Button1, tcell.ModNone),
+	)
+	if action != tview.MouseConsumed || returned != nil || list.GetCurrentItem() != 0 {
+		t.Fatalf("decorative click = (%v, %#v), selection=%d; want consumed without selection change", action, returned, list.GetCurrentItem())
+	}
+}
+
+func TestLoadSQLiteSidebarColumnMetadataMarksKeysAndNullability(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`PRAGMA foreign_keys = ON;
+CREATE TABLE accounts (id INTEGER PRIMARY KEY);
+CREATE TABLE users (
+  id INTEGER PRIMARY KEY,
+  account_id INTEGER NOT NULL REFERENCES accounts(id),
+  email TEXT
+);`); err != nil {
+		t.Fatalf("create schema: %v", err)
+	}
+
+	columns, err := loadSidebarColumnMetadata(context.Background(), db, config.SQLite, "users", "")
+	if err != nil {
+		t.Fatalf("load sidebar metadata: %v", err)
+	}
+	byName := make(map[string]sidebarColumnMeta, len(columns))
+	for _, column := range columns {
+		byName[column.name] = column
+	}
+	if !byName["id"].primaryKey || byName["id"].dataType != "INTEGER" {
+		t.Fatalf("id metadata = %#v", byName["id"])
+	}
+	if !byName["account_id"].foreignKey || !byName["account_id"].notNull || byName["account_id"].target != "accounts.id" {
+		t.Fatalf("account_id metadata = %#v", byName["account_id"])
+	}
+	app := &App{sidebarColumnMetadata: map[string][]sidebarColumnMeta{"users": columns}}
+	label := app.sidebarColumnLabel(sidebarColumnRef{table: "users", column: "account_id"}, false, "")
+	for _, want := range []string{"account_id", "FK", "NN", "integer"} {
+		if !strings.Contains(label, want) {
+			t.Fatalf("metadata label = %q, want %q", label, want)
+		}
+	}
+}
+
+func BenchmarkSidebarSearchLargeSchema(b *testing.B) {
+	tables := make([]string, 5000)
+	catalog := sqlCompletionCatalog{relations: make([]sqlCompletionRelation, len(tables))}
+	for tableIndex := range tables {
+		table := fmt.Sprintf("table_%04d", tableIndex)
+		tables[tableIndex] = table
+		columns := make([]string, 20)
+		for columnIndex := range columns {
+			columns[columnIndex] = fmt.Sprintf("column_%02d", columnIndex)
+		}
+		catalog.relations[tableIndex] = sqlCompletionRelation{name: table, kind: sqlCompletionTable, columns: columns}
+	}
+	index := buildSidebarSearchIndex(tables, catalog, nil)
+	b.ResetTimer()
+	for range b.N {
+		_, _ = bestSidebarSearchMatch(index, "table_4999.column_19")
+	}
+}
+
+func BenchmarkSidebarApplySearchLargeSchema(b *testing.B) {
+	tables := make([]string, 5000)
+	catalog := sqlCompletionCatalog{relations: make([]sqlCompletionRelation, len(tables))}
+	for tableIndex := range tables {
+		table := fmt.Sprintf("table_%04d", tableIndex)
+		tables[tableIndex] = table
+		columns := make([]string, 20)
+		for columnIndex := range columns {
+			columns[columnIndex] = fmt.Sprintf("column_%02d", columnIndex)
+		}
+		catalog.relations[tableIndex] = sqlCompletionRelation{name: table, kind: sqlCompletionTable, columns: columns}
+	}
+	app := &App{
+		tables: tview.NewList().ShowSecondaryText(false), tableOrder: tables, tableCount: len(tables),
+		tableIdentifiers: map[int]string{}, tableColumnItems: map[int]sidebarColumnRef{},
+		databaseObjects: map[int]databaseObjectListItem{}, sortColumn: -1, sqlCompletionCatalog: catalog,
+	}
+	app.sidebarSearchIndex = buildSidebarSearchIndex(tables, catalog, nil)
+	app.rebuildTableSidebar(sidebarSelection{})
+	app.tableSearch = "table_4999.column_19"
+	app.applyTableSearch()
+	b.ResetTimer()
+	for iteration := range b.N {
+		if iteration%2 == 0 {
+			app.tableSearch = "table_4999.column_18"
+		} else {
+			app.tableSearch = "table_4999.column_19"
+		}
+		app.applyTableSearch()
+	}
+}
+
+func BenchmarkSidebarMetadataRefreshLargeSchema(b *testing.B) {
+	tables := make([]string, 5000)
+	catalog := sqlCompletionCatalog{relations: make([]sqlCompletionRelation, len(tables))}
+	for tableIndex := range tables {
+		table := fmt.Sprintf("table_%04d", tableIndex)
+		tables[tableIndex] = table
+		columns := make([]string, 20)
+		for columnIndex := range columns {
+			columns[columnIndex] = fmt.Sprintf("column_%02d", columnIndex)
+		}
+		catalog.relations[tableIndex] = sqlCompletionRelation{name: table, kind: sqlCompletionTable, columns: columns}
+	}
+	app := &App{
+		tables: tview.NewList().ShowSecondaryText(false), tableOrder: tables, tableCount: len(tables),
+		tableIdentifiers: map[int]string{}, tableColumnItems: map[int]sidebarColumnRef{},
+		databaseObjects: map[int]databaseObjectListItem{}, sortColumn: -1, sqlCompletionCatalog: catalog,
+		expandedSidebarTable: "table_4999",
+	}
+	app.sidebarSearchIndex = buildSidebarSearchIndex(tables, catalog, nil)
+	app.sidebarSearchLookup = buildSidebarSearchLookup(app.sidebarSearchIndex)
+	app.rebuildTableSidebar(sidebarSelection{table: "table_4999", column: "column_19"})
+	metadata := make([]sidebarColumnMeta, 20)
+	for index := range metadata {
+		metadata[index] = sidebarColumnMeta{name: fmt.Sprintf("column_%02d", index), dataType: "text", notNull: index%2 == 0}
+	}
+	b.ResetTimer()
+	for range b.N {
+		app.applySidebarColumnMetadata("table_4999", metadata)
+	}
+}
+
+func BenchmarkSidebarRebuildLargeSchema(b *testing.B) {
+	tables := make([]string, 5000)
+	catalog := sqlCompletionCatalog{relations: make([]sqlCompletionRelation, len(tables))}
+	for tableIndex := range tables {
+		table := fmt.Sprintf("table_%04d", tableIndex)
+		tables[tableIndex] = table
+		columns := make([]string, 20)
+		for columnIndex := range columns {
+			columns[columnIndex] = fmt.Sprintf("column_%02d", columnIndex)
+		}
+		catalog.relations[tableIndex] = sqlCompletionRelation{name: table, kind: sqlCompletionTable, columns: columns}
+	}
+	app := &App{
+		tables: tview.NewList().ShowSecondaryText(false), tableOrder: tables, tableCount: len(tables),
+		tableIdentifiers: map[int]string{}, tableColumnItems: map[int]sidebarColumnRef{},
+		databaseObjects: map[int]databaseObjectListItem{}, sortColumn: -1, sqlCompletionCatalog: catalog,
+	}
+	app.rebuildTableSidebar(sidebarSelection{table: "table_4999"})
+	b.ResetTimer()
+	for iteration := range b.N {
+		if iteration%2 == 0 {
+			app.expandedSidebarTable = "table_4999"
+		} else {
+			app.expandedSidebarTable = ""
+		}
+		app.rebuildTableSidebar(sidebarSelection{table: "table_4999"})
+	}
+}
 
 func TestIsSelectableTableLabelIgnoresDecorativeRows(t *testing.T) {
 	cases := []struct {
@@ -20,6 +336,9 @@ func TestIsSelectableTableLabelIgnoresDecorativeRows(t *testing.T) {
 		{name: "visited table", label: "[#6c7086]•[-]  public.orders", want: true},
 		{name: "filtered unvisited table", label: "[#cba6f7]/[-] public.logs", want: true},
 		{name: "pinned table", label: "[#f9e2af]" + iconPin + "[-] public.events", want: true},
+		{name: "collapsed table", label: "    [#6c7086]▸[-] public.events", want: true},
+		{name: "expanded table", label: "    [#a6adc8]▾[-] public.events", want: true},
+		{name: "expanded column", label: "      [#6c7086]├─[-] account_id [#cba6f7]FK[-]", want: true},
 		{name: "section header", label: "[#6c7086]── Views (2) ──[-]", want: false},
 		{name: "indented styled object", label: "  [#a6adc8]◈[-] reporting_view", want: false},
 		{name: "empty decorative", label: "   [gray]No tables found[-]", want: false},
@@ -44,7 +363,7 @@ func TestTableSearchMatchRangeIsCaseInsensitive(t *testing.T) {
 	}
 }
 
-func TestTableTypeAheadSelectsFirstMatchAndClearsOnEnter(t *testing.T) {
+func TestTableTypeAheadRanksPrefixAndClearsOnEnter(t *testing.T) {
 	list := tview.NewList().ShowSecondaryText(false)
 	list.AddItem("[#6c7086]── Schema (public) ──[-]", "", 0, nil)
 	list.AddItem("audit_users", "", 0, nil)
@@ -65,12 +384,12 @@ func TestTableTypeAheadSelectsFirstMatchAndClearsOnEnter(t *testing.T) {
 		}
 	}
 
-	if got := list.GetCurrentItem(); got != 1 {
-		t.Fatalf("selected index = %d, want first matching index 1", got)
+	if got := list.GetCurrentItem(); got != 2 {
+		t.Fatalf("selected index = %d, want stronger prefix match at index 2", got)
 	}
-	label, _ := list.GetItemText(1)
+	label, _ := list.GetItemText(2)
 	if !strings.Contains(label, "[black:#f9e2af:b]user[-:-:-]") {
-		t.Fatalf("matching letters are not highlighted: %q", label)
+		t.Fatalf("selected match is not highlighted: %q", label)
 	}
 	if !strings.Contains(list.GetTitle(), "USER") {
 		t.Fatalf("title does not show active search: %q", list.GetTitle())
@@ -83,8 +402,8 @@ func TestTableTypeAheadSelectsFirstMatchAndClearsOnEnter(t *testing.T) {
 	if app.tableSearch != "" {
 		t.Fatalf("search was not cleared: %q", app.tableSearch)
 	}
-	label, _ = list.GetItemText(1)
-	if label != "     audit_users" {
+	label, _ = list.GetItemText(2)
+	if strings.Contains(label, "[black:#f9e2af:b]") || !strings.Contains(label, "▸[-] user_profiles") {
 		t.Fatalf("highlight was not cleared: %q", label)
 	}
 }

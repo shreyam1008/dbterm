@@ -19,7 +19,10 @@ func TestKeyboardHelpHighlightsCoreWorkflows(t *testing.T) {
 		"[yellow]/[-]",
 		"Clear a filter",
 		"Pin/unpin the selected table",
-		"Copy the selected table name",
+		"Copy the selected table or column name",
+		"Find a column",
+		"Type (headers)",
+		"Copy the complete selected column name",
 		"[yellow]Shift+C / Right-click[-]",
 		"Tab / Shift+Tab",
 		"[yellow]Ctrl++ / Ctrl+-[-]",
@@ -27,7 +30,7 @@ func TestKeyboardHelpHighlightsCoreWorkflows(t *testing.T) {
 		"[yellow]> / <[-]",
 		"[yellow]0 / Ctrl+0[-]",
 		"[yellow]Ctrl+P[-]",
-		"Search documented actions, database objects, and recent queries",
+		"Search documented actions, tables, collapsed columns, database objects, and recent queries",
 	} {
 		if !strings.Contains(help, expected) {
 			t.Fatalf("keyboard help is missing %q", expected)

@@ -136,6 +136,7 @@ func (a *App) executeQueryWorker(ctx context.Context, finish func(), db *sql.DB,
 		a.queueManualQueryCompletion(db, resultGeneration, finish, func() {
 			a.tableResultsActive = false
 			a.activeTable = ""
+			a.resultColumnSearch = ""
 			a.refreshTableSidebarState()
 			a.clearResultNavigation()
 			a.resetSort()
@@ -245,10 +246,24 @@ func (a *App) showQueryError(err error, query string) {
 
 	var hint string
 	errLower := strings.ToLower(errMsg)
+	missingColumn := sqlErrorMatchesAnyPattern(errMsg, sqlMissingColumnPatterns)
+	missingRelation := sqlErrorMatchesAnyPattern(errMsg, sqlMissingRelationPatterns)
 
 	switch {
-	case strings.Contains(errLower, "does not exist") || strings.Contains(errLower, "no such table"):
-		hint = fmt.Sprintf("\n\n💡 Hint: Check table name spelling. Press %s to see available tables.", a.escapedActionShortcut(actionFocusTables))
+	case missingColumn:
+		if suggestion, ok := sqlMissingColumnSuggestion(errMsg, query, a.sqlCompletionCatalog, a.selectedTable); ok {
+			hint = fmt.Sprintf("\n\n💡 Did you mean column %s? Correct it, or press Ctrl+Space in this expression for ranked columns.", tview.Escape(suggestion))
+		} else {
+			hint = "\n\n💡 Hint: Check the column name, then press Ctrl+Space in this expression for columns from the referenced or selected table."
+		}
+	case missingRelation:
+		if suggestion, ok := sqlMissingRelationSuggestion(errMsg, a.sqlCompletionCatalog); ok {
+			hint = fmt.Sprintf("\n\n💡 Did you mean %s? Correct the table name, or press Ctrl+Space after FROM for ranked matches.", tview.Escape(suggestion))
+		} else {
+			hint = fmt.Sprintf("\n\n💡 Hint: Check table name spelling. Press %s to see available tables, or Ctrl+Space after FROM for matches.", a.escapedActionShortcut(actionFocusTables))
+		}
+	case strings.Contains(errLower, "does not exist"):
+		hint = "\n\n💡 Hint: Check the referenced database object name and schema. Ctrl+Space can show local catalog matches."
 	case strings.Contains(errLower, "syntax error") || strings.Contains(errLower, "near"):
 		hint = fmt.Sprintf("\n\n💡 Hint: Check your SQL syntax. Press %s for cheatsheets.", a.escapedActionShortcut(actionHelp))
 	case strings.Contains(errLower, "permission denied") || strings.Contains(errLower, "access denied"):

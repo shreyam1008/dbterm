@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -18,12 +19,15 @@ const (
 	commandPaletteQueryLimit = 24
 
 	paletteActionRunQuery             keymapAction = "palette_run_query"
+	paletteActionSQLSuggestions       keymapAction = "palette_sql_suggestions"
 	paletteActionRefreshTable         keymapAction = "palette_refresh_table"
 	paletteActionRefreshDatabase      keymapAction = "palette_refresh_database"
 	paletteActionFilterColumn         keymapAction = "palette_filter_column"
 	paletteActionFilterClipboard      keymapAction = "palette_filter_clipboard"
 	paletteActionClearFilters         keymapAction = "palette_clear_filters"
 	paletteActionCopyCell             keymapAction = "palette_copy_cell"
+	paletteActionFindResultColumn     keymapAction = "palette_find_result_column"
+	paletteActionCopyColumnName       keymapAction = "palette_copy_column_name"
 	paletteActionExploreRelationships keymapAction = "palette_explore_relationships"
 	paletteActionSortColumn           keymapAction = "palette_sort_column"
 	paletteActionOpenRowDetail        keymapAction = "palette_open_row_detail"
@@ -41,6 +45,7 @@ type commandPaletteItemKind string
 const (
 	commandPaletteAction    commandPaletteItemKind = "action"
 	commandPaletteTable     commandPaletteItemKind = "table"
+	commandPaletteColumn    commandPaletteItemKind = "column"
 	commandPaletteView      commandPaletteItemKind = "view"
 	commandPaletteFunction  commandPaletteItemKind = "function"
 	commandPaletteProcedure commandPaletteItemKind = "procedure"
@@ -56,6 +61,7 @@ type commandPaletteItem struct {
 	description string
 	keywords    string
 	objectName  string
+	columnName  string
 	shortcut    string
 	action      keymapAction
 	objectType  database.DBObjectType
@@ -79,7 +85,7 @@ type commandPaletteActionSpec struct {
 }
 
 var commandPaletteActionSpecs = []commandPaletteActionSpec{
-	{actionFocusTables, "Focus Tables", "Move focus to the database object list so you can find and open a table.", "sidebar objects navigation browse", ""},
+	{actionFocusTables, "Focus Tables & Schema", "Move focus to the searchable schema tree so you can expand tables and open columns.", "sidebar objects columns navigation browse", ""},
 	{actionFocusQuery, "Focus Query Editor", "Move focus to the SQL editor and keep the current query text intact.", "sql statement editor write", ""},
 	{actionFocusResults, "Focus Results", "Move focus to the result grid for cell navigation, filtering, and row actions.", "data grid cells rows navigation", ""},
 	{actionDashboard, "Open Dashboard", "Open saved connections, connection health, and connection management.", "connections home back manage", ""},
@@ -97,11 +103,14 @@ var commandPaletteActionSpecs = []commandPaletteActionSpec{
 	{actionClearSelection, "Clear Result Row Selection", "Remove the selection marker from all currently displayed result rows.", "unselect deselect rows bulk", ""},
 	{actionSettings, "Open Settings", "Configure effective keyboard shortcuts and dashboard health-check behavior.", "preferences keymap bindings configuration", ""},
 	{paletteActionUpdates, "Version & Update", "Show the current build, check the latest GitHub release, and install it with checksum verification while preserving the user profile.", "about upgrade latest release current version", "U (Dashboard)"},
+	{paletteActionSQLSuggestions, "Open Smart SQL Suggestions", "Focus Query and show context-ranked SQL, typo-tolerant tables, selected-table columns, and ready read-only query templates.", "autocomplete completion template preview count columns typo", "Ctrl+Space"},
 	{paletteActionRunQuery, "Run Current SQL", "Execute the SQL currently in the Query editor against the active connection.", "execute statement editor", "Enter"},
 	{paletteActionRefreshTable, "Refresh Current Table", "Reload the active table page without blocking the interface; Esc cancels safely.", "reload data rows", "F5"},
 	{paletteActionRefreshDatabase, "Refresh Database Objects and Data", "Reload tables and objects, then reload the active table with cancellable progress.", "full reload schema sidebar", "Ctrl+F5"},
 	{paletteActionToggleTablePin, "Pin / Unpin Selected Table", "Move the selected sidebar table into or out of the persistent pinned section for this database connection.", "favorite favourite top sidebar table", "Space (Tables)"},
 	{paletteActionCopyTableName, "Copy Selected Table Name", "Copy the complete selected table identifier without opening it.", "clipboard relation identifier sidebar", "Shift+C / Right-click (Tables)"},
+	{paletteActionFindResultColumn, "Find a Result Column", "Focus the selectable header row; type to find and highlight a column, then press Down or Enter for its data.", "header field name jump search highlight columns", "↑ from first data row"},
+	{paletteActionCopyColumnName, "Copy Selected Column Name", "Copy the complete name of the selected result column.", "clipboard header field identifier", "Shift+C (Headers)"},
 	{paletteActionFilterColumn, "Filter Selected Column", "Open the typed filter builder for the selected result column; Apply updates and Add AND composes.", "where search operator contains starts null", "/"},
 	{paletteActionFilterClipboard, "Filter Column by Clipboard", "Apply or update equality on the selected column using the copied value; SQL NULL becomes IS NULL.", "paste value cross table lookup", "V"},
 	{paletteActionClearFilters, "Clear All Active Filters", "Remove every active table predicate and reload the first page.", "reset where predicates", "Esc"},
@@ -126,6 +135,7 @@ func (a *App) showCommandPalette() {
 
 	a.paletteReturnPage, _ = a.pages.GetFrontPage()
 	a.paletteReturnFocus = a.app.GetFocus()
+	a.ensureSidebarSearchIndex()
 	items := a.buildCommandPaletteItems()
 	paletteShortcut := a.effectiveActionShortcut(actionCommandPalette)
 	if paletteShortcut == "" {
@@ -134,7 +144,7 @@ func (a *App) showCommandPalette() {
 
 	searchInput := tview.NewInputField().
 		SetLabel(" Search ").
-		SetPlaceholder("commands, tables, views, functions, procedures, triggers, or recent SQL...")
+		SetPlaceholder("commands, tables, columns, views, routines, or recent SQL...")
 	searchInput.SetBorder(true).
 		SetTitle(fmt.Sprintf(" Command & Object Palette [yellow](%s)[-] ", tview.Escape(paletteShortcut))).
 		SetTitleColor(mauve).
@@ -203,7 +213,7 @@ func (a *App) showCommandPalette() {
 	}
 
 	refreshMatches := func(query string) {
-		matches = searchCommandPaletteItems(items, query)
+		matches = a.searchCommandPaletteItemsWithColumns(items, query, 80)
 		list.Clear()
 		list.SetTitle(fmt.Sprintf(" Matches (%d) ", len(matches)))
 		if len(matches) == 0 {
@@ -531,12 +541,20 @@ func uniqueCommandPaletteStrings(values []string) []string {
 }
 
 func searchCommandPaletteItems(items []commandPaletteItem, query string) []commandPaletteMatch {
+	return searchCommandPaletteItemsLimit(items, query, 0)
+}
+
+func searchCommandPaletteItemsLimit(items []commandPaletteItem, query string, limit int) []commandPaletteMatch {
 	terms := strings.Fields(strings.ToLower(strings.TrimSpace(query)))
-	matches := make([]commandPaletteMatch, 0, len(items))
+	capacity := len(items)
+	if limit > 0 {
+		capacity = min(capacity, limit)
+	}
+	matches := make([]commandPaletteMatch, 0, capacity)
 	for sourceIndex, item := range items {
 		match := commandPaletteMatch{item: item, sourceIndex: sourceIndex}
 		if len(terms) == 0 {
-			matches = append(matches, match)
+			matches = appendLimitedCommandPaletteMatch(matches, match, limit)
 			continue
 		}
 
@@ -553,12 +571,11 @@ func searchCommandPaletteItems(items []commandPaletteItem, query string) []comma
 		}
 
 		matched := true
-		positionSet := map[int]struct{}{}
 		for _, term := range terms {
 			bestScore := int(^uint(0) >> 1)
 			termMatched := false
 			for _, field := range fields {
-				_, score, ok := fuzzySubsequenceMatch(field.text, term)
+				score, ok := fuzzySubsequenceScore(field.text, term)
 				if !ok {
 					continue
 				}
@@ -572,32 +589,273 @@ func searchCommandPaletteItems(items []commandPaletteItem, query string) []comma
 				break
 			}
 			match.score += bestScore
-			if positions, _, ok := fuzzySubsequenceMatch(item.title, term); ok {
+		}
+		if !matched {
+			continue
+		}
+		matches = appendLimitedCommandPaletteMatch(matches, match, limit)
+	}
+
+	sort.SliceStable(matches, func(i, j int) bool { return commandPaletteMatchLess(matches[i], matches[j]) })
+	for index := range matches {
+		positionSet := make(map[int]struct{})
+		for _, term := range terms {
+			if positions, _, ok := fuzzySubsequenceMatch(matches[index].item.title, term); ok {
 				for _, position := range positions {
 					positionSet[position] = struct{}{}
 				}
 			}
 		}
+		for position := range positionSet {
+			matches[index].titlePositions = append(matches[index].titlePositions, position)
+		}
+		sort.Ints(matches[index].titlePositions)
+	}
+	return matches
+}
+
+func commandPaletteMatchLess(left, right commandPaletteMatch) bool {
+	if left.score != right.score {
+		return left.score < right.score
+	}
+	if left.item.sortOrder != right.item.sortOrder {
+		return left.item.sortOrder < right.item.sortOrder
+	}
+	return left.sourceIndex < right.sourceIndex
+}
+
+func (a *App) searchCommandPaletteItemsWithColumns(items []commandPaletteItem, query string, limit int) []commandPaletteMatch {
+	columnMatches := searchSidebarColumnPaletteWithLookup(a.sidebarSearchIndex, a.sidebarSearchLookup, query, limit)
+	trimmedQuery := strings.TrimSpace(query)
+	if len(columnMatches) > 0 && (strings.Contains(trimmedQuery, ".") || len(strings.Fields(trimmedQuery)) > 1) {
+		return columnMatches
+	}
+	matches := searchCommandPaletteItemsLimit(items, query, limit)
+	matches = append(matches, columnMatches...)
+	sort.SliceStable(matches, func(i, j int) bool { return commandPaletteMatchLess(matches[i], matches[j]) })
+	if limit > 0 && len(matches) > limit {
+		matches = matches[:limit]
+	}
+	return matches
+}
+
+func searchSidebarColumnPalette(entries []sidebarSearchEntry, query string, limit int) []commandPaletteMatch {
+	return searchSidebarColumnPaletteWithLookup(entries, sidebarSearchLookup{}, query, limit)
+}
+
+func searchSidebarColumnPaletteWithLookup(entries []sidebarSearchEntry, lookup sidebarSearchLookup, query string, limit int) []commandPaletteMatch {
+	terms := strings.Fields(strings.ToLower(strings.TrimSpace(query)))
+	if len(terms) == 0 || limit == 0 {
+		return nil
+	}
+	if candidates := exactSidebarSearchCandidates(lookup, terms); len(candidates) > 0 {
+		if matches := searchSidebarColumnPaletteMode(entries, candidates, terms, limit, false); len(matches) > 0 {
+			return matches
+		}
+		if matches := searchSidebarColumnPaletteMode(entries, candidates, terms, limit, true); len(matches) > 0 {
+			return matches
+		}
+	}
+	matches := searchSidebarColumnPaletteMode(entries, nil, terms, limit, false)
+	if len(matches) == 0 {
+		matches = searchSidebarColumnPaletteMode(entries, nil, terms, limit, true)
+	}
+	return matches
+}
+
+func searchSidebarColumnPaletteMode(entries []sidebarSearchEntry, candidates []int, terms []string, limit int, allowFuzzy bool) []commandPaletteMatch {
+	matches := make([]commandPaletteMatch, 0, min(limit, 32))
+	visit := func(sourceIndex int, entry sidebarSearchEntry) {
+		if entry.column == "" {
+			return
+		}
+		score := 0
+		matched := true
+		for _, term := range terms {
+			termScore, ok := sidebarColumnPaletteTermScore(entry, term, allowFuzzy)
+			if !ok {
+				matched = false
+				break
+			}
+			score += termScore
+		}
 		if !matched {
-			continue
+			return
+		}
+		title := entry.table + "." + entry.column
+		match := commandPaletteMatch{
+			item: commandPaletteItem{
+				id: "column:" + title, kind: commandPaletteColumn, title: title,
+				description: fmt.Sprintf("Open table %s and select column %s in the Results header.", entry.table, entry.column),
+				keywords:    "field schema table column", objectName: entry.table, columnName: entry.column,
+				sortOrder: 150 + entry.order,
+			},
+			score: score, sourceIndex: sourceIndex + 1_000_000,
+		}
+		matches = appendLimitedCommandPaletteMatch(matches, match, limit)
+	}
+	if len(candidates) > 0 {
+		for _, sourceIndex := range candidates {
+			if sourceIndex >= 0 && sourceIndex < len(entries) {
+				visit(sourceIndex, entries[sourceIndex])
+			}
+		}
+	} else {
+		for sourceIndex, entry := range entries {
+			visit(sourceIndex, entry)
+		}
+	}
+	sort.SliceStable(matches, func(i, j int) bool { return commandPaletteMatchLess(matches[i], matches[j]) })
+	for index := range matches {
+		positionSet := make(map[int]struct{})
+		for _, term := range terms {
+			if positions, _, ok := fuzzySubsequenceMatch(matches[index].item.title, term); ok {
+				for _, position := range positions {
+					positionSet[position] = struct{}{}
+				}
+			}
 		}
 		for position := range positionSet {
-			match.titlePositions = append(match.titlePositions, position)
+			matches[index].titlePositions = append(matches[index].titlePositions, position)
 		}
-		sort.Ints(match.titlePositions)
-		matches = append(matches, match)
+		sort.Ints(matches[index].titlePositions)
+	}
+	return matches
+}
+
+func sidebarColumnPaletteTermScore(entry sidebarSearchEntry, term string, allowFuzzy bool) (int, bool) {
+	if strings.Contains(term, ".") {
+		return sidebarSearchEntryScore(entry, term, allowFuzzy)
+	}
+	best := int(^uint(0) >> 1)
+	if strings.Contains(entry.columnFolded, term) {
+		best = sidebarTextMatchScore(entry.columnFolded, term)
+	} else if allowFuzzy {
+		if score, ok := foldedSubsequenceScore(entry.columnFolded, term); ok {
+			best = 80 + score
+		}
+	}
+	if strings.Contains(entry.tableFolded, term) {
+		best = min(best, 50+sidebarTextMatchScore(entry.tableFolded, term))
+	} else if allowFuzzy {
+		if score, ok := foldedSubsequenceScore(entry.tableFolded, term); ok {
+			best = min(best, 130+score)
+		}
+	}
+	return best, best != int(^uint(0)>>1)
+}
+
+func appendLimitedCommandPaletteMatch(matches []commandPaletteMatch, match commandPaletteMatch, limit int) []commandPaletteMatch {
+	if limit <= 0 || len(matches) < limit {
+		return append(matches, match)
+	}
+	worst := 0
+	for index := 1; index < len(matches); index++ {
+		if commandPaletteMatchLess(matches[worst], matches[index]) {
+			worst = index
+		}
+	}
+	if !commandPaletteMatchLess(match, matches[worst]) {
+		return matches
+	}
+	matches[worst] = match
+	return matches
+}
+
+func fuzzySubsequenceScore(candidate, query string) (int, bool) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return 0, true
+	}
+	if !isASCIIString(candidate) || !isASCIIString(query) {
+		_, score, ok := fuzzySubsequenceMatch(candidate, query)
+		return score, ok
+	}
+	if len(candidate) == 0 || len(query) > len(candidate) {
+		return 0, false
 	}
 
-	sort.SliceStable(matches, func(i, j int) bool {
-		if matches[i].score != matches[j].score {
-			return matches[i].score < matches[j].score
+	queryIndex := 0
+	start := -1
+	previous := -2
+	boundaryBonus := 0
+	contiguousBonus := 0
+	last := -1
+	for candidateIndex := 0; candidateIndex < len(candidate) && queryIndex < len(query); candidateIndex++ {
+		if asciiLower(candidate[candidateIndex]) != asciiLower(query[queryIndex]) {
+			continue
 		}
-		if matches[i].item.sortOrder != matches[j].item.sortOrder {
-			return matches[i].item.sortOrder < matches[j].item.sortOrder
+		if start < 0 {
+			start = candidateIndex
 		}
-		return matches[i].sourceIndex < matches[j].sourceIndex
-	})
-	return matches
+		if candidateIndex == previous+1 {
+			contiguousBonus += 3
+		}
+		if candidateIndex == 0 || isCommandPaletteBoundary(rune(candidate[candidateIndex-1])) {
+			boundaryBonus += 4
+		}
+		previous = candidateIndex
+		last = candidateIndex
+		queryIndex++
+	}
+	if queryIndex != len(query) {
+		return 0, false
+	}
+	span := last - start + 1
+	gaps := span - len(query)
+	score := start*6 + gaps*5 + len(candidate) - len(query) - contiguousBonus - boundaryBonus
+	if asciiEqualFold(candidate, query) {
+		score -= 200
+	} else if asciiHasPrefixFold(candidate, query) {
+		score -= 100
+	} else if asciiIndexFold(candidate, query) >= 0 {
+		score -= 50
+	}
+	return score, true
+}
+
+func isASCIIString(value string) bool {
+	for index := 0; index < len(value); index++ {
+		if value[index] >= utf8.RuneSelf {
+			return false
+		}
+	}
+	return true
+}
+
+func asciiLower(value byte) byte {
+	if value >= 'A' && value <= 'Z' {
+		return value + ('a' - 'A')
+	}
+	return value
+}
+
+func asciiEqualFold(left, right string) bool {
+	return len(left) == len(right) && asciiHasPrefixFold(left, right)
+}
+
+func asciiHasPrefixFold(candidate, prefix string) bool {
+	if len(prefix) > len(candidate) {
+		return false
+	}
+	for index := range len(prefix) {
+		if asciiLower(candidate[index]) != asciiLower(prefix[index]) {
+			return false
+		}
+	}
+	return true
+}
+
+func asciiIndexFold(candidate, query string) int {
+	if query == "" {
+		return 0
+	}
+	for start := 0; start+len(query) <= len(candidate); start++ {
+		if asciiHasPrefixFold(candidate[start:], query) {
+			return start
+		}
+	}
+	return -1
 }
 
 func fuzzySubsequenceMatch(candidate, query string) ([]int, int, bool) {
@@ -720,6 +978,8 @@ func commandPaletteCategoryTag(kind commandPaletteItemKind) string {
 		return "[#cba6f7]ACTION[-]"
 	case commandPaletteTable:
 		return "[#89b4fa]TABLE[-]"
+	case commandPaletteColumn:
+		return "[#74c7ec]COLUMN[-]"
 	case commandPaletteView:
 		return "[#94e2d5]VIEW[-]"
 	case commandPaletteFunction:
@@ -743,6 +1003,8 @@ func (a *App) executeCommandPaletteItem(item commandPaletteItem) {
 		a.executeCommandPaletteAction(item.action, item.title)
 	case commandPaletteTable:
 		a.openCommandPaletteTable(item.objectName)
+	case commandPaletteColumn:
+		a.openCommandPaletteColumn(item.objectName, item.columnName)
 	case commandPaletteView, commandPaletteFunction, commandPaletteProcedure, commandPaletteTrigger:
 		a.openCommandPaletteDatabaseObject(item.objectType, item.objectName)
 	case commandPaletteQuery:
@@ -817,6 +1079,9 @@ func (a *App) executeCommandPaletteAction(action keymapAction, title string) {
 			return
 		}
 		a.ExecuteQuery(query)
+	case paletteActionSQLSuggestions:
+		a.showCommandPaletteWorkspace(a.queryInput)
+		a.refreshSQLCompletions(true)
 	case paletteActionRefreshTable:
 		a.showCommandPaletteWorkspace(a.results)
 		a.refreshCurrentTableAsync()
@@ -829,6 +1094,12 @@ func (a *App) executeCommandPaletteAction(action keymapAction, title string) {
 	case paletteActionCopyTableName:
 		a.showCommandPaletteWorkspace(a.tables)
 		a.copySelectedTableName()
+	case paletteActionFindResultColumn:
+		a.showCommandPaletteWorkspace(a.results)
+		a.focusResultColumnHeader()
+	case paletteActionCopyColumnName:
+		a.showCommandPaletteWorkspace(a.results)
+		a.copySelectedResultColumnName()
 	case paletteActionFilterColumn:
 		a.showCommandPaletteWorkspace(a.results)
 		a.showResultFilterModal()
@@ -876,8 +1147,9 @@ func commandPaletteActionNeedsConnection(action keymapAction) bool {
 	case actionFocusTables, actionFocusQuery, actionFocusResults, actionFullscreen,
 		actionBackup, actionExportCSV, actionHistory, actionImportDump,
 		actionInspectSchema, actionSelectAll, actionClearSelection,
-		paletteActionRunQuery, paletteActionRefreshTable, paletteActionRefreshDatabase,
+		paletteActionRunQuery, paletteActionSQLSuggestions, paletteActionRefreshTable, paletteActionRefreshDatabase,
 		paletteActionToggleTablePin, paletteActionCopyTableName,
+		paletteActionFindResultColumn, paletteActionCopyColumnName,
 		paletteActionFilterColumn, paletteActionFilterClipboard, paletteActionClearFilters,
 		paletteActionCopyCell, paletteActionExploreRelationships, paletteActionSortColumn,
 		paletteActionOpenRowDetail, paletteActionNextPage, paletteActionPreviousPage,
@@ -920,24 +1192,18 @@ func (a *App) openCommandPaletteTable(tableName string) {
 			break
 		}
 	}
-	previous := a.captureResultNavigationState()
-	previousStack := append([]resultNavigationState(nil), a.resultNavStack...)
-	a.selectTableWithRememberedFilter(tableName)
-	a.clearResultNavigation()
-	a.resetSort()
-	a.resetPagination()
 	a.setFocusWithColor(a.tables)
-	a.loadCurrentTableAsync(tableLoadOptions{
-		loadingText:  fmt.Sprintf("Loading %s...", tableName),
-		cancelText:   "Press Esc to cancel opening this table.",
-		canceledText: "Table loading canceled",
-		errorText:    fmt.Sprintf("Could not load table %q", tableName),
-		rollback: func() {
-			a.restoreResultNavigationState(previous)
-			a.resultNavStack = previousStack
-			a.selectTableListIdentifier(previous.table)
-		},
-	})
+	a.openSidebarTable(tableName, nil)
+}
+
+func (a *App) openCommandPaletteColumn(tableName, columnName string) {
+	if strings.TrimSpace(tableName) == "" || strings.TrimSpace(columnName) == "" || !a.commandPaletteRequireConnection("Finding a column") {
+		return
+	}
+	a.pages.SwitchToPage("main")
+	a.revealSidebarColumn(tableName, columnName)
+	a.flashStatus(fmt.Sprintf("[teal]Opening %s.%s…[-]", tview.Escape(tableName), tview.Escape(columnName)), a.currentResultRowCount(), 1800*time.Millisecond)
+	a.openSidebarColumn(sidebarColumnRef{table: tableName, column: columnName})
 }
 
 func (a *App) openCommandPaletteDatabaseObject(objectType database.DBObjectType, objectName string) {

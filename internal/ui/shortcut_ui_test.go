@@ -103,6 +103,35 @@ func TestFooterTextThatFitsKeepsRichestAvailableCandidate(t *testing.T) {
 	}
 }
 
+func TestShiftTabReversePanelCyclePreservesResultHeader(t *testing.T) {
+	application := tview.NewApplication()
+	tables := tview.NewList()
+	query := tview.NewTextArea()
+	results := newResultTable()
+	results.SetCell(0, 0, tview.NewTableCell("EMAIL").SetReference("email").SetSelectable(true))
+	results.SetCell(1, 0, tview.NewTableCell("a@example.com"))
+	results.Select(0, 0)
+	app := &App{
+		app: application, tables: tables, queryInput: query, results: results,
+		statusBar: tview.NewTextView(), resultColumnSearch: "em",
+	}
+
+	application.SetFocus(tables)
+	app.focusedPanel = tables
+	app.cycleFocusReverse()
+	if application.GetFocus() != results {
+		t.Fatal("Shift+Tab from Tables did not return to Results")
+	}
+	if row, col := results.GetSelection(); row != 0 || col != 0 || app.resultColumnSearch != "em" {
+		t.Fatalf("result header state changed after reverse cycle: row=%d col=%d search=%q", row, col, app.resultColumnSearch)
+	}
+
+	app.cycleFocus()
+	if application.GetFocus() != tables {
+		t.Fatal("Tab from Results did not return to Tables")
+	}
+}
+
 func TestWorkspacePanelTitleUsesEffectiveShortcut(t *testing.T) {
 	settings := config.DefaultSettings()
 	settings.Keymap[config.ActionFocusResults] = []string{"f9"}

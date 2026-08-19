@@ -77,15 +77,23 @@ type App struct {
 	tables                *tview.List
 	databaseObjects       map[int]databaseObjectListItem
 	tableIdentifiers      map[int]string
+	tableColumnItems      map[int]sidebarColumnRef
 	tableOrder            []string
 	tableSidebarItems     int
 	tableSearch           string
+	expandedSidebarTable  string
+	sidebarColumnMetadata map[string][]sidebarColumnMeta
+	sidebarMetadataLoads  map[string]bool
+	sidebarSearchIndex    []sidebarSearchEntry
+	sidebarSearchLookup   sidebarSearchLookup
+	sidebarRenderedSearch sidebarSelection
 	databaseObjectCount   int
 	selectedTable         string
 	activeTable           string          // table whose rows are currently visible
 	visitedTables         map[string]bool // tables opened during the active connection
 	tableResultsActive    bool
 	resultPositions       map[string]resultSelectionState // remembered cursor/scroll position per table
+	resultColumnSearch    string                          // type-ahead search while the result header row is active
 	resultFilter          *resultValueFilter
 	resultFilters         map[string]*resultValueFilter // remembered per table for the active connection
 	copiedCellValue       string
@@ -122,6 +130,7 @@ type App struct {
 	totalRowCount           int           // cached COUNT(*) for the selected table (-1 = unknown)
 	resultGeneration        atomic.Uint64 // invalidates async result metadata updates
 	sqlCompletionGeneration atomic.Uint64 // invalidates async autocomplete metadata
+	sidebarSearchGeneration atomic.Uint64 // debounces lazy metadata while type-ahead changes
 	resultNavStack          []resultNavigationState
 
 	// Layout components for scaling
@@ -289,11 +298,7 @@ func (a *App) setupUI() {
 
 	// ── Results table input: sort on 's', key navigation, column width ──
 	a.results.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		// tview scans backwards through the non-selectable header when Up is
-		// pressed on the first data row. From columns after the first, that scan
-		// restarts the selection at column 0. Treat the top row as a hard
-		// vertical boundary so the selected column is preserved.
-		if resultSelectionAtTop(a.results, event) {
+		if a.handleResultColumnInput(event) {
 			return nil
 		}
 
@@ -378,6 +383,11 @@ func (a *App) setupUI() {
 			}
 		}
 		return event
+	})
+	a.results.SetSelectionChangedFunc(func(_, _ int) {
+		if a.statusBar != nil {
+			a.updateStatusBar("", a.currentResultRowCount())
+		}
 	})
 
 	// Execute query on Enter; Shift+Enter or Alt+Enter inserts newline
@@ -527,6 +537,20 @@ func (a *App) cycleFocus() {
 		a.setFocusWithColor(a.queryInput)
 	case a.queryInput:
 		a.setFocusWithColor(a.results)
+	default:
+		a.setFocusWithColor(a.tables)
+	}
+}
+
+// cycleFocusReverse mirrors the standard Shift+Tab convention while keeping
+// each panel's cursor and type-ahead search exactly where the user left it.
+func (a *App) cycleFocusReverse() {
+	current := a.app.GetFocus()
+	switch current {
+	case a.tables:
+		a.setFocusWithColor(a.results)
+	case a.results:
+		a.setFocusWithColor(a.queryInput)
 	default:
 		a.setFocusWithColor(a.tables)
 	}
@@ -916,29 +940,7 @@ func resultCellSortText(cell *tview.TableCell) (string, bool) {
 }
 
 func (a *App) setSortHeaderIndicator() {
-	if a.results == nil {
-		return
-	}
-	colCount := a.results.GetColumnCount()
-	for c := 0; c < colCount; c++ {
-		headerCell := a.results.GetCell(0, c)
-		if headerCell == nil {
-			continue
-		}
-		name := stripSortIndicator(headerCell.Text)
-		if c == a.sortColumn {
-			if a.sortAsc {
-				headerCell.Text = name + " ▲"
-			} else {
-				headerCell.Text = name + " ▼"
-			}
-		} else {
-			headerCell.Text = name
-		}
-		if width := tview.TaggedStringWidth(headerCell.Text); headerCell.MaxWidth > width {
-			headerCell.Text += strings.Repeat(" ", headerCell.MaxWidth-width)
-		}
-	}
+	a.refreshResultColumnHeaders()
 }
 
 func stripSortIndicator(text string) string {
@@ -1006,6 +1008,10 @@ func (a *App) setupKeyBindings() {
 			if page == "main" && current == a.queryInput && a.handleSQLCompletionKey(event) {
 				return nil
 			}
+			if page == "main" && current == a.results && a.hasActiveResultColumnSearch() {
+				a.clearResultColumnSearch()
+				return nil
+			}
 			// Let the Tables list clear an active type-ahead search first.
 			if current == a.tables && a.hasActiveTableSearch() {
 				return event
@@ -1042,6 +1048,9 @@ func (a *App) setupKeyBindings() {
 			}
 			// If in query input, let it delete text
 			if current == a.queryInput {
+				return event
+			}
+			if page == "main" && current == a.results && a.hasActiveResultColumnSearch() {
 				return event
 			}
 			// Related-row hops keep a navigation stack. In Results,
@@ -1129,6 +1138,10 @@ func (a *App) setupKeyBindings() {
 		// Tab — cycle focus between panels
 		if event.Key() == tcell.KeyTab {
 			a.cycleFocus()
+			return nil
+		}
+		if event.Key() == tcell.KeyBacktab {
+			a.cycleFocusReverse()
 			return nil
 		}
 
@@ -1354,13 +1367,8 @@ func (a *App) applyColumnWidths() {
 				cell.SetMaxWidth(w).SetExpansion(0)
 			}
 		}
-		if header := a.results.GetCell(0, c); header != nil {
-			label := strings.TrimSpace(header.Text)
-			if width := tview.TaggedStringWidth(label); width < w {
-				header.Text = label + strings.Repeat(" ", w-width)
-			}
-		}
 	}
+	a.refreshResultColumnHeaders()
 }
 
 // adjustColumnWidth changes the width of a single column by delta characters.
@@ -1524,8 +1532,16 @@ func (a *App) clearTableSessionState() {
 	a.visitedTables = nil
 	a.selectedTable = ""
 	a.tableSearch = ""
+	a.sidebarSearchGeneration.Add(1)
+	a.expandedSidebarTable = ""
+	a.sidebarSearchIndex = nil
+	a.sidebarSearchLookup = sidebarSearchLookup{}
+	a.sidebarRenderedSearch = sidebarSelection{}
+	a.sidebarColumnMetadata = nil
+	a.sidebarMetadataLoads = nil
 	a.tableResultsActive = false
 	a.resultPositions = nil
+	a.resultColumnSearch = ""
 	a.resultFilter = nil
 	a.resultFilters = nil
 	a.refreshTableSidebarState()
@@ -1653,12 +1669,23 @@ func (a *App) statusActionText(width int) string {
 	selectAllKey := a.taggedActionShortcut(actionSelectAll)
 	clearSelectionKey := a.taggedActionShortcut(actionClearSelection)
 	if inQuery && a.sqlCompletionState.visible {
-		return "[yellow]↑/↓[-] Choose  │  [yellow]Tab[-] Insert  │  [yellow]Esc[-] Close  │  [yellow]Enter[-] Run"
+		return "[yellow]↑/↓[-] Choose  │  [yellow]Tab/Enter[-] Insert  │  [yellow]Esc[-] Close"
+	}
+	if inResults && a.resultHeaderSelected() {
+		find := ""
+		if a.resultColumnSearch != "" {
+			find = fmt.Sprintf(" [#a6adc8]find:[-][yellow]%s[-]  │ ", tview.Escape(a.resultColumnSearch))
+		}
+		full := find + "[yellow]Type[-] Find column  │  [yellow]←/→[-] Headers  │  [yellow]↓/Enter[-] Data  │  [yellow]Shift+C[-] Copy name  │  [yellow]Tab[-] Tables"
+		medium := find + "[yellow]Type[-] Find  │  [yellow]←/→[-] Move  │  [yellow]↓[-] Data  │  [yellow]Shift+C[-] Copy  │  [yellow]Tab[-] Tables"
+		short := find + "[yellow]Type[-] Find column  │  [yellow]↓[-] Data  │  [yellow]Tab[-] Tables"
+		minimal := "[yellow]↓[-] Data  │  [yellow]Tab[-] Tables"
+		return footerTextThatFits(max(1, width-2), full, medium, short, minimal)
 	}
 	if inTables {
-		full := fmt.Sprintf("[yellow]Space[-] Pin/unpin table  │  [yellow]Type[-] Find  │  [yellow]Enter[-] Open  │  [yellow]Shift+C/Right-click[-] Copy  │  %s Schema  │  [yellow]%s[-] Palette", schemaKey, paletteKey)
-		medium := fmt.Sprintf("[yellow]Space[-] Pin/unpin  │  [yellow]Type[-] Find  │  [yellow]Enter[-] Open  │  [yellow]Shift+C[-] Copy  │  [yellow]%s[-] Palette", paletteKey)
-		short := "[yellow]Space[-] Pin  │  [yellow]Enter[-] Open  │  [yellow]Shift+C[-] Copy  │  [yellow]Esc[-] Back"
+		full := fmt.Sprintf("[yellow]→/←[-] Expand/collapse  │  [yellow]Type[-] Find table/column  │  [yellow]Space[-] Pin  │  [yellow]Enter[-] Open  │  [yellow]Shift+C/Right-click[-] Copy  │  %s Schema  │  [yellow]%s[-] Palette", schemaKey, paletteKey)
+		medium := fmt.Sprintf("[yellow]→/←[-] Schema  │  [yellow]Type[-] Find all  │  [yellow]Space[-] Pin  │  [yellow]Enter[-] Open  │  [yellow]Shift+C[-] Copy  │  [yellow]%s[-] Palette", paletteKey)
+		short := "[yellow]→/←[-] Schema  │  [yellow]Space[-] Pin  │  [yellow]Enter[-] Open  │  [yellow]Shift+C[-] Copy  │  [yellow]Esc[-] Back"
 		compact := "[yellow]Enter[-] Open  │  [yellow]Shift+C[-] Copy  │  [yellow]Esc[-] Back"
 		minimal := "[yellow]Shift+C[-] Copy  │  [yellow]Esc[-] Back"
 		return footerTextThatFits(max(1, width-2), full, medium, short, compact, minimal)

@@ -25,11 +25,11 @@ const quickStartSteps = [
   },
   {
     step: "Run your first query",
-    detail: "Focus Query (Alt+Q), type sel to see local SQL suggestions, press Tab to insert, and press Enter to run."
+    detail: "Select a table, focus Query (Alt+Q), and press Ctrl+Space for ready read-only queries; type SQL for context-ranked tables and columns."
   },
   {
     step: "Inspect and iterate",
-    detail: "Use Alt+T and Alt+R to move between tables and results while refining SQL."
+    detail: "Use Alt+T and Alt+R directly, or Tab and Shift+Tab, to move between table and column searches without losing their position."
   }
 ];
 
@@ -41,33 +41,38 @@ const workspacePanels = [
   },
   {
     panel: "Query",
-    behavior: "Write SQL with local context-aware keyword and schema autocomplete, then execute it directly against the current database session.",
+    behavior: "Write SQL with local typo-tolerant table, column, clause, keyword, and schema suggestions, or insert a ready read-only query for the selected table.",
     keys: "Alt+Q, Ctrl+Space, ↑/↓, Tab, Enter, Shift+Enter"
   },
   {
     panel: "Tables",
-    behavior: "Browse grouped schema objects, type to jump, pin frequent tables, and load data into Results.",
-    keys: "Alt+T, type, Space, F5, Ctrl+F5"
+    behavior: "Search every table and collapsed column, expand one schema branch with lazy PK/FK/NN/type metadata, pin tables, and open a column directly in Results.",
+    keys: "Alt+T, type, →/←, click ▸/▾, Space, Enter, Shift+C"
   },
   {
     panel: "Results",
-    behavior: "Filter typed values, explore parent and child rows, follow multi-table chains, page and sort data, inspect full cells, and export selected/current/all-matching CSV.",
-    keys: "Alt+R, /, V, F, S, PgUp/PgDn, Alt+E, Enter, +/−"
+    behavior: "Press Up from the first data row to search selectable column headers, then filter values, follow relationships, page, sort, inspect, and export.",
+    keys: "Alt+R, ↑ then type, ←/→, ↓, Shift+C, /, V, F, S"
   }
 ];
 
 const shortcutRows = [
-  { combo: "Ctrl + P", action: "Fuzzy-search commands, database objects, and recent SQL (default binding)" },
+  { combo: "Ctrl + P", action: "Search commands, tables, collapsed columns, database objects, and recent SQL (default binding)" },
   { combo: "Alt + Q / T / R", action: "Focus Query, Tables, or Results panel" },
+  { combo: "Tab / Shift + Tab", action: "Cycle workspace panels forward / backward while preserving each panel's position and type-ahead search" },
   { combo: "Space (Tables)", action: "Pin or unpin the highlighted table at the top for this database connection" },
+  { combo: "Right / Left or click ▸ / ▾ (Tables)", action: "Expand or enter columns / return to the parent or collapse it; one table stays expanded" },
+  { combo: "Type (Tables)", action: "Search tables and collapsed columns; a matching column expands and highlights automatically" },
   { combo: "Enter", action: "Execute query (in Query panel)" },
   { combo: "Shift + Enter", action: "New line in query (multiline SQL)" },
-  { combo: "Ctrl + Space / ↑ / ↓ / Tab", action: "Open, navigate, and insert local SQL suggestions" },
+  { combo: "Ctrl + Space / ↑ / ↓ / Tab / Enter", action: "Open smart local suggestions or ready selected-table queries, then navigate and insert" },
   { combo: "Alt + Y", action: "Open per-connection query history" },
   { combo: "Alt + W", action: "Open Change Profiler; A selects the whole database and live progress shows percent/rate/ETA" },
   { combo: "Alt + A / Alt + C", action: "Select all result rows / clear selection" },
   { combo: "Space (Results)", action: "Toggle current row selection" },
   { combo: "C (Results)", action: "Copy the selected cell's complete value" },
+  { combo: "↑ from first result row, then type", action: "Enter the header row, jump to and highlight a matching column; Down or Enter returns to its data" },
+  { combo: "Shift + C (result headers)", action: "Copy the selected column's complete name" },
   { combo: "/ / V (Results)", action: "Build typed AND filters / filter the selected column by clipboard value" },
   { combo: "F / Backspace (Results)", action: "Explore declared relationships in both directions / return one step through the table chain" },
   { combo: "Alt + E", action: "Export selected rows, the current page, or all rows matching active table filters" },

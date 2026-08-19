@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -146,30 +147,101 @@ func TestResultSizeShortcutsSeparateColumnZoomAndRows(t *testing.T) {
 	}
 }
 
-func TestResultSelectionStaysInColumnAtTopRow(t *testing.T) {
+func TestResultSelectionMovesBetweenDataAndColumnHeader(t *testing.T) {
 	table := newResultTable()
 	for col := 0; col < 3; col++ {
-		table.SetCell(0, col, tview.NewTableCell("header").SetSelectable(false))
+		table.SetCell(0, col, tview.NewTableCell("header").SetReference("header").SetSelectable(true))
 		table.SetCell(1, col, tview.NewTableCell("value"))
 		table.SetCell(2, col, tview.NewTableCell("value"))
 	}
+	app := &App{results: table}
 
 	table.Select(1, 2)
 	up := tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
-	if !resultSelectionAtTop(table, up) {
-		t.Fatal("Up on the first data row should be consumed")
+	if !app.handleResultColumnInput(up) {
+		t.Fatal("Up on the first data row should enter the header")
+	}
+	if row, col := table.GetSelection(); row != 0 || col != 2 {
+		t.Fatalf("selection = (%d, %d), want header (0, 2)", row, col)
+	}
+
+	down := tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
+	if !app.handleResultColumnInput(down) {
+		t.Fatal("Down on the header should return to data")
 	}
 	if row, col := table.GetSelection(); row != 1 || col != 2 {
-		t.Fatalf("selection = (%d, %d), want (1, 2)", row, col)
+		t.Fatalf("selection after Down = (%d, %d), want (1, 2)", row, col)
 	}
 
 	table.Select(2, 2)
-	if resultSelectionAtTop(table, up) {
+	if app.handleResultColumnInput(up) {
 		t.Fatal("Up below the first data row should reach the table navigation handler")
 	}
 	table.InputHandler()(up, func(tview.Primitive) {})
 	if row, col := table.GetSelection(); row != 1 || col != 2 {
 		t.Fatalf("selection after moving up = (%d, %d), want (1, 2)", row, col)
+	}
+}
+
+func TestResultColumnTypeAheadHighlightsAndSelectsMatch(t *testing.T) {
+	table := newResultTable()
+	columns := []string{"id", "email_address", "created_at"}
+	for col, column := range columns {
+		table.SetCell(0, col, tview.NewTableCell(strings.ToUpper(column)).SetReference(column).SetSelectable(true))
+		table.SetCell(1, col, tview.NewTableCell("value"))
+	}
+	app := &App{results: table, sortColumn: -1}
+	table.Select(0, 0)
+
+	for _, r := range "EMAIL" {
+		if !app.handleResultColumnInput(tcell.NewEventKey(tcell.KeyRune, r, tcell.ModNone)) {
+			t.Fatalf("column search rune %q was not consumed", r)
+		}
+	}
+	if row, col := table.GetSelection(); row != 0 || col != 1 {
+		t.Fatalf("column search selection = (%d, %d), want header (0, 1)", row, col)
+	}
+	if got := table.GetCell(0, 1).Text; !strings.Contains(got, "[black:#f9e2af:b]EMAIL[-:-:-]") {
+		t.Fatalf("matching header is not highlighted: %q", got)
+	}
+
+	if !app.handleResultColumnInput(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)) {
+		t.Fatal("Down did not leave column search")
+	}
+	if app.resultColumnSearch != "" {
+		t.Fatalf("column search was not cleared: %q", app.resultColumnSearch)
+	}
+	if row, col := table.GetSelection(); row != 1 || col != 1 {
+		t.Fatalf("data selection = (%d, %d), want (1, 1)", row, col)
+	}
+}
+
+func TestResultHeaderStatusExplainsColumnSearchControls(t *testing.T) {
+	table := newResultTable()
+	table.SetCell(0, 0, tview.NewTableCell("EMAIL").SetReference("email").SetSelectable(true))
+	table.SetCell(1, 0, tview.NewTableCell("a@example.com"))
+	table.Select(0, 0)
+	app := &App{results: table, focusedPanel: table, resultColumnSearch: "em"}
+
+	hint := app.statusActionText(140)
+	for _, want := range []string{"find:", "Type", "Find column", "↓/Enter", "Shift+C", "Tab", "Tables"} {
+		if !strings.Contains(hint, want) {
+			t.Fatalf("header status = %q, want %q", hint, want)
+		}
+	}
+}
+
+func TestResultHeaderPositionRestoresPerTable(t *testing.T) {
+	table := newResultTable()
+	for col := 0; col < 3; col++ {
+		table.SetCell(0, col, tview.NewTableCell("HEADER").SetReference(fmt.Sprintf("column_%d", col)).SetSelectable(true))
+		table.SetCell(1, col, tview.NewTableCell("value"))
+	}
+	app := &App{results: table}
+	app.restoreResultSelection(resultSelectionState{row: 0, col: 2, offsetCol: 1}, 1)
+
+	if row, col := table.GetSelection(); row != 0 || col != 2 {
+		t.Fatalf("restored header selection = (%d, %d), want (0, 2)", row, col)
 	}
 }
 
