@@ -547,32 +547,20 @@ func dashboardFooterText(hasConnections, hasWorkspace bool, width int, paletteSh
 			medium := fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [blue]A[-] All DBs  │  [yellow]N[-] New  │  [green]B[-] Center  │  [yellow]W/Esc[-] Back %s", iconConnect, iconBack)
 			full := fmt.Sprintf("  [green]Enter[-] Connect %s  │  [blue]A[-] All server DBs  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [yellow]I[-] Import  │  [green]Ctrl+B[-] Schedule selected  │  [green]B[-] Backup Center  │  [#94e2d5]S[-] Services %s  │  [yellow]R[-] Recheck %s  │  [yellow]%s[-] Palette  │  [yellow]G[-] Settings  │  [yellow]U[-] Update  │  [yellow]W/Esc[-] Back %s  │  [#cba6f7]Q[-] Quit",
 				iconConnect, iconServices, iconRefresh, paletteShortcut, iconBack)
-			return firstDashboardFooterThatFits(width, full, medium, short, minimal)
+			return footerTextThatFits(width, full, medium, short, minimal)
 		}
 		medium := fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [blue]A[-] All DBs  │  [green]B[-] Center  │  [yellow]G[-] Settings  │  [teal]H[-] Help %s", iconConnect, iconHelp)
 		full := fmt.Sprintf("  [green]Enter[-] Connect %s  │  [blue]A[-] All server DBs  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [yellow]I[-] Import  │  [green]Ctrl+B[-] Schedule selected  │  [green]B[-] Backup Center  │  [#94e2d5]S[-] Services %s  │  [yellow]R[-] Recheck %s  │  [yellow]%s[-] Palette  │  [yellow]G[-] Settings  │  [yellow]U[-] Update  │  [teal]H[-] Help %s  │  [#cba6f7]Q[-] Quit",
 			iconConnect, iconServices, iconRefresh, paletteShortcut, iconHelp)
-		return firstDashboardFooterThatFits(width, full, medium, short, minimal)
+		return footerTextThatFits(width, full, medium, short, minimal)
 	}
 
 	if hasWorkspace {
 		short := fmt.Sprintf("  [yellow]N[-] New  │  [green]B[-] Backups  │  [yellow]W/Esc[-] Back %s  │  [#cba6f7]Q[-] Quit", iconBack)
 		full := fmt.Sprintf("  [yellow]N[-] New Connection  │  [green]B[-] Backups  │  [#94e2d5]S[-] Services %s  │  [yellow]%s[-] Palette  │  [yellow]G[-] Settings  │  [yellow]U[-] Update  │  [yellow]W/Esc[-] Back %s  │  [#cba6f7]Q[-] Quit", iconServices, paletteShortcut, iconBack)
-		return firstDashboardFooterThatFits(width, full, short, minimal)
+		return footerTextThatFits(width, full, short, minimal)
 	}
 	short := fmt.Sprintf("  [yellow]N[-] New  │  [green]B[-] Backups  │  [teal]H[-] Help %s  │  [#cba6f7]Q[-] Quit", iconHelp)
 	full := fmt.Sprintf("  [yellow]N[-] New Connection  │  [green]B[-] Backups  │  [#94e2d5]S[-] Services %s  │  [yellow]%s[-] Palette  │  [yellow]G[-] Settings  │  [yellow]U[-] Update  │  [teal]H[-] Help %s  │  [#cba6f7]Q[-] Quit", iconServices, paletteShortcut, iconHelp)
-	return firstDashboardFooterThatFits(width, full, short, minimal)
-}
-
-func firstDashboardFooterThatFits(width int, candidates ...string) string {
-	for _, candidate := range candidates {
-		if width <= 0 || tview.TaggedStringWidth(candidate) <= width {
-			return candidate
-		}
-	}
-	if len(candidates) == 0 {
-		return ""
-	}
-	return candidates[len(candidates)-1]
+	return footerTextThatFits(width, full, short, minimal)
 }

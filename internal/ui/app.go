@@ -85,6 +85,7 @@ type App struct {
 	activeTable           string          // table whose rows are currently visible
 	visitedTables         map[string]bool // tables opened during the active connection
 	tableResultsActive    bool
+	resultPositions       map[string]resultSelectionState // remembered cursor/scroll position per table
 	resultFilter          *resultValueFilter
 	resultFilters         map[string]*resultValueFilter // remembered per table for the active connection
 	copiedCellValue       string
@@ -235,24 +236,25 @@ func (a *App) setupUI() {
 		SetFixed(1, 0). // ★ Freeze header row
 		SetSelectedStyle(tcell.StyleDefault.Background(blue).Foreground(crust))
 	a.results.SetBorder(true).
-		SetTitle(fmt.Sprintf(" %s Results [yellow](Alt+R)[-] ", iconResults)).
+		SetTitle(a.workspacePanelTitle(iconResults, "Results", actionFocusResults, "")).
 		SetBorderColor(surface1).
 		SetTitleColor(peach)
 
 	// ── Tables List ──
 	a.tables = tview.NewList().ShowSecondaryText(false)
 	a.tables.SetBorder(true).
-		SetTitle(fmt.Sprintf(" %s Tables [yellow](Alt+T)[-] ", iconTables)).
+		SetTitle(a.workspacePanelTitle(iconTables, "Tables", actionFocusTables, "")).
 		SetBorderColor(surface1).
 		SetTitleColor(peach)
 	a.tables.SetInputCapture(a.handleTableListInput)
+	a.tables.SetMouseCapture(a.handleTableListMouse)
 
 	// ── Query Input ──
 	a.queryInput = tview.NewTextArea().
 		SetPlaceholder("  Write SQL here — Enter to run, Shift+Enter for newline").
 		SetPlaceholderStyle(tcell.StyleDefault.Foreground(overlay0))
 	a.queryInput.SetBorder(true).
-		SetTitle(fmt.Sprintf(" %s Query [yellow](Alt+Q)[-] ", iconQuery)).
+		SetTitle(a.workspacePanelTitle(iconQuery, "Query", actionFocusQuery, "")).
 		SetBorderColor(surface1).
 		SetTitleColor(peach)
 	a.sqlCompletionView = newSQLCompletionView()
@@ -295,37 +297,39 @@ func (a *App) setupUI() {
 			return nil
 		}
 
-		switch event.Rune() {
-		case 'c', 'C':
-			a.copyCurrentResultCell()
-			return nil
-		case '/':
-			a.showResultFilterModal()
-			return nil
-		case 'v', 'V':
-			a.filterSelectedResultColumnByClipboard()
-			return nil
-		case 'f', 'F':
-			a.exploreSelectedRelationships()
-			return nil
-		case 's', 'S':
-			// Sort by current column
-			row, col := a.results.GetSelection()
-			a.toggleSort(col)
-			if row <= 0 {
-				row = 1
+		if shortcut, ok := plainShortcutRune(event); ok {
+			switch shortcut {
+			case 'c':
+				a.copyCurrentResultCell()
+				return nil
+			case '/':
+				a.showResultFilterModal()
+				return nil
+			case 'v':
+				a.filterSelectedResultColumnByClipboard()
+				return nil
+			case 'f':
+				a.exploreSelectedRelationships()
+				return nil
+			case 's':
+				// Sort by current column.
+				row, col := a.results.GetSelection()
+				a.toggleSort(col)
+				if row <= 0 {
+					row = 1
+				}
+				a.results.Select(row, col)
+				return nil
+			case ' ':
+				a.toggleCurrentResultRowSelection()
+				return nil
+			case ']':
+				a.nextPage()
+				return nil
+			case '[':
+				a.prevPage()
+				return nil
 			}
-			a.results.Select(row, col)
-			return nil
-		case ' ':
-			a.toggleCurrentResultRowSelection()
-			return nil
-		case ']':
-			a.nextPage()
-			return nil
-		case '[':
-			a.prevPage()
-			return nil
 		}
 
 		// Pagination: PgDn/PgUp for next/prev page, Home/End for first/last page
@@ -411,15 +415,16 @@ func (a *App) updateStatusBar(extra string, rowCount int) {
 	}
 
 	if a.db == nil {
+		helpKey := a.taggedActionShortcut(actionHelp)
 		if width < 58 {
-			a.statusBar.SetText("  [gray]○[-]  [yellow]Alt+H[-]  [yellow]Q[-]")
+			a.statusBar.SetText(fmt.Sprintf("  [gray]○[-]  %s  [yellow]Q[-]", helpKey))
 			return
 		}
 		if width < 80 {
-			a.statusBar.SetText("  [gray]○ offline[-]  │  [yellow]Alt+H[-] Help  │  [yellow]Q[-] Quit")
+			a.statusBar.SetText(fmt.Sprintf("  [gray]○ offline[-]  │  %s Help  │  [yellow]Q[-] Quit", helpKey))
 			return
 		}
-		a.statusBar.SetText(fmt.Sprintf("  [gray]○ offline[-]  │  %s no DB  │  [yellow]%s[-] Palette  │  [yellow]Alt+H[-] Help  │  [yellow]Q[-] Quit", iconConnect, tview.Escape(a.commandPaletteShortcutHint())))
+		a.statusBar.SetText(fmt.Sprintf("  [gray]○ offline[-]  │  %s no DB  │  [yellow]%s[-] Palette  │  %s Help  │  [yellow]Q[-] Quit", iconConnect, tview.Escape(a.commandPaletteShortcutHint()), helpKey))
 		return
 	}
 
@@ -480,13 +485,9 @@ func (a *App) updateStatusBar(extra string, rowCount int) {
 		parts = append(parts, extra)
 	}
 
-	// Put contextual table actions first so the pin/open/find controls remain
-	// visible even when a narrow terminal truncates status details on the right.
-	if a.focusedPanel == a.tables {
-		parts = append([]string{actionText}, parts...)
-	} else {
-		parts = append(parts, actionText)
-	}
+	// The focused panel's controls are the most immediately useful content.
+	// Keep them first so narrow terminals clip connection metadata, not actions.
+	parts = append([]string{actionText}, parts...)
 	a.statusBar.SetText("  " + strings.Join(parts, "  │  "))
 }
 
@@ -1022,6 +1023,9 @@ func (a *App) setupKeyBindings() {
 			}
 			// If anywhere else in main view, go back to dashboard
 			if page == "main" {
+				if current == a.results {
+					a.resetCurrentResultPosition()
+				}
 				a.pages.HidePage("main")
 				a.showDashboard()
 				return nil
@@ -1091,9 +1095,18 @@ func (a *App) setupKeyBindings() {
 				}
 				return nil
 			case actionDashboard:
-				if page == "main" || page == "help" {
-					a.pages.HidePage(page)
+				if page != "dashboard" {
+					if page == "main" {
+						a.pages.HidePage(page)
+					} else {
+						a.pages.RemovePage(page)
+					}
 					a.showDashboard()
+				}
+				return nil
+			case actionSettings:
+				if page != pageSettings {
+					a.showSettings()
 				}
 				return nil
 			case actionServices:
@@ -1203,12 +1216,6 @@ func (a *App) setupKeyBindings() {
 				return nil
 			case actionHistory:
 				a.showHistoryModal()
-				return nil
-			case actionSettings:
-				a.showSettings()
-				return nil
-			case actionChangeProfiler:
-				a.showChangeProfiler()
 				return nil
 			}
 		}
@@ -1518,6 +1525,7 @@ func (a *App) clearTableSessionState() {
 	a.selectedTable = ""
 	a.tableSearch = ""
 	a.tableResultsActive = false
+	a.resultPositions = nil
 	a.resultFilter = nil
 	a.resultFilters = nil
 	a.refreshTableSidebarState()
@@ -1638,17 +1646,22 @@ func (a *App) statusActionText(width int) string {
 	filterActive := a.isTableResultActive() && a.activeResultFilter(a.selectedTable) != nil
 	tableActive := a.isTableResultActive()
 	paletteKey := tview.Escape(a.commandPaletteShortcutHint())
+	schemaKey := a.taggedActionShortcut(actionInspectSchema)
+	exportKey := a.taggedActionShortcut(actionExportCSV)
+	helpKey := a.taggedActionShortcut(actionHelp)
+	dashboardKey := a.taggedActionShortcut(actionDashboard)
+	selectAllKey := a.taggedActionShortcut(actionSelectAll)
+	clearSelectionKey := a.taggedActionShortcut(actionClearSelection)
 	if inQuery && a.sqlCompletionState.visible {
 		return "[yellow]↑/↓[-] Choose  │  [yellow]Tab[-] Insert  │  [yellow]Esc[-] Close  │  [yellow]Enter[-] Run"
 	}
 	if inTables {
-		if width < 100 {
-			return "[yellow]Space[-] Pin/unpin  │  [yellow]Enter[-] Open  │  [yellow]Esc[-] Back"
-		}
-		if width < 140 {
-			return fmt.Sprintf("[yellow]Space[-] Pin/unpin  │  [yellow]Type[-] Find  │  [yellow]Enter[-] Open  │  [yellow]%s[-] Palette", paletteKey)
-		}
-		return fmt.Sprintf("[yellow]Space[-] Pin/unpin table  │  [yellow]Type[-] Find  │  [yellow]Enter[-] Open  │  [yellow]Alt+M[-] Schema  │  [yellow]%s[-] Palette", paletteKey)
+		full := fmt.Sprintf("[yellow]Space[-] Pin/unpin table  │  [yellow]Type[-] Find  │  [yellow]Enter[-] Open  │  [yellow]Shift+C/Right-click[-] Copy  │  %s Schema  │  [yellow]%s[-] Palette", schemaKey, paletteKey)
+		medium := fmt.Sprintf("[yellow]Space[-] Pin/unpin  │  [yellow]Type[-] Find  │  [yellow]Enter[-] Open  │  [yellow]Shift+C[-] Copy  │  [yellow]%s[-] Palette", paletteKey)
+		short := "[yellow]Space[-] Pin  │  [yellow]Enter[-] Open  │  [yellow]Shift+C[-] Copy  │  [yellow]Esc[-] Back"
+		compact := "[yellow]Enter[-] Open  │  [yellow]Shift+C[-] Copy  │  [yellow]Esc[-] Back"
+		minimal := "[yellow]Shift+C[-] Copy  │  [yellow]Esc[-] Back"
+		return footerTextThatFits(max(1, width-2), full, medium, short, compact, minimal)
 	}
 	switch {
 	case width < 72:
@@ -1659,52 +1672,52 @@ func (a *App) statusActionText(width int) string {
 			if filterActive {
 				return "[yellow]Esc[-] Clear filter  │  [yellow]C[-] Copy  │  [yellow]/[-] Find"
 			}
-			return "[yellow]C[-] Copy  │  [yellow]/[-] Filter  │  [yellow]Alt+E[-] CSV"
+			return fmt.Sprintf("[yellow]C[-] Copy  │  [yellow]/[-] Filter  │  %s CSV", exportKey)
 		}
-		return "[yellow]Space[-] Select  │  [yellow]Alt+E[-] CSV  │  [yellow]Esc[-] Back"
+		return fmt.Sprintf("[yellow]Space[-] Select  │  %s CSV  │  [yellow]Esc[-] Back", exportKey)
 	case width < 90:
 		if inQuery {
-			return fmt.Sprintf("[yellow]Enter[-] Run ▶  │  [yellow]Shift+Enter[-] Newline  │  [yellow]Esc[-] Back  │  [yellow]Alt+H[-] Help %s", iconHelp)
+			return fmt.Sprintf("[yellow]Enter[-] Run ▶  │  [yellow]Shift+Enter[-] Newline  │  [yellow]Esc[-] Back  │  %s Help %s", helpKey, iconHelp)
 		}
 		if inResults {
 			if filterActive {
-				return "[yellow]Esc[-] Clear filter  │  [yellow]/[-] Change  │  [yellow]Alt+E[-] CSV"
+				return fmt.Sprintf("[yellow]Esc[-] Clear filter  │  [yellow]/[-] Change  │  %s CSV", exportKey)
 			}
-			return "[yellow]C[-] Copy  │  [yellow]/[-] Filter  │  [yellow]V[-] Clipboard  │  [yellow]Alt+E[-] CSV"
+			return fmt.Sprintf("[yellow]C[-] Copy  │  [yellow]/[-] Filter  │  [yellow]V[-] Clipboard  │  %s CSV", exportKey)
 		}
-		return fmt.Sprintf("[yellow]Space[-] Select  │  [yellow]Alt+A/C[-] All/Clear  │  [yellow]Alt+E[-] CSV  │  [yellow]Alt+H[-] %s", iconHelp)
+		return fmt.Sprintf("[yellow]Space[-] Select  │  %s/%s All/Clear  │  %s CSV  │  %s %s", selectAllKey, clearSelectionKey, exportKey, helpKey, iconHelp)
 	case width < 120:
 		if inQuery {
-			return fmt.Sprintf("[yellow]Enter[-] Run ▶  │  [yellow]Shift+Enter[-] Newline  │  [yellow]F5[-] %s  │  [yellow]Alt+D/Esc[-] Dash %s",
-				iconRefresh, iconDashboard)
+			return fmt.Sprintf("[yellow]Enter[-] Run ▶  │  [yellow]Shift+Enter[-] Newline  │  [yellow]F5[-] %s  │  %s/[yellow]Esc[-] Dash %s",
+				iconRefresh, dashboardKey, iconDashboard)
 		}
 		if inResults {
 			if filterActive {
-				return fmt.Sprintf("[yellow]Esc[-] Clear filter  │  [yellow]/[-] Change  │  [yellow]C[-] Copy  │  [yellow]Alt+E[-] CSV  │  [yellow]Alt+H[-] %s", iconHelp)
+				return fmt.Sprintf("[yellow]Esc[-] Clear filter  │  [yellow]/[-] Change  │  [yellow]C[-] Copy  │  %s CSV  │  %s %s", exportKey, helpKey, iconHelp)
 			}
 			if tableActive {
-				return "[yellow]C[-] Copy  │  [yellow]/[-] Filter  │  [yellow]V[-] Clipboard  │  [yellow]F[-] Follow FK  │  [yellow]Alt+E[-] CSV"
+				return fmt.Sprintf("[yellow]C[-] Copy  │  [yellow]/[-] Filter  │  [yellow]V[-] Clipboard  │  [yellow]F[-] Follow FK  │  %s CSV", exportKey)
 			}
-			return fmt.Sprintf("[yellow]C[-] Copy  │  [yellow]Enter[-] Detail  │  [yellow]Alt+E[-] CSV  │  [yellow]%s[-] Palette", paletteKey)
+			return fmt.Sprintf("[yellow]C[-] Copy  │  [yellow]Enter[-] Detail  │  %s CSV  │  [yellow]%s[-] Palette", exportKey, paletteKey)
 		}
-		return fmt.Sprintf("[yellow]F5[-] %s  │  [yellow]Space[-] Toggle Sel  │  [yellow]Alt+A/C/E[-] All/Clear/CSV  │  [yellow]Enter[-] Detail  │  [yellow]Alt+D/Esc[-] Dash %s",
-			iconRefresh, iconDashboard)
+		return fmt.Sprintf("[yellow]F5[-] %s  │  [yellow]Space[-] Toggle Sel  │  %s/%s/%s All/Clear/CSV  │  [yellow]Enter[-] Detail  │  %s/[yellow]Esc[-] Dash %s",
+			iconRefresh, selectAllKey, clearSelectionKey, exportKey, dashboardKey, iconDashboard)
 	default:
 		if inQuery {
-			return fmt.Sprintf("[yellow]Enter[-] Run ▶  │  [yellow]Shift+Enter[-] Newline  │  [yellow]F5[-] %s  │  [yellow]Alt+H[-] Help %s  │  [yellow]Esc/Bksp[-] Dashboard %s",
-				iconRefresh, iconHelp, iconDashboard)
+			return fmt.Sprintf("[yellow]Enter[-] Run ▶  │  [yellow]Shift+Enter[-] Newline  │  [yellow]F5[-] %s  │  %s Help %s  │  [yellow]Esc/Bksp[-] Dashboard %s",
+				iconRefresh, helpKey, iconHelp, iconDashboard)
 		}
 		if inResults {
 			if filterActive {
-				return fmt.Sprintf("[yellow]Esc[-] Clear filters  │  [yellow]/[-] Change  │  [yellow]C[-] Copy  │  [yellow]V[-] Clipboard  │  [yellow]F[-] Follow FK  │  [yellow]Alt+E[-] CSV  │  [yellow]%s[-] Palette", paletteKey)
+				return fmt.Sprintf("[yellow]Esc[-] Clear filters  │  [yellow]/[-] Change  │  [yellow]C[-] Copy  │  [yellow]V[-] Clipboard  │  [yellow]F[-] Follow FK  │  %s CSV  │  [yellow]%s[-] Palette", exportKey, paletteKey)
 			}
 			if tableActive {
-				return fmt.Sprintf("[yellow]C[-] Copy  │  [yellow]/[-] Filter  │  [yellow]V[-] Clipboard  │  [yellow]F[-] Follow FK  │  [yellow]Alt+E[-] CSV  │  [yellow]Enter[-] Detail  │  [yellow]F5[-] %s  │  [yellow]%s[-] Palette", iconRefresh, paletteKey)
+				return fmt.Sprintf("[yellow]C[-] Copy  │  [yellow]/[-] Filter  │  [yellow]V[-] Clipboard  │  [yellow]F[-] Follow FK  │  %s CSV  │  [yellow]Enter[-] Detail  │  [yellow]F5[-] %s  │  [yellow]%s[-] Palette", exportKey, iconRefresh, paletteKey)
 			}
-			return fmt.Sprintf("[yellow]C[-] Copy  │  [yellow]Space[-] Select  │  [yellow]Enter[-] Detail  │  [yellow]Alt+E[-] CSV  │  [yellow]%s[-] Palette  │  [yellow]Alt+H[-] %s", paletteKey, iconHelp)
+			return fmt.Sprintf("[yellow]C[-] Copy  │  [yellow]Space[-] Select  │  [yellow]Enter[-] Detail  │  %s CSV  │  [yellow]%s[-] Palette  │  %s %s", exportKey, paletteKey, helpKey, iconHelp)
 		}
-		return fmt.Sprintf("[yellow]F5[-] %s  │  [yellow]Space[-] Toggle Sel  │  [yellow]Alt+A[-] All  │  [yellow]Alt+C[-] Clear  │  [yellow]Alt+E[-] CSV  │  [yellow]Enter[-] Detail  │  [yellow]Alt+H[-] Help %s  │  [yellow]Esc/Bksp[-] Dashboard %s",
-			iconRefresh, iconHelp, iconDashboard)
+		return fmt.Sprintf("[yellow]F5[-] %s  │  [yellow]Space[-] Toggle Sel  │  %s All  │  %s Clear  │  %s CSV  │  [yellow]Enter[-] Detail  │  %s Help %s  │  [yellow]Esc/Bksp[-] Dashboard %s",
+			iconRefresh, selectAllKey, clearSelectionKey, exportKey, helpKey, iconHelp, iconDashboard)
 	}
 }
 

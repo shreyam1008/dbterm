@@ -40,6 +40,7 @@ var keymapFieldSpecs = []keymapFieldSpec{
 	{Action: config.ActionFullscreen, Label: "Toggle Fullscreen"},
 	{Action: config.ActionBackup, Label: "Open Backup"},
 	{Action: config.ActionBackupCenter, Label: "Backup Center"},
+	{Action: config.ActionChangeProfiler, Label: "Change Profiler"},
 	{Action: config.ActionExportCSV, Label: "Export CSV"},
 	{Action: config.ActionHistory, Label: "Query History"},
 	{Action: config.ActionSettings, Label: "Open Settings"},
@@ -303,6 +304,7 @@ func (a *App) showSettings() {
 		settings = updated
 		a.settings = cloneSettings(updated)
 		a.keymap = resolver
+		a.refreshWorkspaceShortcutLabels()
 		agentMode := "read-only"
 		if updated.AgentAccess.AllowProfileWrites {
 			agentMode = "read-only database + profile writes allowed"

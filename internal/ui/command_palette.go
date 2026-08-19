@@ -32,6 +32,7 @@ const (
 	paletteActionFirstPage            keymapAction = "palette_first_page"
 	paletteActionLastPage             keymapAction = "palette_last_page"
 	paletteActionToggleTablePin       keymapAction = "palette_toggle_table_pin"
+	paletteActionCopyTableName        keymapAction = "palette_copy_table_name"
 	paletteActionUpdates              keymapAction = "palette_updates"
 )
 
@@ -100,6 +101,7 @@ var commandPaletteActionSpecs = []commandPaletteActionSpec{
 	{paletteActionRefreshTable, "Refresh Current Table", "Reload the active table page without blocking the interface; Esc cancels safely.", "reload data rows", "F5"},
 	{paletteActionRefreshDatabase, "Refresh Database Objects and Data", "Reload tables and objects, then reload the active table with cancellable progress.", "full reload schema sidebar", "Ctrl+F5"},
 	{paletteActionToggleTablePin, "Pin / Unpin Selected Table", "Move the selected sidebar table into or out of the persistent pinned section for this database connection.", "favorite favourite top sidebar table", "Space (Tables)"},
+	{paletteActionCopyTableName, "Copy Selected Table Name", "Copy the complete selected table identifier without opening it.", "clipboard relation identifier sidebar", "Shift+C / Right-click (Tables)"},
 	{paletteActionFilterColumn, "Filter Selected Column", "Open the typed filter builder for the selected result column; Apply updates and Add AND composes.", "where search operator contains starts null", "/"},
 	{paletteActionFilterClipboard, "Filter Column by Clipboard", "Apply or update equality on the selected column using the copied value; SQL NULL becomes IS NULL.", "paste value cross table lookup", "V"},
 	{paletteActionClearFilters, "Clear All Active Filters", "Remove every active table predicate and reload the first page.", "reset where predicates", "Esc"},
@@ -824,6 +826,9 @@ func (a *App) executeCommandPaletteAction(action keymapAction, title string) {
 	case paletteActionToggleTablePin:
 		a.showCommandPaletteWorkspace(a.tables)
 		a.toggleSelectedTablePin()
+	case paletteActionCopyTableName:
+		a.showCommandPaletteWorkspace(a.tables)
+		a.copySelectedTableName()
 	case paletteActionFilterColumn:
 		a.showCommandPaletteWorkspace(a.results)
 		a.showResultFilterModal()
@@ -872,7 +877,7 @@ func commandPaletteActionNeedsConnection(action keymapAction) bool {
 		actionBackup, actionExportCSV, actionHistory, actionImportDump,
 		actionInspectSchema, actionSelectAll, actionClearSelection,
 		paletteActionRunQuery, paletteActionRefreshTable, paletteActionRefreshDatabase,
-		paletteActionToggleTablePin,
+		paletteActionToggleTablePin, paletteActionCopyTableName,
 		paletteActionFilterColumn, paletteActionFilterClipboard, paletteActionClearFilters,
 		paletteActionCopyCell, paletteActionExploreRelationships, paletteActionSortColumn,
 		paletteActionOpenRowDetail, paletteActionNextPage, paletteActionPreviousPage,

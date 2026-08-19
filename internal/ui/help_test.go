@@ -19,17 +19,41 @@ func TestKeyboardHelpHighlightsCoreWorkflows(t *testing.T) {
 		"[yellow]/[-]",
 		"Clear a filter",
 		"Pin/unpin the selected table",
+		"Copy the selected table name",
+		"[yellow]Shift+C / Right-click[-]",
 		"Tab / Shift+Tab",
 		"[yellow]Ctrl++ / Ctrl+-[-]",
 		"[yellow]Alt++ / Alt+-[-]",
 		"[yellow]> / <[-]",
 		"[yellow]0 / Ctrl+0[-]",
-		"[yellow]Ctrl+P (default)[-]",
+		"[yellow]Ctrl+P[-]",
 		"Search documented actions, database objects, and recent queries",
 	} {
 		if !strings.Contains(help, expected) {
 			t.Fatalf("keyboard help is missing %q", expected)
 		}
+	}
+}
+
+func TestKeyboardHelpUsesEffectiveConfiguredShortcuts(t *testing.T) {
+	settings := config.DefaultSettings()
+	settings.Keymap[config.ActionFocusTables] = []string{"ctrl+g", "alt+t"}
+	settings.Keymap[config.ActionChangeProfiler] = []string{"f8"}
+	settings.Keymap[config.ActionCommandPalette] = []string{"alt+p"}
+
+	help := keyboardHelpTextFor(&App{settings: settings})
+	for _, expected := range []string{
+		"[yellow]Ctrl+G / Alt+T[-]",
+		"[yellow]F8[-]",
+		"[yellow]Alt+P[-] Search documented actions",
+		"CHANGE PROFILER (F8)",
+	} {
+		if !strings.Contains(help, expected) {
+			t.Fatalf("configured keyboard help is missing %q", expected)
+		}
+	}
+	if strings.Contains(help, "Ctrl+P (default)") {
+		t.Fatal("configured keyboard help still labels the default palette shortcut")
 	}
 }
 

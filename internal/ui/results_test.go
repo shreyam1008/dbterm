@@ -202,6 +202,102 @@ func TestPreparedTableResultRequestsHaveUniqueGenerations(t *testing.T) {
 	}
 }
 
+func TestPreparedTableResultRequestRestoresDestinationTablePosition(t *testing.T) {
+	remembered := resultSelectionState{
+		row:             7,
+		col:             3,
+		offsetRow:       5,
+		offsetCol:       2,
+		hasDataRow:      true,
+		selectedRowText: []string{"value:remembered"},
+	}
+	app := &App{
+		db:                 &sql.DB{},
+		dbType:             config.SQLite,
+		selectedTable:      "orders",
+		activeTable:        "users",
+		tableResultsActive: true,
+		results:            newResultTable(),
+		resultLimit:        100,
+		sortColumn:         -1,
+		resultPositions:    map[string]resultSelectionState{"orders": remembered},
+	}
+	app.results.SetCell(0, 0, tview.NewTableCell("id").SetSelectable(false))
+	app.results.SetCell(1, 0, tview.NewTableCell("source"))
+	app.results.Select(1, 0)
+
+	request, err := app.prepareTableResultRequest()
+	if err != nil {
+		t.Fatalf("prepare request: %v", err)
+	}
+	if got := request.selection; got.row != remembered.row || got.col != remembered.col || got.offsetRow != remembered.offsetRow || got.offsetCol != remembered.offsetCol || !got.hasDataRow || strings.Join(got.selectedRowText, ",") != strings.Join(remembered.selectedRowText, ",") {
+		t.Fatalf("request selection = %#v, want remembered %#v", got, remembered)
+	}
+
+	// The request owns a copy so later cache mutations cannot alter in-flight work.
+	app.resultPositions["orders"].selectedRowText[0] = "value:changed"
+	if got := request.selection.selectedRowText[0]; got != "value:remembered" {
+		t.Fatalf("request selection signature mutated to %q", got)
+	}
+}
+
+func TestPreparedTableResultRequestStartsUnvisitedTableAtTopLeft(t *testing.T) {
+	app := &App{
+		db:                 &sql.DB{},
+		dbType:             config.SQLite,
+		selectedTable:      "orders",
+		activeTable:        "users",
+		tableResultsActive: true,
+		results:            newResultTable(),
+		resultLimit:        100,
+		sortColumn:         -1,
+	}
+	app.results.SetCell(0, 0, tview.NewTableCell("id").SetSelectable(false))
+	app.results.SetCell(1, 0, tview.NewTableCell("source"))
+	app.results.Select(1, 0)
+	app.results.SetOffset(4, 2)
+
+	request, err := app.prepareTableResultRequest()
+	if err != nil {
+		t.Fatalf("prepare request: %v", err)
+	}
+	if got := request.selection; got.row != 1 || got.col != 0 || got.offsetRow != 0 || got.offsetCol != 0 || got.hasDataRow {
+		t.Fatalf("new table selection = %#v, want top-left default", got)
+	}
+}
+
+func TestResetCurrentResultPositionReturnsToTopLeftAndForgetsCache(t *testing.T) {
+	results := newResultTable()
+	for col := 0; col < 3; col++ {
+		results.SetCell(0, col, tview.NewTableCell("header").SetSelectable(false))
+		for row := 1; row <= 4; row++ {
+			results.SetCell(row, col, tview.NewTableCell("value"))
+		}
+	}
+	results.Select(4, 2)
+	results.SetOffset(3, 1)
+	app := &App{
+		activeTable:        "users",
+		selectedTable:      "users",
+		tableResultsActive: true,
+		results:            results,
+		resultPositions: map[string]resultSelectionState{
+			"users": {row: 4, col: 2, offsetRow: 3, offsetCol: 1},
+		},
+	}
+
+	app.resetCurrentResultPosition()
+	if row, col := results.GetSelection(); row != 1 || col != 0 {
+		t.Fatalf("reset selection = (%d, %d), want (1, 0)", row, col)
+	}
+	if row, col := results.GetOffset(); row != 0 || col != 0 {
+		t.Fatalf("reset offset = (%d, %d), want (0, 0)", row, col)
+	}
+	if _, remembered := app.resultPositions["users"]; remembered {
+		t.Fatal("reset position remained in the per-table cache")
+	}
+}
+
 func TestApplyTableResultSnapshotRejectsStaleRequest(t *testing.T) {
 	app := &App{
 		db:            &sql.DB{},

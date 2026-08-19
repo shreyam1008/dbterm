@@ -279,7 +279,7 @@ func (a *App) showDatabaseObjectInfoModal(objType database.DBObjectType, name, s
 		SetScrollable(true).
 		SetText(summary)
 	detailView.SetBorder(true).
-		SetTitle(fmt.Sprintf(" %s %s: %s (read-only) ", objectTypeIcon(objType), objType, name)).
+		SetTitle(fmt.Sprintf(" %s %s: %s (read-only) [yellow](Esc/Enter close)[-] ", objectTypeIcon(objType), objType, name)).
 		SetBorderColor(surface1).
 		SetTitleColor(mauve).
 		SetBackgroundColor(mantle)

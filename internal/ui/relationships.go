@@ -348,7 +348,7 @@ func (a *App) showRelatedDataPicker(tableName, column string, selectedValue fore
 		case event.Key() == tcell.KeyEscape:
 			closePicker()
 			return nil
-		case event.Rune() == 'v' || event.Rune() == 'V':
+		case matchesPlainShortcut(event, 'v'):
 			closePicker()
 			a.findSameValueMatches(tableName, column, selectedValue)
 			return nil
@@ -356,10 +356,11 @@ func (a *App) showRelatedDataPicker(tableName, column string, selectedValue fore
 		return event
 	})
 
+	modalW, modalH := a.modalSize(76, 110, 14, 28)
 	path := a.relationshipPathLabel(tableName)
-	footerText := fmt.Sprintf(" [yellow]Enter[-] Open related rows  │  [yellow]V[-] Same value across tables  │  [yellow]Esc[-] Close  │  [#6c7086]%d relation(s)[-]", len(relationships))
+	footerText := relatedDataFooterText(modalW, len(relationships))
 	if path != "" {
-		footerText = fmt.Sprintf(" [#6c7086]%s[-]\n%s", tview.Escape(path), footerText)
+		footerText = fmt.Sprintf(" [#6c7086]%s[-]\n%s", tview.Escape(truncateForDisplay(path, max(16, modalW-4))), footerText)
 	}
 	footer := tview.NewTextView().SetDynamicColors(true).SetTextAlign(tview.AlignCenter).SetText(footerText)
 	footer.SetBackgroundColor(crust)
@@ -370,7 +371,6 @@ func (a *App) showRelatedDataPicker(tableName, column string, selectedValue fore
 	container := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(list, 0, 1, true).
 		AddItem(footer, footerHeight, 0, false)
-	modalW, modalH := a.modalSize(76, 110, 14, 28)
 	grid := tview.NewGrid().
 		SetColumns(0, modalW, 0).
 		SetRows(0, modalH, 0).
@@ -441,6 +441,7 @@ func (a *App) navigateToRelatedRows(target string, predicates []resultFilterPred
 	origin := a.captureResultNavigationState()
 	stackDepth := len(a.resultNavStack)
 	a.resultNavStack = append(a.resultNavStack, origin)
+	a.rememberCurrentResultPosition()
 	a.rememberCurrentResultFilter()
 	a.selectedTable = target
 	a.resetSort()
@@ -695,15 +696,29 @@ func (a *App) showSameValueMatches(sourceTable, column string, value foreignKeyR
 		}
 		return event
 	})
+	modalW, modalH := a.modalSize(68, 100, 12, 26)
 	footer := tview.NewTextView().SetDynamicColors(true).SetTextAlign(tview.AlignCenter).
-		SetText(fmt.Sprintf(" [yellow]Enter[-] Open filtered table  │  [yellow]Esc[-] Close  │  [#6c7086]%d table(s)[-]", len(matches)))
+		SetText(sameValueMatchesFooterText(modalW, len(matches)))
 	footer.SetBackgroundColor(crust)
 	container := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(list, 0, 1, true).
 		AddItem(footer, 1, 0, false)
-	modalW, modalH := a.modalSize(68, 100, 12, 26)
 	grid := tview.NewGrid().SetColumns(0, modalW, 0).SetRows(0, modalH, 0).
 		AddItem(container, 1, 1, 1, 1, 0, 0, true)
 	a.pages.AddPage(pageSameValueMatches, grid, true, true)
 	a.app.SetFocus(list)
+}
+
+func relatedDataFooterText(width, relationshipCount int) string {
+	full := fmt.Sprintf(" [yellow]Enter[-] Open related rows  │  [yellow]V[-] Same value across tables  │  [yellow]Esc[-] Close  │  [#6c7086]%d relation(s)[-]", relationshipCount)
+	medium := " [yellow]Enter[-] Open  │  [yellow]V[-] Same value  │  [yellow]Esc[-] Close "
+	minimal := " [yellow]Enter[-] Open  │  [yellow]Esc[-] Close "
+	return footerTextThatFits(width, full, medium, minimal)
+}
+
+func sameValueMatchesFooterText(width, matchCount int) string {
+	full := fmt.Sprintf(" [yellow]Enter[-] Open filtered table  │  [yellow]Esc[-] Close  │  [#6c7086]%d table(s)[-]", matchCount)
+	short := " [yellow]Enter[-] Open filtered table  │  [yellow]Esc[-] Close "
+	minimal := " [yellow]Enter[-] Open  │  [yellow]Esc[-] Close "
+	return footerTextThatFits(width, full, short, minimal)
 }

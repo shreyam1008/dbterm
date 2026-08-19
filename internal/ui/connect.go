@@ -63,7 +63,7 @@ func (a *App) DirectConnect(dbType config.DBType, dsn, name string) error {
 	}
 
 	// Reset page title for results
-	a.results.SetTitle(fmt.Sprintf(" %s Results [yellow](Alt+R)[-] ", iconResults))
+	a.results.SetTitle(a.workspacePanelTitle(iconResults, "Results", actionFocusResults, ""))
 
 	return nil
 }
@@ -992,7 +992,7 @@ func (a *App) connectWithConfig(cfg *config.ConnectionConfig, storeIndex int) {
 			}
 
 			a.updateStatusBar("", 0)
-			a.results.SetTitle(fmt.Sprintf(" %s Results [yellow](Alt+R)[-] ", iconResults))
+			a.results.SetTitle(a.workspacePanelTitle(iconResults, "Results", actionFocusResults, ""))
 
 			a.pages.RemovePage("connectModal")
 			a.pages.RemovePage("dashboard")

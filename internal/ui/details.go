@@ -72,10 +72,12 @@ func (a *App) showRowDetail(row int) {
 	table.Select(1, 1)
 
 	// Instructions footer for the modal
+	screenW, _ := a.getScreenSize()
+	detailWidth := max(32, screenW*3/5)
 	instruction := tview.NewTextView().
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignCenter).
-		SetText(" [yellow]Esc/Enter[-] Close  │  [yellow]c[-] Copy selected cell  │  [yellow]Arrows[-] Move ")
+		SetText(rowDetailFooterText(detailWidth))
 	instruction.SetBackgroundColor(crust)
 
 	detailsFlex.AddItem(table, 0, 1, true)
@@ -102,7 +104,7 @@ func (a *App) showRowDetail(row int) {
 			a.app.SetFocus(a.results)
 			return nil
 		}
-		if event.Rune() == 'c' || event.Rune() == 'C' {
+		if matchesPlainShortcut(event, 'c') {
 			selectedRow, selectedCol := table.GetSelection()
 			if cell := table.GetCell(selectedRow, selectedCol); cell != nil {
 				value := strings.TrimSpace(cell.Text)
@@ -123,4 +125,11 @@ func (a *App) showRowDetail(row int) {
 
 	a.pages.AddPage("row_details", frame, true, true)
 	a.app.SetFocus(table)
+}
+
+func rowDetailFooterText(width int) string {
+	full := " [yellow]Esc/Enter[-] Close  │  [yellow]C[-] Copy selected cell  │  [yellow]Arrows[-] Move "
+	short := " [yellow]Esc[-] Close  │  [yellow]C[-] Copy  │  [yellow]Arrows[-] Move "
+	minimal := " [yellow]C[-] Copy  │  [yellow]Esc[-] Close "
+	return footerTextThatFits(width, full, short, minimal)
 }

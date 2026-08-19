@@ -321,6 +321,7 @@ func (a *App) navigateBackFromRelationship() bool {
 	stackIndex := len(a.resultNavStack) - 1
 	destination := a.resultNavStack[stackIndex]
 	current := a.captureResultNavigationState()
+	a.rememberCurrentResultPosition()
 	a.restoreResultNavigationState(destination)
 	a.selectTableListIdentifier(destination.table)
 	a.setFocusWithColor(a.results)

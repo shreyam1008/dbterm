@@ -64,6 +64,7 @@ type resultFilterViewState struct {
 	pageOffset    int
 	pageSize      int
 	totalRowCount int
+	selection     resultSelectionState
 }
 
 func (a *App) copyCurrentResultCell() {
@@ -276,10 +277,11 @@ func (a *App) showResultFilterModal() {
 		SetText(resultFilterModalSummary(activeFilter))
 	activeView.SetBackgroundColor(mantle)
 
+	modalW, modalH := a.modalSize(72, 104, 16, 23)
 	footer := tview.NewTextView().
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignCenter).
-		SetText(" [yellow]Enter[-] Apply  │  [yellow]Add AND[-] Compose  │  [yellow]Tab / Shift+Tab[-] Move  │  [yellow]Esc[-] Cancel ")
+		SetText(resultFilterFooterText(modalW))
 	footer.SetBackgroundColor(crust)
 
 	activeHeight := resultFilterModalSummaryHeight(activeFilter)
@@ -288,7 +290,6 @@ func (a *App) showResultFilterModal() {
 		AddItem(form, 0, 1, true).
 		AddItem(activeView, activeHeight, 0, false).
 		AddItem(footer, 1, 0, false)
-	modalW, modalH := a.modalSize(72, 104, 16, 23)
 	grid := tview.NewGrid().
 		SetColumns(0, modalW, 0).
 		SetRows(0, modalH, 0).
@@ -296,6 +297,15 @@ func (a *App) showResultFilterModal() {
 
 	a.pages.AddPage(pageResultFilter, grid, true, true)
 	a.app.SetFocus(form)
+}
+
+func resultFilterFooterText(width int) string {
+	return footerTextThatFits(width,
+		" [yellow]Enter[-] Apply / choose  │  [yellow]Tab / Shift+Tab[-] Move  │  [yellow]Esc[-] Cancel ",
+		" [yellow]Enter[-] Apply  │  [yellow]Tab[-] Move  │  [yellow]Esc[-] Cancel ",
+		" [yellow]Enter[-] Apply  │  [yellow]Esc[-] Cancel ",
+		" [yellow]Esc[-] Cancel ",
+	)
 }
 
 func (a *App) filterSelectedResultColumnByClipboard() {
@@ -391,6 +401,7 @@ func (a *App) changeResultPredicate(column string, operator resultFilterOperator
 		fmt.Sprintf("%s filter %s...", action, tview.Escape(predicateText)),
 		fmt.Sprintf("[green]%s (%d): %s[-]", completedAction, len(predicates), tview.Escape(predicateText)),
 		fmt.Sprintf("Could not apply filter %s", tview.Escape(predicateText)),
+		false,
 	)
 }
 
@@ -454,6 +465,7 @@ func (a *App) removeLastResultFilterAndReload() {
 		"Removing the last filter...",
 		fmt.Sprintf("[green]Removed filter: %s[-]", tview.Escape(resultFilterPredicateText(removed, 34))),
 		"Could not remove the last table filter",
+		false,
 	)
 }
 
@@ -466,6 +478,7 @@ func (a *App) clearResultFilterAndReload() {
 		return
 	}
 	previous := a.captureResultFilterViewState()
+	a.resetCurrentResultPosition()
 	a.setCurrentResultFilter(nil)
 	a.resetPagination()
 	a.reloadResultFilterAsync(
@@ -473,6 +486,7 @@ func (a *App) clearResultFilterAndReload() {
 		"Clearing all table filters...",
 		"[green]All table filters cleared[-]",
 		"Could not clear the table filters",
+		true,
 	)
 }
 
@@ -481,6 +495,9 @@ func (a *App) captureResultFilterViewState() resultFilterViewState {
 		pageOffset:    a.pageOffset,
 		pageSize:      a.pageSize,
 		totalRowCount: a.totalRowCount,
+	}
+	if a.results != nil {
+		state.selection = cloneResultSelectionState(a.captureResultSelection())
 	}
 	if a.resultFilter != nil {
 		state.filter = cloneResultValueFilter(a.resultFilter)
@@ -493,9 +510,12 @@ func (a *App) restoreResultFilterViewState(state resultFilterViewState) {
 	a.pageOffset = state.pageOffset
 	a.pageSize = state.pageSize
 	a.totalRowCount = state.totalRowCount
+	if a.results != nil {
+		a.restoreResultSelection(state.selection, a.currentResultRowCount())
+	}
 }
 
-func (a *App) reloadResultFilterAsync(previous resultFilterViewState, loadingText, successText, failureText string) {
+func (a *App) reloadResultFilterAsync(previous resultFilterViewState, loadingText, successText, failureText string, resetSelection bool) {
 	request, err := a.prepareTableResultRequest()
 	if err != nil || request == nil {
 		a.restoreResultFilterViewState(previous)
@@ -505,6 +525,9 @@ func (a *App) reloadResultFilterAsync(previous resultFilterViewState, loadingTex
 		}
 		a.ShowAlert(fmt.Sprintf("%s %s:\n\n%v", iconWarn, failureText, err), "main")
 		return
+	}
+	if resetSelection {
+		request.selection = defaultResultSelectionState()
 	}
 
 	a.runTableResultRequestAsync(request, loadingText, "Press Esc to cancel filtering.", tableResultAsyncCallbacks{
@@ -651,6 +674,7 @@ func (a *App) selectTableWithRememberedFilter(table string) {
 	if a == nil {
 		return
 	}
+	a.rememberCurrentResultPosition()
 	a.rememberCurrentResultFilter()
 	a.selectedTable = table
 	a.restoreRememberedResultFilter(table)

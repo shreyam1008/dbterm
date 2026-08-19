@@ -10,6 +10,7 @@
 # 5) If that tag already exists, the workflow skips release creation safely.
 #
 # Newest entry first:
+0.9.2|Jhelum|Remembered per-table result positions, direct table-name copy, and consistent effective shortcuts across Help, Settings, the command palette, and responsive TUI hints.
 0.9.1|Ravi|Stable non-moving user profiles, self-healing private connection snapshots, sudo-update data guards, and verified in-app updates.
 0.9.0|Chenab|Instant local schema-aware SQL autocomplete, stable top-row result navigation, and sudo-update protection for per-user connections, backups, and Change Profiler anchors.
 0.8.0|Sutlej|Named Change Profiler anchors with compressed whole-database tracking, live progress, and bidirectional relationship navigation.

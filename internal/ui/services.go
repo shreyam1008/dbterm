@@ -57,12 +57,7 @@ func (a *App) showServiceDashboard() {
 		SetTextAlign(tview.AlignCenter)
 	footer.SetBackgroundColor(crust)
 	screenW, _ := a.getScreenSize()
-	switch {
-	case screenW < 95:
-		footer.SetText(fmt.Sprintf(" [yellow]1[-] MySQL │ [yellow]2[-] PG │ [yellow]C[-] Connect │ [yellow]R[-] %s │ [yellow]Esc[-] %s", iconRefresh, iconBack))
-	default:
-		footer.SetText(fmt.Sprintf(" [yellow]1[-] Toggle MySQL  │  [yellow]2[-] Toggle PostgreSQL  │  [yellow]C/Enter[-] Connect  │  [yellow]R[-] %s  │  [yellow]Esc[-] Back %s", iconRefresh, iconBack))
-	}
+	footer.SetText(servicesFooterText(screenW))
 
 	// ── Layout ──
 	layout := tview.NewFlex().
@@ -93,25 +88,27 @@ func (a *App) showServiceDashboard() {
 			return nil
 		}
 
-		switch event.Rune() {
-		case 'c', 'C':
-			a.showConnectServiceModal()
-			return nil
-		case '1':
-			if mysqlInfo != nil {
-				a.toggleService(mysqlInfo)
+		if shortcut, ok := plainShortcutRune(event); ok {
+			switch shortcut {
+			case 'c':
+				a.showConnectServiceModal()
+				return nil
+			case '1':
+				if mysqlInfo != nil {
+					a.toggleService(mysqlInfo)
+				}
+				return nil
+			case '2':
+				if pgInfo != nil {
+					a.toggleService(pgInfo)
+				}
+				return nil
+			case 'r':
+				// Refresh the service dashboard entirely.
+				a.pages.RemovePage("services")
+				a.showServiceDashboard()
+				return nil
 			}
-			return nil
-		case '2':
-			if pgInfo != nil {
-				a.toggleService(pgInfo)
-			}
-			return nil
-		case 'r', 'R':
-			// Refresh the service dashboard entirely
-			a.pages.RemovePage("services")
-			a.showServiceDashboard()
-			return nil
 		}
 		return event
 	})
@@ -150,6 +147,14 @@ func (a *App) showServiceDashboard() {
 			content.SetText(sb.String())
 		})
 	}()
+}
+
+func servicesFooterText(width int) string {
+	full := fmt.Sprintf(" [yellow]1[-] Toggle MySQL  │  [yellow]2[-] Toggle PostgreSQL  │  [yellow]C/Enter[-] Connect  │  [yellow]R[-] Refresh %s  │  [yellow]Esc[-] Back %s", iconRefresh, iconBack)
+	medium := fmt.Sprintf(" [yellow]1[-] MySQL  │  [yellow]2[-] PostgreSQL  │  [yellow]C/Enter[-] Connect  │  [yellow]R[-] %s  │  [yellow]Esc[-] Back", iconRefresh)
+	short := fmt.Sprintf(" [yellow]1[-] MySQL │ [yellow]2[-] PG │ [yellow]C[-] Connect │ [yellow]R[-] %s │ [yellow]Esc[-] %s", iconRefresh, iconBack)
+	minimal := " [yellow]C/Enter[-] Connect  │  [yellow]Esc[-] Back "
+	return footerTextThatFits(width, full, medium, short, minimal)
 }
 
 // writeServiceSection writes a formatted section for one service
@@ -1104,7 +1109,7 @@ func (a *App) connectServiceConfig(cfg *config.ConnectionConfig) {
 				a.applyTableListSnapshot(snapshot)
 				a.loadDatabaseObjects()
 			}
-			a.results.SetTitle(fmt.Sprintf(" %s Results [yellow](Alt+R)[-] ", iconResults))
+			a.results.SetTitle(a.workspacePanelTitle(iconResults, "Results", actionFocusResults, ""))
 			a.pages.RemovePage(serviceConnectionPage)
 			a.pages.RemovePage("services")
 			a.pages.ShowPage("main")

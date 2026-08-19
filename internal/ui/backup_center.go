@@ -859,9 +859,10 @@ func (a *App) showBackupJobFormForConnection(existing *backupcore.Job, preferred
 		}
 	}
 
+	w, h := a.modalSize(68, 104, 20, 32)
 	footer := tview.NewTextView().SetDynamicColors(true).SetTextAlign(tview.AlignCenter)
 	footer.SetBackgroundColor(crust)
-	footer.SetText(" [yellow]Tab[-] Move  │  [yellow]F2[-] Browse  │  [yellow]F3[-] Space  │  [yellow]F4[-] More  │  [yellow]Esc[-] Cancel\n [#a6adc8]Safe defaults are set. Open More Settings only if you need them.[-] ")
+	footer.SetText(backupPlanFormFooterText(w))
 
 	renderForm = func(focusLabel string) {
 		form := tview.NewForm()
@@ -1054,7 +1055,6 @@ func (a *App) showBackupJobFormForConnection(existing *backupcore.Job, preferred
 		a.app.SetFocus(form)
 	}
 
-	w, h := a.modalSize(68, 104, 20, 32)
 	grid := backupModalGrid(container, w, h)
 	a.pages.AddPage(pageBackupForm, grid, true, true)
 	renderForm("")
@@ -1339,7 +1339,8 @@ func (a *App) showBackupHistory() {
 		}
 		return event
 	})
-	footer := tview.NewTextView().SetDynamicColors(true).SetTextAlign(tview.AlignCenter).SetText(" [yellow]↑/↓[-] Browse  │  [yellow]Enter[-] Run details  │  Artifacts survive uninstall/purge  │  [yellow]Esc[-] Back ")
+	screenW, _ := a.getScreenSize()
+	footer := tview.NewTextView().SetDynamicColors(true).SetTextAlign(tview.AlignCenter).SetText(backupHistoryFooterText(screenW))
 	footer.SetBackgroundColor(crust)
 	layout := tview.NewFlex().SetDirection(tview.FlexRow).AddItem(list, 0, 1, true).AddItem(footer, 1, 0, false)
 	a.pages.AddAndSwitchToPage("backupHistory", layout, true)
@@ -2122,7 +2123,8 @@ func (a *App) showBackupAgentLogs() {
 	logView.SetTextColor(text)
 	footer := tview.NewTextView().SetDynamicColors(true).SetTextAlign(tview.AlignCenter)
 	footer.SetBackgroundColor(crust)
-	footer.SetText(" [yellow]↑/↓ PgUp/PgDn[-] Scroll  │  [yellow]C[-] Copy visible tail  │  [yellow]P[-] Copy paths  │  [yellow]R[-] Refresh  │  [yellow]Esc[-] Agent status ")
+	screenW, _ := a.getScreenSize()
+	footer.SetText(backupAgentLogsFooterText(screenW))
 	closeLogs := func() {
 		a.pages.RemovePage("backupAgentLogs")
 		a.showBackupAgentManager()
@@ -2132,9 +2134,9 @@ func (a *App) showBackupAgentLogs() {
 			closeLogs()
 			return nil
 		}
-		if event.Key() == tcell.KeyRune && event.Modifiers()&(tcell.ModCtrl|tcell.ModAlt|tcell.ModMeta) == 0 {
-			switch event.Rune() {
-			case 'c', 'C':
+		if shortcut, ok := plainShortcutRune(event); ok {
+			switch shortcut {
+			case 'c':
 				a.copyValueAsync(content, func(copyErr error) {
 					if copyErr != nil {
 						a.ShowAlert(fmt.Sprintf("%s Log tail is in dbterm's internal clipboard; system clipboard unavailable:\n\n%v", iconInfo, copyErr), "backupAgentLogs")
@@ -2143,7 +2145,7 @@ func (a *App) showBackupAgentLogs() {
 					a.ShowAlert(fmt.Sprintf("%s Bounded log tail copied.", iconSuccess), "backupAgentLogs")
 				})
 				return nil
-			case 'p', 'P':
+			case 'p':
 				a.copyValueAsync(strings.Join(paths, "\n"), func(copyErr error) {
 					if copyErr != nil {
 						a.ShowAlert(fmt.Sprintf("%s Log paths are in dbterm's internal clipboard; system clipboard unavailable:\n\n%v", iconInfo, copyErr), "backupAgentLogs")
@@ -2152,7 +2154,7 @@ func (a *App) showBackupAgentLogs() {
 					a.ShowAlert(fmt.Sprintf("%s Log paths copied.", iconSuccess), "backupAgentLogs")
 				})
 				return nil
-			case 'r', 'R':
+			case 'r':
 				a.pages.RemovePage("backupAgentLogs")
 				a.showBackupAgentLogs()
 				return nil
@@ -2749,7 +2751,40 @@ func backupCenterFooterText(width int) string {
 	medium := " [yellow]N[-] New  │  [yellow]Enter[-] Actions  │  [yellow]R[-] Run  │  [yellow]I[-] Restore  │  [yellow]H[-] Activity  │  [yellow]Esc[-] Back "
 	short := " [yellow]N[-] New  │  [yellow]Enter[-] Actions  │  [yellow]R[-] Run  │  [yellow]I[-] Restore  │  [yellow]Esc[-] Back "
 	minimal := " [yellow]N[-] New  │  [yellow]Enter[-] Actions  │  [yellow]Esc[-] Back "
-	return firstDashboardFooterThatFits(width, full, medium, short, minimal)
+	return footerTextThatFits(width, full, medium, short, minimal)
+}
+
+func backupPlanFormFooterText(width int) string {
+	actions := footerTextThatFits(width,
+		" [yellow]Tab / Shift+Tab[-] Move  │  [yellow]F2[-] Browse  │  [yellow]F3[-] Space  │  [yellow]F4[-] More  │  [yellow]Esc[-] Cancel ",
+		" [yellow]Tab[-] Move  │  [yellow]F2[-] Browse  │  [yellow]F3[-] Space  │  [yellow]F4[-] More  │  [yellow]Esc[-] Cancel ",
+		" [yellow]F2[-] Browse  │  [yellow]F3[-] Space  │  [yellow]F4[-] More  │  [yellow]Esc[-] Cancel ",
+		" [yellow]F4[-] More  │  [yellow]Esc[-] Cancel ",
+	)
+	note := footerTextThatFits(width,
+		" [#a6adc8]Safe defaults are set. Open More Settings only if you need them.[-] ",
+		" [#a6adc8]Safe defaults are already set.[-] ",
+	)
+	return actions + "\n" + note
+}
+
+func backupHistoryFooterText(width int) string {
+	return footerTextThatFits(width,
+		" [yellow]↑/↓[-] Browse  │  [yellow]Enter[-] Run details  │  Artifacts survive uninstall / purge  │  [yellow]Esc[-] Back ",
+		" [yellow]↑/↓[-] Browse  │  [yellow]Enter[-] Details  │  [yellow]Esc[-] Back ",
+		" [yellow]Enter[-] Details  │  [yellow]Esc[-] Back ",
+		" [yellow]Esc[-] Back ",
+	)
+}
+
+func backupAgentLogsFooterText(width int) string {
+	return footerTextThatFits(width,
+		" [yellow]↑/↓ PgUp/PgDn[-] Scroll  │  [yellow]C[-] Copy visible tail  │  [yellow]P[-] Copy paths  │  [yellow]R[-] Refresh  │  [yellow]Esc[-] Agent status ",
+		" [yellow]↑/↓ PgUp/PgDn[-] Scroll  │  [yellow]C[-] Copy tail  │  [yellow]P[-] Paths  │  [yellow]R[-] Refresh  │  [yellow]Esc[-] Back ",
+		" [yellow]C[-] Copy tail  │  [yellow]P[-] Paths  │  [yellow]R[-] Refresh  │  [yellow]Esc[-] Back ",
+		" [yellow]C[-] Copy  │  [yellow]R[-] Refresh  │  [yellow]Esc[-] Back ",
+		" [yellow]Esc[-] Back ",
+	)
 }
 
 func backupRunSummary(run backupcore.Run) string {

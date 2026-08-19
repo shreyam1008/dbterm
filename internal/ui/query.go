@@ -53,7 +53,7 @@ func (a *App) executeQueryWorker(ctx context.Context, finish func(), db *sql.DB,
 	// Check connection health before executing.
 	if db == nil {
 		a.queueUpdateDraw(func() {
-			a.ShowAlert(fmt.Sprintf("%s Not connected to any database.\n\nPress Alt+D to go to Dashboard and connect.", iconWarn), "main")
+			a.ShowAlert(fmt.Sprintf("%s Not connected to any database.\n\nPress %s to go to Dashboard and connect.", iconWarn, a.escapedActionShortcut(actionDashboard)), "main")
 		})
 		return
 	}
@@ -65,7 +65,7 @@ func (a *App) executeQueryWorker(ctx context.Context, finish func(), db *sql.DB,
 			return
 		}
 		a.queueUpdateDraw(func() {
-			a.ShowAlert(fmt.Sprintf("%s Connection lost: %v\n\nPress Alt+D to reconnect from Dashboard.", iconWarn, err), "main")
+			a.ShowAlert(fmt.Sprintf("%s Connection lost: %v\n\nPress %s to reconnect from Dashboard.", iconWarn, err, a.escapedActionShortcut(actionDashboard)), "main")
 		})
 		return
 	}
@@ -150,7 +150,8 @@ func (a *App) executeQueryWorker(ctx context.Context, finish func(), db *sql.DB,
 			if truncated {
 				previewBadge = fmt.Sprintf(" [#a6adc8](showing %d)[-]", rowCount)
 			}
-			a.results.SetTitle(fmt.Sprintf(" %s Results [yellow](Alt+R)[-] — [green]%d rows[-]%s in [teal]%s[-] ", iconResults, rowCount, previewBadge, formatDuration(elapsed)))
+			a.results.SetTitle(a.workspacePanelTitle(iconResults, "Results", actionFocusResults,
+				fmt.Sprintf(" — [green]%d rows[-]%s in [teal]%s[-]", rowCount, previewBadge, formatDuration(elapsed))))
 			a.results.ScrollToBeginning()
 			a.applyColumnWidths()
 			a.updateStatusBar(fmt.Sprintf("[teal]%s[-]", formatDuration(elapsed)), rowCount)
@@ -247,15 +248,15 @@ func (a *App) showQueryError(err error, query string) {
 
 	switch {
 	case strings.Contains(errLower, "does not exist") || strings.Contains(errLower, "no such table"):
-		hint = "\n\n💡 Hint: Check table name spelling. Press Alt+T to see available tables."
+		hint = fmt.Sprintf("\n\n💡 Hint: Check table name spelling. Press %s to see available tables.", a.escapedActionShortcut(actionFocusTables))
 	case strings.Contains(errLower, "syntax error") || strings.Contains(errLower, "near"):
-		hint = "\n\n💡 Hint: Check your SQL syntax. Press Alt+H for cheatsheets."
+		hint = fmt.Sprintf("\n\n💡 Hint: Check your SQL syntax. Press %s for cheatsheets.", a.escapedActionShortcut(actionHelp))
 	case strings.Contains(errLower, "permission denied") || strings.Contains(errLower, "access denied"):
 		hint = "\n\n💡 Hint: Your user may not have sufficient privileges for this operation."
 	case strings.Contains(errLower, "duplicate") || strings.Contains(errLower, "unique constraint"):
 		hint = "\n\n💡 Hint: A record with this key already exists."
 	case strings.Contains(errLower, "connection") || strings.Contains(errLower, "refused"):
-		hint = "\n\n💡 Hint: Connection issue. Press Alt+D to check your connection."
+		hint = fmt.Sprintf("\n\n💡 Hint: Connection issue. Press %s to check your connection.", a.escapedActionShortcut(actionDashboard))
 	}
 
 	message := fmt.Sprintf("%s Query error:\n\n%s", iconFail, errMsg)

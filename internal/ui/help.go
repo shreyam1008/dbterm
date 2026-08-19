@@ -1,23 +1,36 @@
 package ui
 
 import (
+	"strings"
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	"github.com/shreyam1008/dbterm/internal/config"
 )
 
 func keyboardHelpText() string {
-	return `[::b][#cba6f7]━━━ ` + iconHelp + ` dbterm Help ━━━[-][-]
+	return keyboardHelpTextFor(nil)
+}
+
+func keyboardHelpTextFor(a *App) string {
+	template := `[::b][#cba6f7]━━━ ` + iconHelp + ` dbterm Help ━━━[-][-]
 
 [#f9e2af]START HERE — COMMON WORKFLOWS[-]
-  [#89b4fa]Find a table[-]       [yellow]Alt+T[-] → type its name → [yellow]Enter[-]
+  [#89b4fa]Find a table[-]       [yellow]{{focus_tables}}[-] → type its name → [yellow]Enter[-]
   [#89b4fa]Cross-table lookup[-] Select a cell → [yellow]C[-] → open another table/column → [yellow]V[-]
   [#89b4fa]Filter a column[-]    Select column → [yellow]/[-] → choose operator/value → [yellow]Enter[-]; Add AND composes
   [#89b4fa]Follow related rows[-] Select a key cell → [yellow]F[-] → choose [#a6e3a1]→ parent[-] or [#89b4fa]← children[-]; repeat for a chain
   [#89b4fa]Find the same value[-] In Related Data press [yellow]V[-] to check same-named columns across tables
-  [#89b4fa]Clear a filter[-]     Press [yellow]Esc[-] once; press it again to return to the Dashboard
+  [#89b4fa]Clear a filter[-]     Press [yellow]Esc[-] once to clear and reset position; press again for Dashboard
   [#89b4fa]Resize results[-]     [yellow]+ / -[-] selected column  │  [yellow]Ctrl++ / Ctrl+-[-] all columns  │  [yellow]Alt++ / Alt+-[-] rows
-  [#89b4fa]Track DB changes[-]   [yellow]Alt+W[-] → [yellow]N[-] name anchor → make changes → [yellow]S[-] scan or [yellow]F[-] finish
+  [#89b4fa]Track DB changes[-]   [yellow]{{change_profiler}}[-] → [yellow]N[-] name anchor → make changes → [yellow]S[-] scan or [yellow]F[-] finish
+
+[#a6e3a1]SHORTCUT CONVENTIONS[-]
+  [yellow]Enter[-]            Open or run the focused item     [yellow]Esc[-] Back, close, or safely cancel
+  [yellow]↑/↓ and Tab[-]      Navigate lists / move through form fields
+  [yellow]C[-]                Copy in views that offer copying; the focused page's footer names the exact target
+  [yellow]Plain letters[-]    Act only on the focused page     [yellow]Alt/Ctrl keys[-] Global actions from Settings
+  [yellow]{{command_palette}}[-] Search global/workspace actions; local modal actions remain visible in their footer or title
 
 [#a6e3a1]TABLES[-]
   [#6c7086]Markers[-]          [#a6e3a1]▶[-] currently shown  [#6c7086]•[-] opened this connection  [#cba6f7]/[-] remembered filter  [#f9e2af]` + iconPin + `[-] pinned
@@ -25,8 +38,9 @@ func keyboardHelpText() string {
   [yellow]Type[-]             Jump to the first matching table and highlight the match
   [yellow]Backspace[-]        Edit the table search
   [yellow]Enter[-]            Open the match and clear the search
+  [yellow]Shift+C / Right-click[-] Copy the selected table name (lowercase letters remain type-to-find)
   [yellow]Esc[-]              Clear an active search; press again for Dashboard
-  [yellow]Alt+M[-]            Inspect the selected table schema
+  [yellow]{{inspect_schema}}[-]            Inspect the selected table schema
 
 [#a6e3a1]RESULTS — CELLS & FILTERS[-]
   [yellow]C[-]                Copy only the selected cell (full value, even if preview is shortened)
@@ -35,11 +49,11 @@ func keyboardHelpText() string {
   [yellow]F[-]                Explore declared relationships in both directions; Enter opens related rows
   [yellow]V (Related Data)[-] Find the exact value in same-named columns across tables
   [yellow]Backspace[-]        Return one step through a Person → Visit → Payment-style chain
-  [yellow]Esc[-]              Clear all filters first; press again to return to the Dashboard
+  [yellow]Esc[-]              Clear filters/reset position first; press again for Dashboard
   [yellow]Enter[-]            Open row details; C copies the selected detail cell
   [yellow]Space[-]            Toggle current row selection
-  [yellow]Alt+A / Alt+C[-]    Select all / clear selected rows
-  [yellow]Alt+E[-]            Export selected, current-page, or all matching rows to CSV
+  [yellow]{{select_all}} / {{clear_selection}}[-]    Select all / clear selected rows
+  [yellow]{{export_csv}}[-]            Export selected, current-page, or all matching rows to CSV
 
 [#a6e3a1]RESULTS — SIZE, SORT & PAGES[-]
   [yellow]+ / -[-]            Widen / narrow selected column (remembered per table)
@@ -53,25 +67,26 @@ func keyboardHelpText() string {
   [yellow]Alt++ / Alt+-[-]    Increase / decrease preview rows per page
   [yellow]Alt+0[-]            Toggle preview limit between 100 and safe maximum
   [yellow]F5 / Ctrl+F5[-]     Refresh current table / refresh tables and current data
-  [yellow]Alt+F[-]            Toggle fullscreen results
+  [yellow]{{fullscreen}}[-]            Toggle fullscreen results
 
 [#a6e3a1]QUERY[-]
   [yellow]Enter[-]            Execute SQL             [yellow]Shift+Enter[-] Insert newline
   [yellow]Ctrl+Space[-]        Open local SQL suggestions (keywords, databases, schemas, tables, views, columns, routines)
   [yellow]↑ / ↓, Tab[-]        Choose a suggestion / insert it; [yellow]Esc[-] closes suggestions without leaving Query
-  [yellow]Alt+Y[-]            Query history
-  [yellow]Alt+I[-]            Import SQL dump          [yellow]Esc[-] Cancel a running import
+  [yellow]{{history}}[-]            Query history
+  [yellow]{{import_dump}}[-]            Import SQL dump          [yellow]Esc[-] Cancel a running import
 
 [#a6e3a1]NAVIGATION & APP[-]
-  [yellow]Ctrl+P (default)[-] Search documented actions, database objects, and recent queries
-  [yellow]Alt+T / Q / R[-]    Focus Tables / Query / Results
+  [yellow]{{command_palette}}[-] Search documented actions, database objects, and recent queries
+  [yellow]{{focus_tables}} / {{focus_query}} / {{focus_results}}[-]    Focus Tables / Query / Results
   [yellow]Tab[-]              Cycle Tables → Query → Results
-  [yellow]Alt+B[-]            Instant backup from any workspace panel
-  [yellow]Alt+D[-]            Dashboard                [yellow]Alt+K[-] Backup Center
-  [yellow]Alt+W[-]            Change Profiler: named before/after anchors and saved reports
-  [yellow]Alt+S[-]            Database services
-  [yellow]Alt+, / Alt+G[-]    Settings                 [yellow]Alt+H[-] This help
-  [yellow]Esc / Backspace[-]  Go back                  [yellow]Ctrl+C[-] Cancel active work / quit
+  [yellow]{{backup}}[-]            Instant backup from any workspace panel
+  [yellow]{{dashboard}}[-]            Dashboard                [yellow]{{backup_center}}[-] Backup Center
+  [yellow]{{change_profiler}}[-]            Change Profiler: named before/after anchors and saved reports
+  [yellow]{{services}}[-]            Database services
+  [yellow]{{settings}}[-]    Settings                 [yellow]{{help}}[-] This help
+  [yellow]Esc[-]              Back/close/cancel        [yellow]Backspace[-] Back in supported lists/results, edit in fields
+  [yellow]Ctrl+C[-]           Cancel active work / quit
 
 [#a6e3a1]DASHBOARD ` + iconDashboard + `[-]
   [yellow]Enter[-] Connect/default DB   [yellow]A[-] All DBs on selected server   [yellow]N[-] New   [yellow]E[-] Edit   [yellow]D[-] Delete
@@ -80,7 +95,7 @@ func keyboardHelpText() string {
   [yellow]G[-] Settings   [yellow]H[-] Help   [yellow]W / Esc[-] Workspace   [yellow]Q[-] Quit
   [yellow]1–9 / 0[-] Quick-select the first ten connections
 
-[#a6e3a1]BACKUP CENTER (Alt+K) ` + iconBackup + `[-]
+[#a6e3a1]BACKUP CENTER ({{backup_center}}) ` + iconBackup + `[-]
   [yellow]N[-]               Choose saved/new database for a new plan
   [yellow]Enter[-]           Edit the highlighted plan
   [yellow]R / Space[-]       Run now / toggle a timed schedule (manual stays on demand)
@@ -93,7 +108,7 @@ func keyboardHelpText() string {
   [yellow]Ctrl+N[-]          Add a database from inside the plan form
   [#6c7086]Filename tokens[-] {job} {connection} {database} {engine} {date} {time} {timestamp} {run}
 
-[#a6e3a1]CHANGE PROFILER (Alt+W)[-]
+[#a6e3a1]CHANGE PROFILER ({{change_profiler}})[-]
   [yellow]N[-]               Create a named anchor on the connected database; risky/keyless tables require opt-in
   [yellow]Space / A[-]       Toggle one table / explicitly include or exclude the whole database
   [yellow]S / F[-]           Scan without stopping / run the final scan and finish the anchor
@@ -102,7 +117,7 @@ func keyboardHelpText() string {
   [#6c7086]Large databases[-] Loaders show phase, table, rows, bytes, rate, percent, and ETA; baselines are compressed locally
   [#6c7086]Attribution[-]     Observed connection and dbterm writes are evidence; writer remains Unknown without an audit trail
 
-[#a6e3a1]SERVICES (Alt+S) ` + iconServices + `[-]
+[#a6e3a1]SERVICES ({{services}}) ` + iconServices + `[-]
   [yellow]1 / 2[-] Toggle MySQL / PostgreSQL    [yellow]C / Enter[-] Connect
   [yellow]Database optional[-] Leave it blank to browse every database visible to the selected DB login
   [yellow]R[-] Refresh service info             [yellow]Esc[-] Go back
@@ -115,12 +130,35 @@ func keyboardHelpText() string {
 
 
 `
+	shortcut := func(action keymapAction) string {
+		return tview.Escape(a.effectiveActionShortcut(action))
+	}
+	return strings.NewReplacer(
+		"{{focus_tables}}", shortcut(actionFocusTables),
+		"{{focus_query}}", shortcut(actionFocusQuery),
+		"{{focus_results}}", shortcut(actionFocusResults),
+		"{{dashboard}}", shortcut(actionDashboard),
+		"{{help}}", shortcut(actionHelp),
+		"{{services}}", shortcut(actionServices),
+		"{{fullscreen}}", shortcut(actionFullscreen),
+		"{{backup}}", shortcut(actionBackup),
+		"{{backup_center}}", shortcut(actionBackupCenter),
+		"{{change_profiler}}", shortcut(actionChangeProfiler),
+		"{{export_csv}}", shortcut(actionExportCSV),
+		"{{history}}", shortcut(actionHistory),
+		"{{settings}}", shortcut(actionSettings),
+		"{{import_dump}}", shortcut(actionImportDump),
+		"{{inspect_schema}}", shortcut(actionInspectSchema),
+		"{{select_all}}", shortcut(actionSelectAll),
+		"{{clear_selection}}", shortcut(actionClearSelection),
+		"{{command_palette}}", shortcut(actionCommandPalette),
+	).Replace(template)
 }
 
 func (a *App) showHelp() {
 	a.helpReturnPage, _ = a.pages.GetFrontPage()
 	a.helpReturnFocus = a.app.GetFocus()
-	helpText := keyboardHelpText()
+	helpText := keyboardHelpTextFor(a)
 
 	cheatPG := `[::b][#89b4fa]━━━ PostgreSQL Cheatsheet ━━━[-][-]
 
@@ -274,7 +312,7 @@ func (a *App) showHelp() {
 		SetText(content).
 		SetScrollable(true)
 	helpView.SetBorder(true).
-		SetTitle(" " + iconHelp + " Help & Cheatsheets [yellow](↑/↓ scroll • Esc/Alt+H close)[-] ").
+		SetTitle(" " + iconHelp + " Help & Cheatsheets [yellow](↑/↓ scroll • Esc/" + tview.Escape(a.effectiveActionShortcut(actionHelp)) + " close)[-] ").
 		SetBorderColor(surface1).
 		SetTitleColor(mauve)
 

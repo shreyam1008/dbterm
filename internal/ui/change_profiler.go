@@ -123,7 +123,8 @@ func (a *App) showChangeProfiler() {
 
 	footer := tview.NewTextView().SetDynamicColors(true).SetTextAlign(tview.AlignCenter)
 	footer.SetBackgroundColor(crust)
-	footer.SetText(" [yellow]N[-] New  │  [yellow]S[-] Scan  │  [yellow]F[-] Finish  │  [yellow]Enter[-] Report  │  [yellow]E[-] Rename  │  [yellow]D[-] Delete  │  [yellow]Esc[-] Back ")
+	screenW, _ := a.getScreenSize()
+	footer.SetText(changeProfilerFooterText(screenW))
 
 	closeCenter := func() {
 		a.pages.RemovePage(pageChangeProfiler)
@@ -152,29 +153,34 @@ func (a *App) showChangeProfiler() {
 		}
 	})
 	list.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		switch {
-		case event.Key() == tcell.KeyEscape:
+		if event.Key() == tcell.KeyEscape {
 			closeCenter()
 			return nil
-		case event.Rune() == 'n' || event.Rune() == 'N':
+		}
+		shortcut, ok := plainShortcutRune(event)
+		if !ok {
+			return event
+		}
+		switch shortcut {
+		case 'n':
 			a.showProfilerNameForm("")
 			return nil
-		case event.Rune() == 's' || event.Rune() == 'S':
+		case 's':
 			if anchor, ok := selectedAnchor(); ok {
 				a.runProfilerScan(anchor, false)
 			}
 			return nil
-		case event.Rune() == 'f' || event.Rune() == 'F':
+		case 'f':
 			if anchor, ok := selectedAnchor(); ok {
 				a.runProfilerScan(anchor, true)
 			}
 			return nil
-		case event.Rune() == 'e' || event.Rune() == 'E':
+		case 'e':
 			if anchor, ok := selectedAnchor(); ok {
 				a.showProfilerNameForm(anchor.ID)
 			}
 			return nil
-		case event.Rune() == 'd' || event.Rune() == 'D':
+		case 'd':
 			if anchor, ok := selectedAnchor(); ok {
 				a.confirmDeleteProfilerAnchor(anchor)
 			}
@@ -335,9 +341,10 @@ func (a *App) showProfilerTableReview(name string, plans []profiler.TablePlan, s
 		summary.SetText(fmt.Sprintf(" [::b]%d/%d tables selected[-] · %s · %d risky table(s)\n [#a6adc8]Exact before-values are stored locally with per-row adaptive compression.[-]", selected, len(plans), estimate, risky))
 	}
 	refresh()
+	modalW, modalH := a.modalSize(76, 118, 16, 34)
 	footer := tview.NewTextView().SetDynamicColors(true).SetTextAlign(tview.AlignCenter)
 	footer.SetBackgroundColor(crust)
-	footer.SetText(" [yellow]Space[-] Toggle table  │  [yellow]A[-] Include/exclude all  │  risky tables start excluded  │  [yellow]Enter[-] Start  │  [yellow]Esc[-] Cancel ")
+	footer.SetText(profilerTableReviewFooterText(modalW))
 	start := func() {
 		selected := 0
 		for _, plan := range plans {
@@ -358,7 +365,7 @@ func (a *App) showProfilerTableReview(name string, plans []profiler.TablePlan, s
 			a.showChangeProfiler()
 			return nil
 		}
-		if event.Rune() == ' ' {
+		if matchesPlainShortcut(event, ' ') {
 			index := list.GetCurrentItem()
 			if index >= 0 && index < len(plans) {
 				plans[index].Included = !plans[index].Included
@@ -367,7 +374,7 @@ func (a *App) showProfilerTableReview(name string, plans []profiler.TablePlan, s
 			}
 			return nil
 		}
-		if event.Rune() == 'a' || event.Rune() == 'A' {
+		if matchesPlainShortcut(event, 'a') {
 			includeAll := false
 			for _, plan := range plans {
 				if !plan.Included {
@@ -388,7 +395,6 @@ func (a *App) showProfilerTableReview(name string, plans []profiler.TablePlan, s
 		return event
 	})
 	container := tview.NewFlex().SetDirection(tview.FlexRow).AddItem(summary, 3, 0, false).AddItem(list, 0, 1, true).AddItem(footer, 1, 0, false)
-	modalW, modalH := a.modalSize(76, 118, 16, 34)
 	grid := tview.NewGrid().SetColumns(0, modalW, 0).SetRows(0, modalH, 0).AddItem(container, 1, 1, 1, 1, 0, 0, true)
 	a.pages.AddPage(pageProfilerTableReview, grid, true, true)
 	a.app.SetFocus(list)
@@ -541,7 +547,8 @@ func (a *App) showProfilerReport(anchor profiler.Anchor) {
 	grid.SetBorder(true).SetTitle(fmt.Sprintf(" Row and Cell Changes (up to %d) ", profilerReportRowLimit)).SetTitleColor(mauve).SetBorderColor(surface1)
 	footer := tview.NewTextView().SetDynamicColors(true).SetTextAlign(tview.AlignCenter)
 	footer.SetBackgroundColor(crust)
-	footer.SetText(" [yellow]↑/↓[-] Table  │  [yellow]Enter[-] Full before/after row  │  [yellow]Esc[-] Anchors ")
+	screenW, _ := a.getScreenSize()
+	footer.SetText(profilerReportFooterText(screenW))
 	var diffRows []profiler.DiffRow
 	loadTable := func(index int) {
 		grid.Clear()
@@ -648,7 +655,7 @@ func (a *App) showProfilerDiffDetail(row profiler.DiffRow) {
 		table.SetCell(index+1, 1, tview.NewTableCell(before.Text).SetTextColor(text).SetBackgroundColor(background).SetExpansion(1))
 		table.SetCell(index+1, 2, tview.NewTableCell(after.Text).SetTextColor(text).SetBackgroundColor(background).SetExpansion(1))
 	}
-	table.SetBorder(true).SetTitle(fmt.Sprintf(" %s row — full before / after ", row.Kind)).SetTitleColor(mauve).SetBorderColor(surface1)
+	table.SetBorder(true).SetTitle(fmt.Sprintf(" %s row — full before / after [yellow](Esc/Enter close)[-] ", row.Kind)).SetTitleColor(mauve).SetBorderColor(surface1)
 	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEscape || event.Key() == tcell.KeyEnter {
 			a.pages.RemovePage(pageProfilerDiffDetail)
@@ -690,6 +697,27 @@ func (a *App) profilerTargetLabel() string {
 		return a.dbName
 	}
 	return "current database"
+}
+
+func changeProfilerFooterText(width int) string {
+	full := " [yellow]N[-] New  │  [yellow]S[-] Scan  │  [yellow]F[-] Finish  │  [yellow]Enter[-] Report  │  [yellow]E[-] Rename  │  [yellow]D[-] Delete  │  [yellow]Esc[-] Back "
+	medium := " [yellow]N[-] New  │  [yellow]S[-] Scan  │  [yellow]F[-] Finish  │  [yellow]Enter[-] Report  │  [yellow]Esc[-] Back "
+	short := " [yellow]N[-] New  │  [yellow]Enter[-] Report  │  [yellow]Esc[-] Back "
+	return footerTextThatFits(width, full, medium, short)
+}
+
+func profilerTableReviewFooterText(width int) string {
+	full := " [yellow]Space[-] Toggle table  │  [yellow]A[-] Include/exclude all  │  risky tables start excluded  │  [yellow]Enter[-] Start  │  [yellow]Esc[-] Cancel "
+	medium := " [yellow]Space[-] Toggle  │  [yellow]A[-] All  │  [yellow]Enter[-] Start  │  [yellow]Esc[-] Cancel "
+	short := " [yellow]Space[-] Toggle  │  [yellow]Enter[-] Start  │  [yellow]Esc[-] Cancel "
+	return footerTextThatFits(width, full, medium, short)
+}
+
+func profilerReportFooterText(width int) string {
+	full := " [yellow]↑/↓[-] Table  │  [yellow]Enter[-] Full before/after row  │  [yellow]Esc[-] Anchors "
+	short := " [yellow]↑/↓[-] Table  │  [yellow]Enter[-] Row detail  │  [yellow]Esc[-] Anchors "
+	minimal := " [yellow]Enter[-] Detail  │  [yellow]Esc[-] Anchors "
+	return footerTextThatFits(width, full, short, minimal)
 }
 
 func profilerStatusLabel(status profiler.Status) string {

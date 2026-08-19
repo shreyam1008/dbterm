@@ -207,18 +207,18 @@ func (a *App) showBackupModal() {
 		return event
 	})
 
+	modalW, modalH := a.modalSize(78, 116, 19, 24)
 	footer := tview.NewTextView().
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignCenter)
 	footer.SetBackgroundColor(crust)
-	footer.SetText(" [yellow]Tab / Shift+Tab[-] Move  │  [yellow]F2[-] Choose folder  │  [yellow]F3[-] Storage info  │  [yellow]Esc[-] Cancel\n [#a6adc8]Use an absolute path or rclone://remote/path; canceling never creates a folder or backup.[-] ")
+	footer.SetText(instantBackupFooterText(modalW))
 
 	container := tview.NewFlex().
 		SetDirection(tview.FlexRow).
 		AddItem(form, 0, 1, true).
 		AddItem(footer, 2, 0, false)
 
-	modalW, modalH := a.modalSize(78, 116, 19, 24)
 	grid := tview.NewGrid().
 		SetColumns(0, modalW, 0).
 		SetRows(0, modalH, 0).
@@ -226,6 +226,20 @@ func (a *App) showBackupModal() {
 
 	a.pages.AddPage(instantBackupPage, grid, true, true)
 	a.app.SetFocus(form)
+}
+
+func instantBackupFooterText(width int) string {
+	actions := footerTextThatFits(width,
+		" [yellow]Tab / Shift+Tab[-] Move  │  [yellow]F2[-] Choose folder  │  [yellow]F3[-] Storage info  │  [yellow]Esc[-] Cancel ",
+		" [yellow]Tab[-] Move  │  [yellow]F2[-] Folder  │  [yellow]F3[-] Storage  │  [yellow]Esc[-] Cancel ",
+		" [yellow]F2[-] Folder  │  [yellow]F3[-] Storage  │  [yellow]Esc[-] Cancel ",
+		" [yellow]Esc[-] Cancel ",
+	)
+	note := footerTextThatFits(width,
+		" [#a6adc8]Use an absolute path or rclone://remote/path; canceling never creates a folder or backup.[-] ",
+		" [#a6adc8]Nothing is written until Create Backup.[-] ",
+	)
+	return actions + "\n" + note
 }
 
 type instantBackupOutput struct {

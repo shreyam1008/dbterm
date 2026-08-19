@@ -55,13 +55,13 @@ func (a *App) showHistoryModal() {
 
 	connectionKey, ok := a.activeConnectionKey()
 	if !ok {
-		a.ShowAlert(fmt.Sprintf("%s No active connection.\n\nConnect to a database first, then press Alt+Y.", iconInfo), "main")
+		a.ShowAlert(fmt.Sprintf("%s No active connection.\n\nConnect to a database first, then press %s.", iconInfo, a.escapedActionShortcut(actionHistory)), "main")
 		return
 	}
 
 	entries := a.historyMgr.Entries(connectionKey)
 	if len(entries) == 0 {
-		a.ShowAlert(fmt.Sprintf("%s No query history yet for this connection.\n\nRun a query and press Alt+Y again.", iconInfo), "main")
+		a.ShowAlert(fmt.Sprintf("%s No query history yet for this connection.\n\nRun a query and press %s again.", iconInfo, a.escapedActionShortcut(actionHistory)), "main")
 		return
 	}
 

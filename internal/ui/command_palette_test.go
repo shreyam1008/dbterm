@@ -144,6 +144,7 @@ func TestBuildCommandPaletteItemsIncludesObjectsRecentQueriesAndEffectiveShortcu
 	}
 	focusTablesShortcut := ""
 	pinShortcut := ""
+	copyTableShortcut := ""
 	containsExtension := false
 	for _, item := range items {
 		if _, wanted := wantedKinds[item.kind]; wanted {
@@ -154,6 +155,9 @@ func TestBuildCommandPaletteItemsIncludesObjectsRecentQueriesAndEffectiveShortcu
 		}
 		if item.action == paletteActionToggleTablePin {
 			pinShortcut = item.shortcut
+		}
+		if item.action == paletteActionCopyTableName {
+			copyTableShortcut = item.shortcut
 		}
 		if item.objectName == "uuid-ossp" {
 			containsExtension = true
@@ -170,9 +174,16 @@ func TestBuildCommandPaletteItemsIncludesObjectsRecentQueriesAndEffectiveShortcu
 	if pinShortcut != "Space (Tables)" {
 		t.Fatalf("pin action shortcut = %q, want Space (Tables)", pinShortcut)
 	}
+	if copyTableShortcut != "Shift+C / Right-click (Tables)" {
+		t.Fatalf("copy-table action shortcut = %q, want Shift+C / Right-click (Tables)", copyTableShortcut)
+	}
 	pinMatches := searchCommandPaletteItems(items, "favorite sidebar")
 	if len(pinMatches) == 0 || pinMatches[0].item.action != paletteActionToggleTablePin {
 		t.Fatalf("pin action search = %#v, want pin toggle first", pinMatches)
+	}
+	copyTableMatches := searchCommandPaletteItems(items, "copy table name")
+	if len(copyTableMatches) == 0 || copyTableMatches[0].item.action != paletteActionCopyTableName {
+		t.Fatalf("copy-table action search = %#v, want table-name copy first", copyTableMatches)
 	}
 	if containsExtension {
 		t.Fatal("palette unexpectedly included an unsupported extension object")

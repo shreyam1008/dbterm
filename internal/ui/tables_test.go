@@ -192,6 +192,39 @@ func TestPinShortcutDoesNotStealPrintableTableSearch(t *testing.T) {
 	}
 }
 
+func TestTableNameCopyKeyUsesCopyLetterWithoutStealingLowercaseSearch(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		event *tcell.EventKey
+		want  bool
+	}{
+		{name: "shift c", event: tcell.NewEventKey(tcell.KeyRune, 'C', tcell.ModShift), want: true},
+		{name: "uppercase rune fallback", event: tcell.NewEventKey(tcell.KeyRune, 'C', tcell.ModNone), want: true},
+		{name: "lowercase search", event: tcell.NewEventKey(tcell.KeyRune, 'c', tcell.ModNone), want: false},
+		{name: "alt c remains global", event: tcell.NewEventKey(tcell.KeyRune, 'C', tcell.ModAlt), want: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := isTableNameCopyKey(test.event); got != test.want {
+				t.Fatalf("isTableNameCopyKey() = %v, want %v", got, test.want)
+			}
+		})
+	}
+
+	list := tview.NewList().ShowSecondaryText(false)
+	list.AddItem("customers", "", 0, nil)
+	app := &App{tables: list, tableIdentifiers: map[int]string{0: "customers"}}
+	if got := app.handleTableListInput(tcell.NewEventKey(tcell.KeyRune, 'c', tcell.ModNone)); got != nil {
+		t.Fatal("lowercase c search event was not consumed")
+	}
+	if app.tableSearch != "c" {
+		t.Fatalf("lowercase c search = %q, want c", app.tableSearch)
+	}
+	app.handleTableListInput(tcell.NewEventKey(tcell.KeyRune, 'C', tcell.ModShift))
+	if app.tableSearch != "cC" {
+		t.Fatalf("uppercase C during active search = %q, want cC", app.tableSearch)
+	}
+}
+
 func TestTableContextHintsPrioritizePinAndSearch(t *testing.T) {
 	tables := tview.NewList()
 	app := &App{tables: tables, focusedPanel: tables}
@@ -200,9 +233,9 @@ func TestTableContextHintsPrioritizePinAndSearch(t *testing.T) {
 		width int
 		want  []string
 	}{
-		{width: 72, want: []string{"Space", "Pin/unpin", "Enter", "Open"}},
-		{width: 112, want: []string{"Space", "Type", "Find", "Ctrl+P"}},
-		{width: 160, want: []string{"Space", "Alt+M", "Schema", "Ctrl+P"}},
+		{width: 72, want: []string{"Space", "Pin", "Enter", "Open", "Shift+C", "Copy", "Esc", "Back"}},
+		{width: 112, want: []string{"Space", "Type", "Find", "Shift+C", "Copy", "Ctrl+P"}},
+		{width: 160, want: []string{"Space", "Shift+C/Right-click", "Copy", "Alt+M", "Schema", "Ctrl+P"}},
 	} {
 		hint := app.statusActionText(test.width)
 		for _, want := range test.want {
@@ -216,6 +249,27 @@ func TestTableContextHintsPrioritizePinAndSearch(t *testing.T) {
 	app.updateTableListTitle()
 	if title := tables.GetTitle(); !strings.Contains(title, "Space") || !strings.Contains(title, iconPin) {
 		t.Fatalf("table title does not expose pin control: %q", title)
+	}
+}
+
+func TestTableListIndexAtPointAccountsForBorderAndScroll(t *testing.T) {
+	list := tview.NewList().ShowSecondaryText(false)
+	for _, name := range []string{"users", "orders", "events", "logs"} {
+		list.AddItem(name, "", 0, nil)
+	}
+	list.SetBorder(true)
+	list.SetRect(10, 5, 20, 5)
+	list.SetOffset(1, 0)
+
+	innerX, innerY, _, _ := list.GetInnerRect()
+	if got := tableListIndexAtPoint(list, innerX, innerY); got != 1 {
+		t.Fatalf("first visible row index = %d, want 1", got)
+	}
+	if got := tableListIndexAtPoint(list, innerX+2, innerY+1); got != 2 {
+		t.Fatalf("second visible row index = %d, want 2", got)
+	}
+	if got := tableListIndexAtPoint(list, innerX-1, innerY); got != -1 {
+		t.Fatalf("border point index = %d, want -1", got)
 	}
 }
 
@@ -311,6 +365,9 @@ func TestClearTableSessionStateDropsConnectionScopedMarkers(t *testing.T) {
 		activeTable:        "users",
 		tableResultsActive: true,
 		visitedTables:      map[string]bool{"users": true},
+		resultPositions: map[string]resultSelectionState{
+			"users": {row: 3, col: 1, offsetRow: 2},
+		},
 		resultFilters: map[string]*resultValueFilter{
 			"users": newResultValueFilter("users", []resultFilterPredicate{
 				{column: "id", operator: resultFilterEqual, value: "42"},
@@ -320,7 +377,7 @@ func TestClearTableSessionStateDropsConnectionScopedMarkers(t *testing.T) {
 	app.resultFilter = cloneResultValueFilter(app.resultFilters["users"])
 
 	app.clearTableSessionState()
-	if app.activeTable != "" || app.selectedTable != "" || app.tableSearch != "" || app.tableResultsActive || app.visitedTables != nil || app.resultFilter != nil || app.resultFilters != nil {
+	if app.activeTable != "" || app.selectedTable != "" || app.tableSearch != "" || app.tableResultsActive || app.visitedTables != nil || app.resultPositions != nil || app.resultFilter != nil || app.resultFilters != nil {
 		t.Fatalf("connection-scoped table state was not cleared: %#v", app)
 	}
 	label, _ := list.GetItemText(0)

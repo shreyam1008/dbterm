@@ -41,3 +41,15 @@ func TestAgentMCPSetupTextContainsNoCredentialPlaceholders(t *testing.T) {
 		}
 	}
 }
+
+func TestSettingsExposeEveryGlobalKeymapAction(t *testing.T) {
+	exposed := make(map[keymapAction]bool, len(keymapFieldSpecs))
+	for _, field := range keymapFieldSpecs {
+		exposed[keymapAction(field.Action)] = true
+	}
+	for action := range knownKeymapActions {
+		if !exposed[action] {
+			t.Errorf("Settings do not expose global action %q", action)
+		}
+	}
+}

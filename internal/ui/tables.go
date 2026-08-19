@@ -439,6 +439,10 @@ func (a *App) handleTableListInput(event *tcell.EventKey) *tcell.EventKey {
 	if event == nil {
 		return nil
 	}
+	if !a.hasActiveTableSearch() && isTableNameCopyKey(event) {
+		a.copySelectedTableName()
+		return nil
+	}
 
 	switch event.Key() {
 	case tcell.KeyEnter:
@@ -476,6 +480,70 @@ func (a *App) handleTableListInput(event *tcell.EventKey) *tcell.EventKey {
 	}
 
 	return event
+}
+
+func isTableNameCopyKey(event *tcell.EventKey) bool {
+	return event != nil &&
+		event.Key() == tcell.KeyRune &&
+		event.Rune() == 'C' &&
+		event.Modifiers()&(tcell.ModCtrl|tcell.ModAlt|tcell.ModMeta) == 0
+}
+
+func (a *App) handleTableListMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	if a == nil || a.tables == nil || event == nil || action != tview.MouseRightClick {
+		return action, event
+	}
+
+	x, y := event.Position()
+	index := tableListIndexAtPoint(a.tables, x, y)
+	table, ok := a.tableIdentifiers[index]
+	if !ok || table == "" {
+		return action, event
+	}
+
+	a.tables.SetCurrentItem(index)
+	if a.app != nil {
+		a.setFocusWithColor(a.tables)
+	}
+	a.copyTableName(table)
+	return tview.MouseConsumed, nil
+}
+
+func tableListIndexAtPoint(list *tview.List, x, y int) int {
+	if list == nil {
+		return -1
+	}
+	innerX, innerY, width, height := list.GetInnerRect()
+	if x < innerX || x >= innerX+width || y < innerY || y >= innerY+height {
+		return -1
+	}
+	itemOffset, _ := list.GetOffset()
+	index := itemOffset + y - innerY
+	if index < 0 || index >= list.GetItemCount() {
+		return -1
+	}
+	return index
+}
+
+func (a *App) copySelectedTableName() {
+	table, ok := a.selectedSidebarTable()
+	if !ok {
+		a.flashStatus("[yellow]Select a table name to copy[-]", a.currentResultRowCount(), 1600*time.Millisecond)
+		return
+	}
+	a.copyTableName(table)
+}
+
+func (a *App) copyTableName(table string) {
+	if a == nil || strings.TrimSpace(table) == "" {
+		return
+	}
+	a.copyValueAsync(table, func(err error) {
+		if err != nil {
+			a.flashStatus(fmt.Sprintf("[yellow]Copied table %s inside dbterm (system clipboard unavailable)[-]", tview.Escape(table)), a.currentResultRowCount(), 2200*time.Millisecond)
+		}
+	})
+	a.flashStatus(fmt.Sprintf("[green]Copied table %s[-]", tview.Escape(table)), a.currentResultRowCount(), 1600*time.Millisecond)
 }
 
 func (a *App) hasActiveTableSearch() bool {
@@ -625,5 +693,5 @@ func (a *App) updateTableListTitle() {
 		search = fmt.Sprintf(" [#a6adc8]find:[-] [#f9e2af]%s[-]", tview.Escape(a.tableSearch))
 	}
 	legend := fmt.Sprintf(" [yellow]Space[-] pin %s  [#6c7086]▶ • /[-]", iconPin)
-	a.tables.SetTitle(fmt.Sprintf(" %s %s%s%s [yellow](Alt+T)[-] ", iconTables, count, search, legend))
+	a.tables.SetTitle(fmt.Sprintf(" %s %s%s%s [yellow](%s)[-] ", iconTables, count, search, legend, a.escapedActionShortcut(actionFocusTables)))
 }

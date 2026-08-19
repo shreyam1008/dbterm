@@ -31,8 +31,7 @@ func resultSelectionAtTop(table *tview.Table, event *tcell.EventKey) bool {
 		return false
 	}
 
-	movingUp := event.Key() == tcell.KeyUp ||
-		(event.Key() == tcell.KeyRune && event.Rune() == 'k')
+	movingUp := event.Key() == tcell.KeyUp || matchesPlainShortcut(event, 'k')
 	if !movingUp {
 		return false
 	}
@@ -162,6 +161,16 @@ func (a *App) prepareTableResultRequest() (*tableResultRequest, error) {
 	if queryLimit > 0 {
 		query = fmt.Sprintf("%s LIMIT %d OFFSET %d", query, queryLimit, a.pageOffset)
 	}
+	selection := a.captureResultSelection()
+	// The visible grid still belongs to activeTable while a different table is
+	// being fetched. Restore that destination table's own cursor/scroll state
+	// instead of carrying the source table's coordinates across.
+	if selectedTable != a.activeTable {
+		selection = defaultResultSelectionState()
+		if remembered, ok := a.rememberedResultPosition(selectedTable); ok {
+			selection = remembered
+		}
+	}
 
 	return &tableResultRequest{
 		db:             a.db,
@@ -176,9 +185,58 @@ func (a *App) prepareTableResultRequest() (*tableResultRequest, error) {
 		// Every fetch owns a unique generation so a slower page, sort, or
 		// filter request can never overwrite a newer result set.
 		generation: a.advanceResultGeneration(),
-		selection:  a.captureResultSelection(),
+		selection:  selection,
 		startedAt:  time.Now(),
 	}, nil
+}
+
+func defaultResultSelectionState() resultSelectionState {
+	return resultSelectionState{row: 1, col: 0}
+}
+
+func cloneResultSelectionState(state resultSelectionState) resultSelectionState {
+	state.selectedRowText = append([]string(nil), state.selectedRowText...)
+	return state
+}
+
+func (a *App) rememberCurrentResultPosition() {
+	if a == nil || a.results == nil || !a.tableResultsActive || strings.TrimSpace(a.activeTable) == "" {
+		return
+	}
+	if a.resultPositions == nil {
+		a.resultPositions = make(map[string]resultSelectionState)
+	}
+	a.resultPositions[a.activeTable] = cloneResultSelectionState(a.captureResultSelection())
+}
+
+func (a *App) rememberedResultPosition(table string) (resultSelectionState, bool) {
+	if a == nil || strings.TrimSpace(table) == "" || a.resultPositions == nil {
+		return resultSelectionState{}, false
+	}
+	state, ok := a.resultPositions[table]
+	return cloneResultSelectionState(state), ok
+}
+
+func (a *App) resetCurrentResultPosition() {
+	if a == nil {
+		return
+	}
+	table := strings.TrimSpace(a.activeTable)
+	if table == "" {
+		table = strings.TrimSpace(a.selectedTable)
+	}
+	if table != "" && a.resultPositions != nil {
+		delete(a.resultPositions, table)
+	}
+	if a.results == nil {
+		return
+	}
+	row := 0
+	if a.currentResultRowCount() > 0 {
+		row = 1
+	}
+	a.results.Select(row, 0)
+	a.results.SetOffset(0, 0)
 }
 
 func fetchTableResultSnapshot(ctx context.Context, request *tableResultRequest) (*tableResultSnapshot, error) {

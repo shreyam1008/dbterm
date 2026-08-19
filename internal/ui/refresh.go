@@ -102,7 +102,7 @@ func (a *App) refreshDataAsyncWithCallbacks(callbacks refreshDataCallbacks) {
 				a.resultFilter = nil
 				a.refreshTableSidebarState()
 				a.results.Clear()
-				a.results.SetTitle(fmt.Sprintf(" %s Results [yellow](Alt+R)[-] ", iconResults))
+				a.results.SetTitle(a.workspacePanelTitle(iconResults, "Results", actionFocusResults, ""))
 				a.updateStatusBar(fmt.Sprintf("[green]%s Database refreshed[-]", iconRefresh), 0)
 				restoreFocus(returnFocus)
 				if callbacks.onSuccess != nil {

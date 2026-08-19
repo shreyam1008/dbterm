@@ -162,17 +162,17 @@ func (a *App) exportCurrentResultsToCSV() {
 	form.SetCancelFunc(closeModal)
 	form.SetFocus(0)
 
+	modalW, modalH := a.modalSize(72, 108, 11, 15)
 	footer := tview.NewTextView().
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignCenter).
-		SetText(" [yellow]Tab / Shift+Tab[-] Move  │  [yellow]Enter[-] Choose / Export  │  [yellow]Esc[-] Cancel ")
+		SetText(resultExportFooterText(modalW))
 	footer.SetBackgroundColor(crust)
 
 	container := tview.NewFlex().
 		SetDirection(tview.FlexRow).
 		AddItem(form, 0, 1, true).
 		AddItem(footer, 1, 0, false)
-	modalW, modalH := a.modalSize(72, 108, 11, 15)
 	grid := tview.NewGrid().
 		SetColumns(0, modalW, 0).
 		SetRows(0, modalH, 0).
@@ -180,6 +180,15 @@ func (a *App) exportCurrentResultsToCSV() {
 
 	a.pages.AddPage(pageResultExport, grid, true, true)
 	a.app.SetFocus(form)
+}
+
+func resultExportFooterText(width int) string {
+	return footerTextThatFits(width,
+		" [yellow]Tab / Shift+Tab[-] Move  │  [yellow]Enter[-] Choose / export  │  [yellow]Esc[-] Cancel ",
+		" [yellow]Tab[-] Move  │  [yellow]Enter[-] Export  │  [yellow]Esc[-] Cancel ",
+		" [yellow]Enter[-] Export  │  [yellow]Esc[-] Cancel ",
+		" [yellow]Esc[-] Cancel ",
+	)
 }
 
 func (a *App) resultExportScopeOptions() []resultExportScopeOption {
