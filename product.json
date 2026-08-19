@@ -21,21 +21,21 @@
       "channel": "Product website",
       "status": "live",
       "url": "https://dbterm.shreyam1008.com.np/",
-      "version": "0.9.2",
+      "version": "0.10.0",
       "verifiedAt": "2026-08-19"
     },
     {
       "channel": "GitHub Releases",
       "status": "live",
-      "url": "https://github.com/shreyam1008/dbterm/releases/tag/v0.9.2",
-      "version": "0.9.2",
+      "url": "https://github.com/shreyam1008/dbterm/releases/tag/v0.10.0",
+      "version": "0.10.0",
       "verifiedAt": "2026-08-19"
     },
     {
       "channel": "APT repository",
       "status": "live",
       "url": "https://dbterm.shreyam1008.com.np/apt/dists/stable/Release",
-      "version": "0.9.2",
+      "version": "0.10.0",
       "verifiedAt": "2026-08-19"
     },
     {
