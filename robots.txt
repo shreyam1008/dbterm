@@ -1,4 +1,4 @@
 User-agent: *
-Content-Signal: search=yes, ai-input=yes, ai-train=yes
+Content-Signal: search=yes, ai-input=yes, ai-train=yes, use=full
 Allow: /
 Sitemap: https://dbterm.shreyam1008.com.np/sitemap.xml

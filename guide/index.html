@@ -9,33 +9,646 @@
           document.documentElement.dataset.theme = "light";
         }
       })();
-    </script><title>dbterm Guide | Setup, Workflow, and Shortcuts</title><meta name="description" content="Production-focused dbterm guide for setup, dashboard workflow, SQL execution, services, backups, shortcuts, and troubleshooting."><meta name="author" content="Shreyam Adhikari"><meta name="application-name" content="dbterm"><meta id="theme-color" name="theme-color" content="#f6f4ea"><meta name="format-detection" content="telephone=no"><meta name="google-site-verification" content="nsLMV5dqPB3vxpuq7DPX9iBtRAikKDpxEUJNvMnriTk"><meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1"><link rel="canonical" href="https://dbterm.shreyam1008.com.np/guide/"><link rel="author" href="https://shreyam1008.com.np/"><link rel="me" href="https://github.com/shreyam1008"><link rel="manifest" href="/manifest.webmanifest"><link rel="sitemap" type="application/xml" href="/sitemap.xml"><link rel="alternate" type="text/markdown" href="/product.md" title="dbterm product overview"><link rel="alternate" type="text/plain" href="/llms.txt" title="dbterm agent-readable index"><link rel="preload" href="/_astro/manrope-latin-wght-normal.DHIcAJRg.woff2" as="font" type="font/woff2" crossorigin><link rel="preload" href="/_astro/ibm-plex-mono-latin-400-normal.DMJ8VG8y.woff2" as="font" type="font/woff2" crossorigin><link rel="preload" href="/_astro/ibm-plex-mono-latin-500-normal.DSY6xOcd.woff2" as="font" type="font/woff2" crossorigin><link rel="preload" href="/_astro/ibm-plex-mono-latin-600-normal.BgSNZQsw.woff2" as="font" type="font/woff2" crossorigin><meta property="og:type" content="website"><meta property="og:site_name" content="dbterm"><meta property="og:locale" content="en_US"><meta property="og:title" content="dbterm Guide | Setup, Workflow, and Shortcuts"><meta property="og:description" content="Production-focused dbterm guide for setup, dashboard workflow, SQL execution, services, backups, shortcuts, and troubleshooting."><meta property="og:url" content="https://dbterm.shreyam1008.com.np/guide/"><meta property="og:image" content="https://dbterm.shreyam1008.com.np/assets/command-palette.png"><meta property="og:image:width" content="1306"><meta property="og:image:height" content="514"><meta property="og:image:alt" content="dbterm terminal database workspace"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="dbterm Guide | Setup, Workflow, and Shortcuts"><meta name="twitter:description" content="Production-focused dbterm guide for setup, dashboard workflow, SQL execution, services, backups, shortcuts, and troubleshooting."><meta name="twitter:image" content="https://dbterm.shreyam1008.com.np/assets/command-palette.png"><meta name="twitter:image:alt" content="dbterm terminal database workspace"><link rel="icon" href="/favicon.ico" sizes="48x48"><link rel="icon" type="image/png" href="/favicon-48.png" sizes="48x48"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180"><script type="application/ld+json">{"@context":"https://schema.org","@type":"HowTo","name":"How to start using dbterm","description":"Production-focused dbterm guide for setup, dashboard workflow, SQL execution, services, backups, shortcuts, and troubleshooting.","totalTime":"PT5M","step":[{"@type":"HowToStep","name":"Install dbterm","text":"Use the shell installer for Linux/macOS or PowerShell installer for Windows."},{"@type":"HowToStep","name":"Create a connection","text":"Press N and enter the MySQL/PostgreSQL server login. The database is optional: Save & Connect opens every accessible database when no default is set."},{"@type":"HowToStep","name":"Run your first query","text":"Select a table, focus Query (Alt+Q), and press Ctrl+Space for ready read-only queries; type SQL for context-ranked tables and columns."},{"@type":"HowToStep","name":"Inspect and iterate","text":"Use Alt+T and Alt+R directly, or Tab and Shift+Tab, to move between table and column searches without losing their position."}]}</script><link rel="stylesheet" href="/_astro/BaseLayout.Vm3Fl4yF.css"></head><body><a class="fixed -top-20 left-4 z-[1000] rounded-md bg-[var(--brand)] px-4 py-2 font-bold text-[var(--primary-foreground)] focus:top-4" href="#page-content">Skip to content</a><header class="sticky top-0 z-100 border-b border-[color-mix(in_srgb,var(--line)_70%,transparent)] bg-[color-mix(in_srgb,var(--bg)_88%,transparent)] py-3 backdrop-blur-xl"><div class="site-container grid grid-cols-[auto_1fr_auto] items-center gap-4 max-[900px]:grid-cols-[auto_auto] max-[900px]:justify-between"><a class="inline-flex items-center gap-2.5 text-[var(--ink)] no-underline hover:text-[var(--ink)]" href="/" aria-label="dbterm home"><svg class="size-9 shrink-0 drop-shadow-[0_4px_8px_rgba(11,93,82,.15)]" viewBox="0 0 64 64" role="img" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#0b5d52"></rect><rect x="10" y="14" width="44" height="34" rx="6" fill="#f7f5ed"></rect><path d="M17 26h30M17 33h22" stroke="#0b5d52" stroke-width="4" stroke-linecap="round"></path><circle cx="49" cy="50" r="5" fill="#f0b16d"></circle></svg><span class="font-mono text-base font-semibold tracking-[-.045em]">dbterm</span></a><nav class="min-w-0 max-[900px]:order-3 max-[900px]:col-span-full max-[900px]:overflow-x-auto max-[900px]:[scrollbar-width:none]" aria-label="Primary navigation"><ul class="m-0 flex items-center justify-center gap-[clamp(.15rem,1.4vw,1.1rem)] p-0 max-[900px]:w-max max-[900px]:min-w-full max-[900px]:justify-start max-[900px]:px-2"><li class="list-none max-[480px]:hidden"><a href="/features/" class="block rounded-md px-2 py-2 text-[.82rem] font-semibold text-[var(--ink-soft)] no-underline hover:bg-[var(--brand-soft)] hover:text-[var(--brand-strong)]">Features</a></li><li class="list-none"><a href="/#playground" class="block rounded-md px-2 py-2 text-[.82rem] font-semibold text-[var(--ink-soft)] no-underline hover:bg-[var(--brand-soft)] hover:text-[var(--brand-strong)]">Live demo</a></li><li class="list-none"><a href="/backup/" class="block rounded-md px-2 py-2 text-[.82rem] font-semibold text-[var(--ink-soft)] no-underline hover:bg-[var(--brand-soft)] hover:text-[var(--brand-strong)]">Backups</a></li><li class="list-none"><a href="/guide/" class="block rounded-md px-2 py-2 text-[.82rem] font-semibold text-[var(--ink-soft)] no-underline hover:bg-[var(--brand-soft)] hover:text-[var(--brand-strong)] bg-[var(--brand-soft)] text-[var(--brand-strong)]" aria-current="page">Guide</a></li><li class="list-none max-[480px]:hidden"><a href="/agents/" class="block rounded-md px-2 py-2 text-[.82rem] font-semibold text-[var(--ink-soft)] no-underline hover:bg-[var(--brand-soft)] hover:text-[var(--brand-strong)]">Agents</a></li><li class="list-none"><a href="/compare/" class="block rounded-md px-2 py-2 text-[.82rem] font-semibold text-[var(--ink-soft)] no-underline hover:bg-[var(--brand-soft)] hover:text-[var(--brand-strong)]">Compare</a></li><li class="list-none max-[480px]:hidden"><a href="/open-source/" class="block rounded-md px-2 py-2 text-[.82rem] font-semibold text-[var(--ink-soft)] no-underline hover:bg-[var(--brand-soft)] hover:text-[var(--brand-strong)]">Open source</a></li></ul></nav><div class="flex items-center gap-2"><button class="theme-toggle grid size-10 place-items-center rounded-full border border-[var(--line)] bg-[var(--surface)] text-[var(--ink-soft)] hover:border-[var(--brand)] hover:text-[var(--brand)]" type="button" data-theme-toggle aria-label="Switch to dark theme" title="Switch theme"><svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42"></path></svg><svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.2 15.2A8.5 8.5 0 0 1 8.8 3.8a8.5 8.5 0 1 0 11.4 11.4Z"></path></svg></button><a class="button primary small max-[680px]:hidden" href="/#install">Install</a></div></div></header><main id="page-content" class="page-shell"><section class="hero-panel"><p class="eyebrow">Practical reference for daily usage</p><h1>dbterm guide</h1><p>This page documents the real app workflow from connection setup to production-safe operations. Keep it open while onboarding new users.</p><div class="page-meta" aria-label="Guide metadata"><span>Setup + workflow</span><span>Keybindings by context</span><span>Services + backup actions</span><span>Troubleshooting tips</span></div></section><section class="panel" id="setup"><h2>1. Start in 60 seconds</h2><p class="lead">Install, connect, run SQL, then iterate in panel-focused flow.</p><div class="copy-stack"><article class="copy-shell"><header><h3>Install on Linux / macOS</h3><button type="button" class="button outline small copy-button" data-copy-target="guide-install-unix" data-default-label="Copy">Copy</button></header><pre><code id="guide-install-unix">curl -fsSL https://raw.githubusercontent.com/shreyam1008/dbterm/main/install.sh | bash</code></pre></article><article class="copy-shell"><header><h3>Install on Windows</h3><button type="button" class="button outline small copy-button" data-copy-target="guide-install-windows" data-default-label="Copy">Copy</button></header><pre><code id="guide-install-windows">powershell -NoProfile -ExecutionPolicy Bypass -Command &quot;irm https://raw.githubusercontent.com/shreyam1008/dbterm/main/install.ps1 | iex&quot;</code></pre></article></div><div class="step-grid"><article class="step-item"><h3>1. Install dbterm</h3><p>Use the shell installer for Linux/macOS or PowerShell installer for Windows.</p></article><article class="step-item"><h3>2. Create a connection</h3><p>Press N and enter the MySQL/PostgreSQL server login. The database is optional: Save &amp; Connect opens every accessible database when no default is set.</p></article><article class="step-item"><h3>3. Run your first query</h3><p>Select a table, focus Query (Alt+Q), and press Ctrl+Space for ready read-only queries; type SQL for context-ranked tables and columns.</p></article><article class="step-item"><h3>4. Inspect and iterate</h3><p>Use Alt+T and Alt+R directly, or Tab and Shift+Tab, to move between table and column searches without losing their position.</p></article></div></section><section class="panel" id="workspace"><h2>2. Understand the workspace</h2><p class="lead">dbterm is optimized around panel focus and keyboard flow.</p><p class="table-hint">Scroll horizontally to inspect every column.</p><div class="table-wrap" tabindex="0" role="region" aria-label="Workspace panels table; scroll horizontally for all columns"><table class="command-table"><thead><tr><th>Panel</th><th>Primary behavior</th><th>Core keys</th></tr></thead><tbody><tr><td>Dashboard</td><td>Manage saved server logins, browse every accessible database, enter Backup Center, and reconnect quickly.</td><td><code>N, E, D, Enter, A, B, R</code></td></tr><tr><td>Query</td><td>Write SQL with local typo-tolerant table, column, clause, keyword, and schema suggestions, or insert a ready read-only query for the selected table.</td><td><code>Alt+Q, Ctrl+Space, ↑/↓, Tab, Enter, Shift+Enter</code></td></tr><tr><td>Tables</td><td>Search every table and collapsed column, expand one schema branch with lazy PK/FK/NN/type metadata, pin tables, and open a column directly in Results.</td><td><code>Alt+T, type, →/←, click ▸/▾, Space, Enter, Shift+C</code></td></tr><tr><td>Results</td><td>Press Up from the first data row to search selectable column headers, then filter values, follow relationships, page, sort, inspect, and export.</td><td><code>Alt+R, ↑ then type, ←/→, ↓, Shift+C, /, V, F, S</code></td></tr></tbody></table></div></section><section class="panel" id="shortcuts"><h2>3. Essential shortcuts</h2><p class="lead">Use these to avoid context switching and keep query loops fast.</p><p class="table-hint">Scroll horizontally to inspect every shortcut and action.</p><div class="table-wrap" tabindex="0" role="region" aria-label="Essential shortcuts table; scroll horizontally for all columns"><table class="shortcut-table"><thead><tr><th>Shortcut</th><th>Action</th></tr></thead><tbody><tr><td><code>Ctrl + P</code></td><td>Search commands, tables, collapsed columns, database objects, and recent SQL (default binding)</td></tr><tr><td><code>Alt + Q / T / R</code></td><td>Focus Query, Tables, or Results panel</td></tr><tr><td><code>Tab / Shift + Tab</code></td><td>Cycle workspace panels forward / backward while preserving each panel&#39;s position and type-ahead search</td></tr><tr><td><code>Space (Tables)</code></td><td>Pin or unpin the highlighted table at the top for this database connection</td></tr><tr><td><code>Right / Left or click ▸ / ▾ (Tables)</code></td><td>Expand or enter columns / return to the parent or collapse it; one table stays expanded</td></tr><tr><td><code>Type (Tables)</code></td><td>Search tables and collapsed columns; a matching column expands and highlights automatically</td></tr><tr><td><code>Enter</code></td><td>Execute query (in Query panel)</td></tr><tr><td><code>Shift + Enter</code></td><td>New line in query (multiline SQL)</td></tr><tr><td><code>Ctrl + Space / ↑ / ↓ / Tab / Enter</code></td><td>Open smart local suggestions or ready selected-table queries, then navigate and insert</td></tr><tr><td><code>Alt + Y</code></td><td>Open per-connection query history</td></tr><tr><td><code>Alt + W</code></td><td>Open Change Profiler; A selects the whole database and live progress shows percent/rate/ETA</td></tr><tr><td><code>Alt + A / Alt + C</code></td><td>Select all result rows / clear selection</td></tr><tr><td><code>Space (Results)</code></td><td>Toggle current row selection</td></tr><tr><td><code>C (Results)</code></td><td>Copy the selected cell&#39;s complete value</td></tr><tr><td><code>↑ from first result row, then type</code></td><td>Enter the header row, jump to and highlight a matching column; Down or Enter returns to its data</td></tr><tr><td><code>Shift + C (result headers)</code></td><td>Copy the selected column&#39;s complete name</td></tr><tr><td><code>/ / V (Results)</code></td><td>Build typed AND filters / filter the selected column by clipboard value</td></tr><tr><td><code>F / Backspace (Results)</code></td><td>Explore declared relationships in both directions / return one step through the table chain</td></tr><tr><td><code>Alt + E</code></td><td>Export selected rows, the current page, or all rows matching active table filters</td></tr><tr><td><code>Alt + I</code></td><td>Open SQL import modal for active connection (PostgreSQL/MySQL)</td></tr><tr><td><code>I (Dashboard)</code></td><td>Import SQL dump into selected saved PostgreSQL/MySQL connection</td></tr><tr><td><code>A (Dashboard)</code></td><td>Browse every database visible through the highlighted PostgreSQL/MySQL server login</td></tr><tr><td><code>G (Dashboard) / Alt + ,</code></td><td>Open keymap settings page</td></tr><tr><td><code>Alt + H</code></td><td>Toggle help + SQL cheatsheets</td></tr><tr><td><code>Alt + D</code></td><td>Back to dashboard</td></tr><tr><td><code>Alt + S</code></td><td>Open services dashboard</td></tr><tr><td><code>Alt + K / B (Dashboard)</code></td><td>Open Backup Center for schedules, history, inspection, restore, and agent status</td></tr><tr><td><code>Ctrl + B (Dashboard)</code></td><td>Create a backup policy from the highlighted saved connection</td></tr><tr><td><code>F5 / Ctrl + F5</code></td><td>Refresh current table / refresh list + table</td></tr><tr><td><code>PgUp / PgDn, Home / End</code></td><td>Navigate previous/next and first/last result pages</td></tr><tr><td><code>Alt + F</code></td><td>Toggle fullscreen results</td></tr><tr><td><code>Alt + B</code></td><td>Instant backup from any workspace panel; F2 chooses a folder and F3 refreshes disk capacity</td></tr><tr><td><code>N (Backup Center)</code></td><td>Choose an existing saved database or add one for a new plan</td></tr><tr><td><code>Ctrl + N (plan form)</code></td><td>Add another saved database without leaving the backup workflow</td></tr><tr><td><code>Alt + = / - / 0</code></td><td>Adjust preview row limit</td></tr><tr><td><code>Ctrl + = / -</code></td><td>Resize all columns (remembered per table)</td></tr><tr><td><code>Ctrl + 0</code></td><td>Reset this table&#39;s column widths</td></tr><tr><td><code>+ / -</code></td><td>Resize selected column (remembered per table)</td></tr><tr><td><code>Ctrl + C</code></td><td>Cancel an active query/import/export; otherwise quit</td></tr></tbody></table></div><p class="notice">Use <kbd>Esc</kbd> and <kbd>Backspace</kbd> to back out safely from most views if you lose focus.</p></section><section class="panel" id="backup-center"><h2>4. Instant backup, scheduled agent, guarded restore</h2><p class="lead">One backup engine serves the TUI, CLI, and background agent. See the focused <a href="/backup/">Backup Center guide</a> for the complete operator model.</p><div class="guide-flow"><article class="guide-box"><h3>Inspect service state</h3><p>Press Alt+S from anywhere to view MySQL/PostgreSQL status and quick actions.</p></article><article class="guide-box"><h3>Toggle MySQL/PostgreSQL</h3><p>Inside services, use key 1 for MySQL and key 2 for PostgreSQL start/stop.</p></article><article class="guide-box"><h3>Connect directly from services</h3><p>Use C or Enter, select a saved database login or enter credentials, and leave Database blank to browse every accessible database.</p></article><article class="guide-box"><h3>Keep instant backup</h3><p>Press Alt+B from Tables, Query, or Results for a one-off engine-appropriate backup. Type a destination or press F2; F3 refreshes destination and staging capacity.</p></article><article class="guide-box"><h3>Schedule the durable path</h3><p>Highlight a saved connection and press Ctrl+B, or open Backup Center and press N to choose a saved database or add one. Essentials stay first; advanced controls expand only when needed.</p></article><article class="guide-box"><h3>Choose desktop or server mode</h3><p>Desktop mode needs no administrator access. Server mode registers at machine boot, uses explicit data paths, and clearly shows the elevated command required.</p></article><article class="guide-box"><h3>Watch storage and progress</h3><p>See the destination volume and free space before saving, then follow phase, bytes, elapsed time, rate, and ETA without a fabricated database-row percentage.</p></article><article class="guide-box"><h3>Bound and report every job</h3><p>Combine count, age, and total-size retention; prune oldest eligible artifacts now; and notify by Gmail defaults or custom SMTP on failure, success, both, or never.</p></article><article class="guide-box"><h3>Inspect before restore</h3><p>Press I. dbterm unwraps gzip, zstd, ZIP, or age and detects the database format from content before a destination can be selected.</p></article></div><div class="copy-stack"><article class="copy-shell"><header><h3>Headless setup</h3></header><pre><code>dbterm backup keygen
-dbterm backup service install
-dbterm backup service status --all
-dbterm backup logs --lines 200
-dbterm backup inspect --identity ./age-identity.txt ./prod.dump.zst.age
-dbterm backup restore --connection production --identity ./age-identity.txt --yes ./prod.dump.zst.age</code></pre></article></div><p class="notice">Scheduled destinations can be absolute local/mounted folders or <code>rclone://remote/path</code> locations. Configure rclone under the backup agent’s OS account. PostgreSQL/MySQL require their official clients; SQLite SQL restore requires <code>sqlite3</code>. Restore supports PostgreSQL, MySQL/MariaDB, and local SQLite. Merge is the restore default; clean restore is explicit and destructive.</p><p class="notice">Retention can combine newest-count, maximum-age, and total-size ceilings. Backup Center previews capacity and can apply the policy immediately; cleanup is restricted to verified artifacts recorded for that exact job, and always preserves its newest successful backup.</p><p class="notice">Per-job email can report failures, successes, both, or neither. Gmail defaults to STARTTLS on port 587; custom SMTP and implicit TLS are available. Test delivery before relying on it, and protect the locally stored app password.</p><p class="notice">Desktop scope is the no-admin default. Server scope runs at machine boot without an interactive login and requires elevation plus explicit existing config, state, and log paths. Runtime start/stop and startup enable/disable are deliberately separate controls.</p><div class="guide-flow" aria-label="Backup control data locations"><article class="guide-box"><h3>Linux</h3><p><code>XDG_CONFIG_HOME/dbterm</code><br><code>XDG_STATE_HOME/dbterm</code></p></article><article class="guide-box"><h3>macOS</h3><p><code>~/Library/Application Support/dbterm</code><br><code>~/Library/Logs/dbterm</code></p></article><article class="guide-box"><h3>Windows</h3><p><code>%AppData%\dbterm</code><br><code>%LocalAppData%\dbterm</code></p></article></div><p class="notice">Run <code>dbterm backup paths</code> for exact resolved paths. Raw dumps are wrapped in private state staging before the finished artifact is published to your destination, so private state needs room for one uncompressed dump. The live view shows real phase, byte growth, elapsed time, rate, and ETA where a meaningful total exists. Uninstalling only the agent never removes completed artifacts.</p><p class="notice">Restore only trusted files: dbterm rechecks content, checksum, engine, and client-side commands, but valid SQL can still perform any server-side action allowed to the selected database account. Turso exports use one source transaction and reject virtual/FTS schemas; D1 uses Cloudflare's native export API, which can briefly make that database unavailable.</p><p class="notice">Inspection unwraps at most three layers. Every decoded gzip, zstd, ZIP, or age layer has a 1 GiB default cap and uses private OS temporary storage; raise it with the TUI’s Max Decoded GiB field or <code>--max-decoded-gib N</code>, with enough temporary disk space available.</p><p class="notice"><code>backup keygen</code> defaults the private identity into dbterm config. For recovery safety, <code>--uninstall --purge</code> refuses to remove a private age identity or backup-like file it discovers there; move the key somewhere safe or delete it explicitly before retrying.</p></section><section class="panel" id="cli"><h2>5. CLI maintenance reference</h2><p class="lead">Press <code>U</code> on the Dashboard for the in-app Version &amp; Update screen, or use CLI mode for updates, diagnostics, and uninstall operations.</p><p class="notice">Connection profiles are stored in a private primary file plus a current recovery mirror, one previous generation, and a separate state-directory vault; settings are mirrored into that vault too. A missing or unreadable primary is restored automatically. With <code>sudo dbterm --update</code>, elevation applies only to replacing the executable; the invoking user’s config, backup catalog, artifacts, and Change Profiler state are guarded in their normal user profile.</p><article class="copy-shell"><header><h3>CLI command set</h3><button type="button" class="button outline small copy-button" data-copy-target="guide-cli-cmds" data-default-label="Copy">Copy</button></header><pre><code id="guide-cli-cmds">dbterm
-dbterm --help
-dbterm --version
-dbterm --info
-dbterm --update
-dbterm --update X.Y.Z
-dbterm --uninstall
-dbterm --uninstall --purge
-dbterm --uninstall --yes
-dbterm backup --help
-dbterm backup list
-dbterm backup run &lt;job&gt;
-dbterm backup inspect &lt;file&gt;
-dbterm backup restore --connection &lt;target&gt; --yes &lt;file&gt;
-dbterm backup service install
-dbterm backup service status --all
-dbterm backup service enable
-dbterm backup prune --yes &lt;job&gt;
-dbterm backup notify-test &lt;job&gt;
-dbterm backup logs --lines 200
-dbterm backup keygen
-dbterm backup paths</code></pre></article><p class="table-hint">Scroll horizontally to inspect every command and purpose.</p><div class="table-wrap" tabindex="0" role="region" aria-label="CLI commands table; scroll horizontally for all columns"><table class="command-table"><thead><tr><th>Command</th><th>Purpose</th></tr></thead><tbody><tr><td><code>dbterm</code></td><td>Launch interactive TUI</td></tr><tr><td><code>dbterm --help</code></td><td>Show command help</td></tr><tr><td><code>dbterm --version</code></td><td>Show version + build details</td></tr><tr><td><code>dbterm --info</code></td><td>Show install path, config path, and runtime info</td></tr><tr><td><code>dbterm --update</code></td><td>Update to latest release</td></tr><tr><td><code>dbterm --update X.Y.Z</code></td><td>Update to a specific release</td></tr><tr><td><code>dbterm --uninstall</code></td><td>Uninstall binary with confirmation</td></tr><tr><td><code>dbterm --uninstall --purge</code></td><td>Remove binary + dbterm-owned config/state/logs; chosen backup artifacts stay</td></tr><tr><td><code>dbterm --uninstall --yes</code></td><td>Uninstall without prompt</td></tr><tr><td><code>dbterm backup --help</code></td><td>Show backup and agent commands</td></tr><tr><td><code>dbterm backup list</code></td><td>List durable jobs and next runs</td></tr><tr><td><code>dbterm backup run &lt;job&gt;</code></td><td>Run a job immediately</td></tr><tr><td><code>dbterm backup inspect &lt;file&gt;</code></td><td>Detect wrappers, engine, checksum, and warnings</td></tr><tr><td><code>dbterm backup restore --connection &lt;target&gt; --yes &lt;file&gt;</code></td><td>Run the guarded, content-inspected restore flow</td></tr><tr><td><code>dbterm backup service install</code></td><td>Install and start the native current-user agent</td></tr><tr><td><code>dbterm backup service status --all</code></td><td>Inspect desktop and server registrations, startup, runtime, and heartbeat</td></tr><tr><td><code>dbterm backup service enable</code></td><td>Enable automatic startup independently of starting the agent now</td></tr><tr><td><code>dbterm backup prune --yes &lt;job&gt;</code></td><td>Apply the job&#39;s retention ceilings immediately</td></tr><tr><td><code>dbterm backup notify-test &lt;job&gt;</code></td><td>Send a test message using the job&#39;s SMTP settings</td></tr><tr><td><code>dbterm backup logs --lines 200</code></td><td>Read the bounded agent log tail locally or over SSH</td></tr><tr><td><code>dbterm backup keygen</code></td><td>Generate an age X25519 identity and public recipient</td></tr><tr><td><code>dbterm backup paths</code></td><td>Print OS-native config, state, log, and catalog paths</td></tr></tbody></table></div></section><section class="panel" id="troubleshooting"><h2>6. Troubleshooting quick list</h2><ul class="list-tight"><li>Connection issues: run `dbterm --info`, verify host/port/credentials, then reconnect from dashboard.</li><li>Query errors: open in-app cheatsheets with Alt+H to validate SQL syntax and DB-specific clauses.</li><li>Permission errors removing a package-managed binary: use the owning installer/package manager or ask an administrator to remove only that binary; keep backup-agent and data operations in your normal user account.</li><li>Large result sets: keep a safe on-screen preview and choose All matching in Alt+E; dbterm streams the full filtered export with progress and cancellation.</li><li>Scheduled job did not run: open Backup Center → A or run `dbterm backup service status`; then verify the database client tool is available in the agent PATH.</li><li>Server agent cannot install: use the exact elevated command shown by Backup Center and supply existing absolute config, state, and log directories accessible to the selected runtime user.</li><li>Encrypted backup is locked: provide the matching age identity during inspection; jobs intentionally store only the public recipient.</li></ul></section></main><footer class="mt-24 border-t border-[var(--line)] bg-[color-mix(in_srgb,var(--bg-deep)_86%,transparent)] pt-14 pb-5"><div class="site-container grid gap-12 lg:grid-cols-[minmax(220px,1.2fr)_minmax(400px,1fr)]"><div><a class="inline-flex items-center gap-2.5 text-[var(--ink)] no-underline" href="/"><svg class="size-9" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#0b5d52"></rect><rect x="10" y="14" width="44" height="34" rx="6" fill="#f7f5ed"></rect><path d="M17 26h30M17 33h22" stroke="#0b5d52" stroke-width="4" stroke-linecap="round"></path><circle cx="49" cy="50" r="5" fill="#f0b16d"></circle></svg><span class="font-mono text-base font-semibold tracking-[-.045em]">dbterm</span></a><p class="mt-4 max-w-sm text-sm text-[var(--ink-soft)]">Connect, query, operate, and protect local or cloud databases from one terminal.</p><p class="mt-2 max-w-sm text-xs text-[var(--ink-faint)]">Created and maintained by <a href="https://shreyam1008.com.np/">Shreyam Adhikari · @shreyam1008</a>.</p></div><div class="grid grid-cols-3 gap-6 max-[680px]:grid-cols-1" aria-label="Project links"><div class="grid content-start gap-2 text-sm"><strong class="mb-1 font-mono text-[.68rem] tracking-[.1em] uppercase">Learn</strong><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href="/features/">Features</a><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href="/backup/">Backups</a><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href="/guide/">Guide</a><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href="/agents/">Agents</a><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href="/compare/">Compare</a></div><div class="grid content-start gap-2 text-sm"><strong class="mb-1 font-mono text-[.68rem] tracking-[.1em] uppercase">Project</strong><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href="https://github.com/shreyam1008/dbterm">GitHub</a><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href="https://github.com/shreyam1008/dbterm/releases">Releases</a><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href="https://github.com/shreyam1008/dbterm/issues">Issues</a></div><div class="grid content-start gap-2 text-sm"><strong class="mb-1 font-mono text-[.68rem] tracking-[.1em] uppercase">Open source</strong><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href="/open-source/">Attribution</a><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href="https://github.com/shreyam1008/dbterm/blob/main/LICENSE">MIT license</a><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href="https://pkg.go.dev/github.com/shreyam1008/dbterm">pkg.go.dev</a></div></div></div><div class="site-container mt-12 flex justify-between gap-4 border-t border-[var(--line)] pt-4 font-mono text-[.68rem] text-[var(--ink-faint)] max-[680px]:flex-col"><span>Built in the open.</span><span>dbterm v0.10.0 · Beas</span></div></footer><script>
+    </script><title>dbterm Documentation | Complete User Guide and CLI Reference</title><meta name="description" content="Complete dbterm documentation for installation, connections, SQL, results, Change Profiler, backup and restore, MCP agents, settings, CLI commands, security, and troubleshooting."><meta name="author" content="Shreyam Adhikari"><meta name="application-name" content="dbterm"><meta id="theme-color" name="theme-color" content="#f6f4ea"><meta name="format-detection" content="telephone=no"><meta name="google-site-verification" content="nsLMV5dqPB3vxpuq7DPX9iBtRAikKDpxEUJNvMnriTk"><meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1"><link rel="canonical" href="https://dbterm.shreyam1008.com.np/guide/"><link rel="author" href="https://shreyam1008.com.np/"><link rel="me" href="https://github.com/shreyam1008"><link rel="manifest" href="/manifest.webmanifest"><link rel="sitemap" type="application/xml" href="/sitemap.xml"><link rel="alternate" type="text/markdown" href="https://dbterm.shreyam1008.com.np/guide.md" title="dbterm Documentation | Complete User Guide and CLI Reference in Markdown"><link rel="describedby" type="text/plain" href="/llms.txt" title="dbterm agent-readable documentation index"><link rel="preload" href="/_astro/manrope-latin-wght-normal.DHIcAJRg.woff2" as="font" type="font/woff2" crossorigin><link rel="preload" href="/_astro/ibm-plex-mono-latin-400-normal.DMJ8VG8y.woff2" as="font" type="font/woff2" crossorigin><link rel="preload" href="/_astro/ibm-plex-mono-latin-500-normal.DSY6xOcd.woff2" as="font" type="font/woff2" crossorigin><link rel="preload" href="/_astro/ibm-plex-mono-latin-600-normal.BgSNZQsw.woff2" as="font" type="font/woff2" crossorigin><meta property="og:type" content="website"><meta property="og:site_name" content="dbterm"><meta property="og:locale" content="en_US"><meta property="og:title" content="dbterm Documentation | Complete User Guide and CLI Reference"><meta property="og:description" content="Complete dbterm documentation for installation, connections, SQL, results, Change Profiler, backup and restore, MCP agents, settings, CLI commands, security, and troubleshooting."><meta property="og:url" content="https://dbterm.shreyam1008.com.np/guide/"><meta property="og:image" content="https://dbterm.shreyam1008.com.np/assets/command-palette.png"><meta property="og:image:width" content="1306"><meta property="og:image:height" content="514"><meta property="og:image:alt" content="dbterm terminal database workspace"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="dbterm Documentation | Complete User Guide and CLI Reference"><meta name="twitter:description" content="Complete dbterm documentation for installation, connections, SQL, results, Change Profiler, backup and restore, MCP agents, settings, CLI commands, security, and troubleshooting."><meta name="twitter:image" content="https://dbterm.shreyam1008.com.np/assets/command-palette.png"><meta name="twitter:image:alt" content="dbterm terminal database workspace"><link rel="icon" href="/favicon.ico" sizes="48x48"><link rel="icon" type="image/png" href="/favicon-48.png" sizes="48x48"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180"><script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"Complete dbterm user guide","description":"Complete dbterm documentation for installation, connections, SQL, results, Change Profiler, backup and restore, MCP agents, settings, CLI commands, security, and troubleshooting.","url":"https://dbterm.shreyam1008.com.np/guide/","mainEntityOfPage":"https://dbterm.shreyam1008.com.np/guide/","datePublished":"2026-08-20","dateModified":"2026-08-20","inLanguage":"en","author":{"@type":"Person","name":"Shreyam Adhikari","alternateName":"shreyam1008","url":"https://shreyam1008.com.np/","sameAs":["https://github.com/shreyam1008"]},"about":{"@type":"SoftwareApplication","name":"dbterm","applicationCategory":"DeveloperApplication","operatingSystem":"Linux, macOS, Windows","softwareVersion":"0.10.0","codeRepository":"https://github.com/shreyam1008/dbterm"},"image":"https://dbterm.shreyam1008.com.np/assets/command-palette.png"}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"dbterm","item":"https://dbterm.shreyam1008.com.np/"},{"@type":"ListItem","position":2,"name":"Documentation","item":"https://dbterm.shreyam1008.com.np/guide/"}]}</script><link rel="stylesheet" href="/_astro/BaseLayout.BNUAlURe.css"></head><body><a class="fixed -top-20 left-4 z-[1000] rounded-md bg-[var(--brand)] px-4 py-2 font-bold text-[var(--primary-foreground)] focus:top-4" href="#page-content">Skip to content</a><header class="sticky top-0 z-100 border-b border-[color-mix(in_srgb,var(--line)_70%,transparent)] bg-[color-mix(in_srgb,var(--bg)_88%,transparent)] py-3 backdrop-blur-xl"><div class="site-container grid grid-cols-[auto_1fr_auto] items-center gap-4 max-[900px]:grid-cols-[auto_auto] max-[900px]:justify-between"><a class="inline-flex items-center gap-2.5 text-[var(--ink)] no-underline hover:text-[var(--ink)]" href="/" aria-label="dbterm home"><svg class="size-9 shrink-0 drop-shadow-[0_4px_8px_rgba(11,93,82,.15)]" viewBox="0 0 64 64" role="img" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#0b5d52"></rect><rect x="10" y="14" width="44" height="34" rx="6" fill="#f7f5ed"></rect><path d="M17 26h30M17 33h22" stroke="#0b5d52" stroke-width="4" stroke-linecap="round"></path><circle cx="49" cy="50" r="5" fill="#f0b16d"></circle></svg><span class="font-mono text-base font-semibold tracking-[-.045em]">dbterm</span></a><nav class="min-w-0 max-[900px]:order-3 max-[900px]:col-span-full max-[900px]:overflow-x-auto max-[900px]:[scrollbar-width:none]" aria-label="Primary navigation"><ul class="m-0 flex items-center justify-center gap-[clamp(.15rem,1.4vw,1.1rem)] p-0 max-[900px]:w-max max-[900px]:min-w-full max-[900px]:justify-start max-[900px]:px-2"><li class="list-none max-[480px]:hidden"><a href="/features/" class="block rounded-md px-2 py-2 text-[.82rem] font-semibold text-[var(--ink-soft)] no-underline hover:bg-[var(--brand-soft)] hover:text-[var(--brand-strong)]">Features</a></li><li class="list-none"><a href="/#playground" class="block rounded-md px-2 py-2 text-[.82rem] font-semibold text-[var(--ink-soft)] no-underline hover:bg-[var(--brand-soft)] hover:text-[var(--brand-strong)]">Live demo</a></li><li class="list-none"><a href="/backup/" class="block rounded-md px-2 py-2 text-[.82rem] font-semibold text-[var(--ink-soft)] no-underline hover:bg-[var(--brand-soft)] hover:text-[var(--brand-strong)]">Backups</a></li><li class="list-none"><a href="/guide/" class="block rounded-md px-2 py-2 text-[.82rem] font-semibold text-[var(--ink-soft)] no-underline hover:bg-[var(--brand-soft)] hover:text-[var(--brand-strong)] bg-[var(--brand-soft)] text-[var(--brand-strong)]" aria-current="page">Docs</a></li><li class="list-none max-[480px]:hidden"><a href="/agents/" class="block rounded-md px-2 py-2 text-[.82rem] font-semibold text-[var(--ink-soft)] no-underline hover:bg-[var(--brand-soft)] hover:text-[var(--brand-strong)]">Agents</a></li><li class="list-none"><a href="/compare/" class="block rounded-md px-2 py-2 text-[.82rem] font-semibold text-[var(--ink-soft)] no-underline hover:bg-[var(--brand-soft)] hover:text-[var(--brand-strong)]">Compare</a></li><li class="list-none max-[480px]:hidden"><a href="/open-source/" class="block rounded-md px-2 py-2 text-[.82rem] font-semibold text-[var(--ink-soft)] no-underline hover:bg-[var(--brand-soft)] hover:text-[var(--brand-strong)]">Open source</a></li></ul></nav><div class="flex items-center gap-2"><button class="theme-toggle grid size-10 place-items-center rounded-full border border-[var(--line)] bg-[var(--surface)] text-[var(--ink-soft)] hover:border-[var(--brand)] hover:text-[var(--brand)]" type="button" data-theme-toggle aria-label="Switch to dark theme" title="Switch theme"><svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42"></path></svg><svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.2 15.2A8.5 8.5 0 0 1 8.8 3.8a8.5 8.5 0 1 0 11.4 11.4Z"></path></svg></button><a class="button primary small max-[680px]:hidden" href="/#install">Install</a></div></div></header><main id="page-content" class="page-shell"><section class="hero-panel docs-hero" aria-labelledby="guide-title"><p class="eyebrow">Complete manual · dbterm v0.10.0 · Beas</p><h1 id="guide-title">dbterm documentation</h1><p>One operational reference for installing dbterm, connecting every supported database, using the TUI and CLI, protecting data, and connecting trusted local agents.</p><div class="docs-actions" aria-label="Documentation formats and focused guides"><a class="button primary" href="#start-here">Read the manual</a><a class="button outline" href="/guide.md">Plain Markdown</a><a class="button outline" href="/backup.md">Backup handbook</a><a class="button outline" href="/agents.md">Agent guide</a></div><div class="page-meta" aria-label="Guide metadata"><span>Maintained by <a href="https://shreyam1008.com.np/">Shreyam Adhikari</a></span><span>Updated 20 August 2026</span><span>21 documented topics</span><span>Static HTML + Markdown</span><span>Offline guide: Alt+H</span></div></section><div class="docs-layout"><aside class="docs-sidebar" aria-label="Documentation table of contents"><nav><p class="section-label">On this page</p><ol><li><a href="#start-here">Start here</a></li><li><a href="#install-verify-update-and-uninstall">Install, verify, update, and uninstall</a></li><li><a href="#create-and-manage-connections">Create and manage connections</a></li><li><a href="#dashboard-and-database-discovery">Dashboard and database discovery</a></li><li><a href="#navigate-the-workspace-and-command-palette">Navigate the workspace and command palette</a></li><li><a href="#browse-tables-columns-and-database-objects">Browse tables, columns, and database objects</a></li><li><a href="#write-sql-use-autocomplete-and-query-history">Write SQL, use autocomplete, and query history</a></li><li><a href="#work-with-result-rows-and-columns">Work with result rows and columns</a></li><li><a href="#import-sql-and-export-csv">Import SQL and export CSV</a></li><li><a href="#compare-changes-with-change-profiler">Compare changes with Change Profiler</a></li><li><a href="#operate-local-postgresql-and-mysql-services">Operate local PostgreSQL and MySQL services</a></li><li><a href="#back-up-and-restore-databases">Back up and restore databases</a></li><li><a href="#configure-settings-and-shortcuts">Configure Settings and shortcuts</a></li><li><a href="#connect-trusted-ai-agents-through-mcp">Connect trusted AI agents through MCP</a></li><li><a href="#database-sql-reference">Database SQL reference</a></li><li><a href="#cli-reference">CLI reference</a></li><li><a href="#files-profiles-and-recovery">Files, profiles, and recovery</a></li><li><a href="#troubleshooting">Troubleshooting</a></li><li><a href="#security-privacy-and-deliberate-limits">Security, privacy, and deliberate limits</a></li><li><a href="#current-release-and-change-history">Current release and change history</a></li><li><a href="#develop-contribute-and-get-help">Develop, contribute, and get help</a></li></ol></nav><div class="docs-sidebar-links"><strong>Focused references</strong><a href="/backup/">Backup overview</a><a href="/agents/">AI agents and MCP</a><a href="https://github.com/shreyam1008/dbterm/releases">Release history</a><a href="https://github.com/shreyam1008/dbterm/issues">Report a problem</a></div></aside><article class="docs-content" aria-label="Complete dbterm user guide"><h2 id="start-here">Start here</h2>
+<p>dbterm is a keyboard-first terminal database workbench for PostgreSQL, MySQL/MariaDB, SQLite, Turso/LibSQL, and Cloudflare D1. It combines saved connections, server-level database discovery, schema and data browsing, SQL, relationship navigation, change comparison, local service controls, import/export, and verified backups in one binary.</p>
+<p>The normal first session is:</p>
+<ol>
+<li>Install dbterm and run <code>dbterm</code>.</li>
+<li>Press <code>N</code> on the Dashboard.</li>
+<li>Choose a database type, enter the connection details, and select <strong>Save &amp; Connect</strong>.</li>
+<li>For PostgreSQL or MySQL, leave <strong>Default Database</strong> empty if you want dbterm to show every database visible to that server login.</li>
+<li>Select a table, use <code>Alt+Q</code> to focus Query, and press <code>Ctrl+Space</code> for local suggestions and safe selected-table templates.</li>
+<li>Press <code>Alt+H</code> at any time for the offline Guide &amp; SQL Reference.</li>
+</ol>
+<p>dbterm is local software. It connects directly from your computer to your databases; it does not send connection data through a hosted dbterm control plane.</p>
+<h3 id="database-capability-matrix">Database capability matrix</h3>
+<table>
+<thead>
+<tr>
+<th>Database</th>
+<th>Query and schema</th>
+<th>Backup</th>
+<th>Restore</th>
+<th>Local service controls</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PostgreSQL</td>
+<td>Yes</td>
+<td>Custom <code>pg_dump</code> archive</td>
+<td>Yes, content-detected</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>MySQL / MariaDB</td>
+<td>Yes</td>
+<td>Single-database <code>mysqldump</code> SQL</td>
+<td>Yes, content-detected</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>SQLite</td>
+<td>Yes</td>
+<td>Consistent built-in snapshot</td>
+<td>Snapshot or streamed SQL</td>
+<td>No service required</td>
+</tr>
+<tr>
+<td>Turso / LibSQL</td>
+<td>Yes</td>
+<td>Transaction-backed logical SQL</td>
+<td>Inspectable only in this release</td>
+<td>No</td>
+</tr>
+<tr>
+<td>Cloudflare D1</td>
+<td>Yes</td>
+<td>Cloudflare native SQL export</td>
+<td>Inspectable only in this release</td>
+<td>No</td>
+</tr>
+</tbody>
+</table>
+<h2 id="install-verify-update-and-uninstall">Install, verify, update, and uninstall</h2>
+<p>Release binaries are available for Linux, macOS, and Windows on amd64 and arm64. The direct installers download the matching release artifact and verify it against the published checksums.</p>
+<h3 id="linux-and-macos-installer">Linux and macOS installer</h3>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#B392F0">curl</span><span style="color:#79B8FF"> -fsSL</span><span style="color:#9ECBFF"> https://raw.githubusercontent.com/shreyam1008/dbterm/main/install.sh</span><span style="color:#F97583"> |</span><span style="color:#B392F0"> bash</span></span></code></pre>
+<h3 id="windows-powershell-installer">Windows PowerShell installer</h3>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="powershell"><code><span class="line"><span style="color:#E1E4E8">powershell </span><span style="color:#F97583">-</span><span style="color:#E1E4E8">NoProfile </span><span style="color:#F97583">-</span><span style="color:#E1E4E8">ExecutionPolicy Bypass </span><span style="color:#F97583">-</span><span style="color:#E1E4E8">Command </span><span style="color:#9ECBFF">"irm https://raw.githubusercontent.com/shreyam1008/dbterm/main/install.ps1 | iex"</span></span></code></pre>
+<h3 id="go-toolchain">Go toolchain</h3>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> install</span><span style="color:#9ECBFF"> github.com/shreyam1008/dbterm/cmd/dbterm@latest</span></span></code></pre>
+<h3 id="homebrew-tap">Homebrew tap</h3>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#B392F0">brew</span><span style="color:#9ECBFF"> tap</span><span style="color:#9ECBFF"> shreyam1008/tap</span></span>
+<span class="line"><span style="color:#B392F0">brew</span><span style="color:#9ECBFF"> install</span><span style="color:#9ECBFF"> shreyam1008/tap/dbterm</span></span></code></pre>
+<h3 id="scoop-bucket">Scoop bucket</h3>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="powershell"><code><span class="line"><span style="color:#E1E4E8">scoop bucket add shreyam1008 https:</span><span style="color:#F97583">//</span><span style="color:#79B8FF">github.com</span><span style="color:#F97583">/</span><span style="color:#E1E4E8">shreyam1008</span><span style="color:#F97583">/</span><span style="color:#E1E4E8">scoop</span><span style="color:#F97583">-</span><span style="color:#E1E4E8">bucket</span></span>
+<span class="line"><span style="color:#E1E4E8">scoop install dbterm</span></span></code></pre>
+<p>Homebrew and Scoop can lag behind the newest GitHub release. Check the version shown by the package manifest before choosing a channel. WinGet is not documented as an install option until its public package is merged. The published APT metadata is not yet signed, so use the direct <code>.deb</code> release artifact or the verified shell installer instead of treating that repository as authenticated.</p>
+<p>Verify the installed build and resolved paths:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#B392F0">dbterm</span><span style="color:#79B8FF"> --version</span></span>
+<span class="line"><span style="color:#B392F0">dbterm</span><span style="color:#79B8FF"> --info</span></span></code></pre>
+<p>Update to the newest release or a specific version:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#B392F0">dbterm</span><span style="color:#79B8FF"> --update</span></span>
+<span class="line"><span style="color:#B392F0">dbterm</span><span style="color:#79B8FF"> --update</span><span style="color:#79B8FF"> 0.10.0</span></span></code></pre>
+<p>The Dashboard <code>U</code> action opens the same Version &amp; Update workflow. Updates verify the release checksum and replace only the executable. Saved connections, settings, query history, backup plans and history, completed artifacts, and Change Profiler anchors remain in the invoking user’s profile. If a system-owned binary needs elevation, <code>sudo dbterm --update</code> preserves the invoking user’s data rather than switching to a root profile.</p>
+<p>Uninstall options:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#B392F0">dbterm</span><span style="color:#79B8FF"> --uninstall</span></span>
+<span class="line"><span style="color:#B392F0">dbterm</span><span style="color:#79B8FF"> --uninstall</span><span style="color:#79B8FF"> --yes</span></span>
+<span class="line"><span style="color:#B392F0">dbterm</span><span style="color:#79B8FF"> --uninstall</span><span style="color:#79B8FF"> --purge</span></span></code></pre>
+<p>Normal uninstall removes the binary. <code>--purge</code> also removes dbterm-owned config, state, and logs, but never removes backup artifacts written to a destination you chose. Purge refuses to remove a discovered private age identity or backup-like file from dbterm’s directories; move the recovery key somewhere safe or delete it explicitly before retrying. If a package manager owns the binary, uninstall through that package manager.</p>
+<h2 id="create-and-manage-connections">Create and manage connections</h2>
+<p>Press <code>N</code> on the Dashboard to open the connection form. Every connection has a display name, database type, and optional <strong>Read-Only Guard</strong> setting. This is a convenience check in the Query workspace, not a database security boundary: it inspects only the statement’s first SQL token and blocks obvious write-leading statements such as <code>INSERT</code>, <code>UPDATE</code>, <code>DELETE</code>, and <code>CREATE</code>.</p>
+<p>Statements beginning with <code>WITH</code>, <code>EXPLAIN</code>, or <code>PRAGMA</code> are classified as readable by this guard even though a data-changing CTE, <code>EXPLAIN ANALYZE</code> of a write, or a writable SQLite pragma can have side effects. For enforced protection, connect with database credentials or grants that cannot write; where applicable, also use the engine’s read-only mode or a read-only filesystem. Keep the guard enabled as an extra warning, not as the only control.</p>
+<h3 id="postgresql">PostgreSQL</h3>
+<p>Provide either a PostgreSQL connection string or the structured fields:</p>
+<ul>
+<li>Host and port; the default port is <code>5432</code>.</li>
+<li>Database user and password.</li>
+<li>Optional default database.</li>
+<li>PostgreSQL SSL mode when required by the server.</li>
+</ul>
+<p>The form can parse URL and key/value PostgreSQL DSNs. Leave the database empty to save a server-level login and browse all accessible databases.</p>
+<h3 id="mysql-and-mariadb">MySQL and MariaDB</h3>
+<p>Provide either a MySQL DSN or the structured fields:</p>
+<ul>
+<li>Host and port; the default port is <code>3306</code>.</li>
+<li>Database user and password.</li>
+<li>Optional default database.</li>
+</ul>
+<p>Ubuntu’s MySQL <code>root</code> account often uses socket authentication and may not work over TCP. Create or use a TCP-capable MySQL account; the Linux sudo password is not a database password.</p>
+<h3 id="sqlite">SQLite</h3>
+<p>Provide the path to the local SQLite database file. SQLite does not need a username, password, port, or local service manager.</p>
+<h3 id="turso--libsql">Turso / LibSQL</h3>
+<p>Provide the database URL, such as <code>libsql://database-owner.turso.io</code>, and its auth token.</p>
+<h3 id="cloudflare-d1">Cloudflare D1</h3>
+<p>Provide the Cloudflare account ID, D1 database ID, and API token. dbterm uses the D1 API for queries and native exports.</p>
+<h3 id="connection-form-actions">Connection form actions</h3>
+<ul>
+<li><strong>Save &amp; Connect</strong> stores the profile, tests the selected database when appropriate, and opens it. A server-level PostgreSQL/MySQL profile opens the database picker.</li>
+<li><strong>Save Only</strong> stores the profile without leaving the Dashboard.</li>
+<li><strong>Find DBs</strong> lists databases visible to the entered PostgreSQL/MySQL login.</li>
+<li><strong>Test</strong> checks the current fields without saving them.</li>
+<li><strong>Parse DSN</strong> copies supported PostgreSQL/MySQL connection-string values into the structured fields so they can be reviewed.</li>
+<li><code>Esc</code> cancels without saving.</li>
+</ul>
+<p>Connection secrets are stored in a private per-user <code>connections.json</code> file so unattended jobs can reuse them. They are not stored in an OS keyring. Protect the OS account and dbterm directories, use narrowly privileged database accounts, and never paste credentials into issue reports.</p>
+<h2 id="dashboard-and-database-discovery">Dashboard and database discovery</h2>
+<p>The Dashboard owns saved logins, health checks, update access, and entry points into the major operational pages.</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Dashboard action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Enter</code></td>
+<td>Connect to the highlighted profile or its default database</td>
+</tr>
+<tr>
+<td><code>A</code></td>
+<td>Browse every database visible through the highlighted PostgreSQL/MySQL server login</td>
+</tr>
+<tr>
+<td><code>N</code> / <code>E</code> / <code>D</code></td>
+<td>New, edit, or delete a connection</td>
+</tr>
+<tr>
+<td><code>R</code></td>
+<td>Run fresh connection health checks</td>
+</tr>
+<tr>
+<td><code>Ctrl+B</code></td>
+<td>Create a scheduled backup plan with the highlighted connection preselected</td>
+</tr>
+<tr>
+<td><code>B</code></td>
+<td>Open Backup Center</td>
+</tr>
+<tr>
+<td><code>I</code></td>
+<td>Import SQL into the highlighted PostgreSQL/MySQL connection</td>
+</tr>
+<tr>
+<td><code>G</code></td>
+<td>Open Settings</td>
+</tr>
+<tr>
+<td><code>H</code></td>
+<td>Open the offline guide</td>
+</tr>
+<tr>
+<td><code>S</code></td>
+<td>Open local database services</td>
+</tr>
+<tr>
+<td><code>U</code></td>
+<td>Open Version &amp; Update</td>
+</tr>
+<tr>
+<td><code>W</code> or <code>Esc</code></td>
+<td>Return to an already-open workspace</td>
+</tr>
+<tr>
+<td><code>Q</code></td>
+<td>Quit</td>
+</tr>
+<tr>
+<td><code>1</code>–<code>9</code>, <code>0</code></td>
+<td>Select one of the first ten saved connections</td>
+</tr>
+</tbody>
+</table>
+<p>Inside the server database picker, <code>Enter</code> opens a database temporarily with the original login, <code>D</code> makes it the optional default, and <code>N</code> saves a separate connection. Separate saved connections are useful when a backup job needs one specific database.</p>
+<p>Dashboard health checks can run automatically or only when <code>R</code> is pressed. Change this in Settings if startup checks are slow on a network with unreachable servers.</p>
+<h2 id="navigate-the-workspace-and-command-palette">Navigate the workspace and command palette</h2>
+<p>The workspace contains Tables, Query, and Results. Direct focus shortcuts and forward/backward cycling preserve each panel’s current table, row, column, scroll position, and type-ahead text.</p>
+<ul>
+<li><code>Alt+T</code>, <code>Alt+Q</code>, and <code>Alt+R</code> focus Tables, Query, and Results.</li>
+<li><code>Tab</code> and <code>Shift+Tab</code> cycle the three panels.</li>
+<li><code>Alt+F</code> toggles fullscreen Results.</li>
+<li><code>Alt+D</code> returns to the Dashboard.</li>
+<li><code>Esc</code> closes a completion or active filter first, then moves out of Query or returns to the Dashboard.</li>
+<li><code>Ctrl+C</code> cancels an active query, import, export, or cancellable loader before it quits the app.</li>
+</ul>
+<p><code>Ctrl+P</code> opens the command palette. It searches documented actions, tables, collapsed columns, views, functions, procedures, triggers, recent successful SQL, backup jobs, and other database objects. Use Up/Down to select, <code>Enter</code> to open, and <code>Esc</code> to close. Palette searches are local; they do not query the database on every keystroke.</p>
+<h2 id="browse-tables-columns-and-database-objects">Browse tables, columns, and database objects</h2>
+<p>The Tables panel is a searchable schema tree rather than a flat table list.</p>
+<ul>
+<li>Type to search every table and collapsed column. A strong column match expands its table and highlights the column.</li>
+<li>Right expands a table and then enters its children. Left returns to the parent and then collapses it.</li>
+<li>Clicking <code>▸</code> or <code>▾</code> expands or collapses without opening rows.</li>
+<li><code>Enter</code> opens a table; on a child column it opens the table and selects that Results header.</li>
+<li><code>Space</code> pins or unpins a table at the top for the current database connection.</li>
+<li><code>Shift+C</code> or right-click copies the complete table or column name.</li>
+<li>Backspace edits the active search; <code>Esc</code> clears it, then returns to the Dashboard on a second press.</li>
+<li><code>Alt+M</code> opens the selected table’s columns, primary keys, foreign keys, and indexes.</li>
+</ul>
+<p>Expanded columns show <code>PK</code>, <code>FK</code>, <code>NN</code>, and data-type metadata. Names appear first; additional metadata loads asynchronously so large schemas remain responsive. Only one branch stays expanded at a time.</p>
+<p>Views can be opened as row data. Functions, procedures, triggers, and extensions open read-only definition/details pages when the engine exposes them.</p>
+<h2 id="write-sql-use-autocomplete-and-query-history">Write SQL, use autocomplete, and query history</h2>
+<p>In Query, <code>Enter</code> executes the current SQL and <code>Shift+Enter</code> or <code>Alt+Enter</code> inserts a newline. Queries have a 30-second execution timeout. Press <code>Esc</code> or <code>Ctrl+C</code> to request cancellation; dbterm keeps the interface responsive while the driver finishes the safe cancellation path.</p>
+<p><code>Ctrl+Space</code> opens local SQL suggestions. Up/Down or <code>Ctrl+P</code>/<code>Ctrl+N</code> changes the selection; <code>Tab</code> or <code>Enter</code> inserts it; <code>Esc</code> dismisses suggestions. Completions include:</p>
+<ul>
+<li>SQL keywords, clauses, functions, and routines.</li>
+<li>Live tables, views, columns, schemas, and databases from the local catalog.</li>
+<li>Alias-aware columns and relation-context ranking.</li>
+<li>Typo-tolerant table and keyword recovery.</li>
+<li>Ready read-only templates for the selected table: preview, row count, named-column, newest-row, and useful grouped summaries when matching columns exist.</li>
+<li>Safe next clauses after a complete table name, including limits, recent-first ordering, and non-NULL filters.</li>
+</ul>
+<p>Metadata is refreshed away from the typing path, so opening or accepting a suggestion never performs a network or database query.</p>
+<p>Successful queries are stored per connection. <code>Alt+Y</code> opens newest-first history; <code>Enter</code> loads one into Query and <code>Esc</code> or Backspace closes the list. Failed and canceled statements are not presented as successful history.</p>
+<p>The full query editor can execute writes. A saved profile’s <strong>Read-Only Guard</strong> blocks only obvious write-leading tokens; <code>WITH</code>, <code>EXPLAIN</code>, and <code>PRAGMA</code> are bypass classes and may still change data. Review destructive SQL carefully and use database-enforced read-only credentials or grants whenever writes must be impossible.</p>
+<h2 id="work-with-result-rows-and-columns">Work with result rows and columns</h2>
+<p>Table browsing uses bounded server-side pages. Ad-hoc query results are also safety-limited for terminal rendering.</p>
+<h3 id="navigate-find-and-inspect">Navigate, find, and inspect</h3>
+<ul>
+<li>Arrow keys move through cells.</li>
+<li>From the first data row, press Up to enter the selectable header row. Type a column name to jump, Left/Right to move, and Down or <code>Enter</code> to return to that column’s data.</li>
+<li><code>Shift+C</code> on a header copies the complete column name.</li>
+<li><code>C</code> on data copies the complete cell value even when its display preview is shortened.</li>
+<li><code>Enter</code> opens a vertical row-detail view with every complete value; use arrows and <code>C</code> inside it.</li>
+<li><code>Space</code> toggles the current row selection. <code>Alt+A</code> selects every displayed row and <code>Alt+C</code> clears the selection.</li>
+</ul>
+<h3 id="filter">Filter</h3>
+<p>Press <code>/</code> to build typed predicates. Supported operators are <code>=</code>, <code>!=</code>, <code>&gt;</code>, <code>&gt;=</code>, <code>&lt;</code>, <code>&lt;=</code>, contains, starts-with, <code>IS NULL</code>, and <code>IS NOT NULL</code>. <strong>Add AND</strong> composes predicates; Apply updates the query; Remove Last and Clear All back out safely. Tab and Shift+Tab move between form fields.</p>
+<p>Press <code>V</code> to apply or update equality for the selected column from the clipboard or the last cell copied inside dbterm. A real SQL <code>NULL</code> becomes <code>IS NULL</code>; the text <code>"NULL"</code> remains text. Table filters are remembered for the active connection and table during the session. The first <code>Esc</code> clears filters and resets to the first page; the next returns to the Dashboard.</p>
+<h3 id="follow-relationships-and-values">Follow relationships and values</h3>
+<p>Press <code>F</code> on a key cell to see declared outgoing parent and incoming child relationships. Composite-key relationships use every declared component. Open a related row and repeat to build a chain; Backspace returns one hop at a time.</p>
+<p>Inside Related Data, <code>V</code> searches exact values across same-named columns in other tables and opens a match as a typed filter. This is an explicit value search, not proof of a foreign-key relationship.</p>
+<h3 id="sort-page-and-size">Sort, page, and size</h3>
+<ul>
+<li><code>S</code> toggles sorting on the selected column. Table results use server-side order; ad-hoc query results can only sort the loaded page locally.</li>
+<li><code>PgDn</code> or <code>]</code> loads the next page; <code>PgUp</code> or <code>[</code> loads the previous page; Home/End jump to first/last when the count is known.</li>
+<li><code>+</code> and <code>-</code> resize the selected column.</li>
+<li><code>Ctrl++</code> and <code>Ctrl+-</code>, or the terminal-safe <code>&gt;</code> and <code>&lt;</code>, resize all columns.</li>
+<li><code>0</code> or <code>Ctrl+0</code> resets the current table’s remembered widths.</li>
+<li><code>Alt++</code> and <code>Alt+-</code> step through 50, 100, 250, 500, 1,000, and safe-maximum preview sizes. <code>Alt+0</code> toggles 100 rows and safe maximum.</li>
+<li><code>F5</code> refreshes the current table. <code>Ctrl+F5</code> refreshes schema objects and current data.</li>
+</ul>
+<p>The default preview is 100 rows. Rendering is bounded to 1,000 rows, 12,000 cells, and approximately 2 MiB of estimated display data; safe maximum chooses the largest size that stays inside those ceilings. Column widths are persisted per connection/table/column. Table pins persist per database connection. Result row and header positions are remembered per table in the current connection.</p>
+<h2 id="import-sql-and-export-csv">Import SQL and export CSV</h2>
+<p><code>Alt+I</code> imports a PostgreSQL or MySQL SQL dump into the active connection. Dashboard <code>I</code> performs the same operation for the highlighted saved connection. Import streams client output, supports stop-on-error behavior, has a 30-minute operation timeout, and can be canceled with <code>Esc</code> or <code>Ctrl+C</code>. SQLite, Turso, and D1 do not use this SQL-import screen.</p>
+<p><code>Alt+E</code> exports one of three scopes:</p>
+<ul>
+<li>Explicitly selected displayed rows.</li>
+<li>The current displayed page.</li>
+<li>Every table row matching the active filters and sort.</li>
+</ul>
+<p>All-matching export streams from the database instead of forcing every row into the TUI. Publication is atomic; cancellation or failure does not leave a completed-looking partial CSV.</p>
+<h2 id="compare-changes-with-change-profiler">Compare changes with Change Profiler</h2>
+<p>Press <code>Alt+W</code> to open Change Profiler. It creates portable, named before/after anchors without installing triggers or server objects.</p>
+<ol>
+<li>Press <code>N</code>, name the anchor, and review the table plan.</li>
+<li>Use Space to toggle one table or <code>A</code> to explicitly include/exclude the whole database.</li>
+<li>Capture the baseline, perform the operation you want to observe, then press <code>S</code> to scan without stopping or <code>F</code> for the final scan and finish.</li>
+<li>Press <code>Enter</code> on a report to inspect changed tables, inserted/updated/deleted rows, schema changes, columns, and complete before/after values.</li>
+<li><code>E</code> renames and <code>D</code> permanently deletes a local anchor/report.</li>
+</ol>
+<p>Risky, keyless, or very large tables start excluded and require explicit opt-in. Loaders show phase, table, rows, bytes, rate, elapsed time, approximate percent, and ETA when estimates are meaningful. Baselines are adaptively compressed in private local state.</p>
+<p>PostgreSQL/MySQL use a consistent repeatable-read snapshot; SQLite/Turso use a transaction; D1 is reported as best-effort. A scan must use the original connection. Cancellation preserves the last successful report and removes partial capture state.</p>
+<p>Change Profiler shows observed differences. The connection and dbterm activity are evidence, but the writer remains <strong>Unknown</strong> unless the database has its own audit trail. Database-native WAL/binlog tracking is not enabled automatically because it needs engine-specific privileges/configuration and can retain server logs when a consumer stops.</p>
+<h2 id="operate-local-postgresql-and-mysql-services">Operate local PostgreSQL and MySQL services</h2>
+<p>Press <code>Alt+S</code> or Dashboard <code>S</code> to inspect supported local PostgreSQL/MySQL services. On supported Linux systems the page shows detected status, version, port, PID, and resident memory.</p>
+<ul>
+<li><code>1</code> toggles MySQL and <code>2</code> toggles PostgreSQL.</li>
+<li><code>C</code> or <code>Enter</code> connects through a saved login or manually entered database credentials.</li>
+<li>Leave Database blank to browse everything visible to that login.</li>
+<li><code>R</code> refreshes service state and <code>Esc</code> returns.</li>
+</ul>
+<p>Starting/stopping a service may require a system authentication prompt. dbterm distinguishes that OS privilege from the database username/password and gives install guidance when a supported service is absent.</p>
+<h2 id="back-up-and-restore-databases">Back up and restore databases</h2>
+<p>The same backup engine serves instant TUI backups, durable Backup Center jobs, the CLI, and the background agent. The complete field-by-field operator handbook is available at <a href="https://dbterm.shreyam1008.com.np/backup.md">the Backup Center documentation</a>.</p>
+<h3 id="required-tools-and-agent-path">Required tools and agent PATH</h3>
+<p>Install only the native tools required by the databases and destinations you use:</p>
+<ul>
+<li>PostgreSQL backup requires <code>pg_dump</code>; import, inspection, and restore can require <code>pg_restore</code> and <code>psql</code>.</li>
+<li>MySQL/MariaDB backup requires <code>mysqldump</code>; import and restore require <code>mysql</code>.</li>
+<li>SQLite snapshot backup and snapshot restore are built in. Restoring a streamed SQLite SQL dump requires <code>sqlite3</code>.</li>
+<li>Turso/LibSQL logical export and Cloudflare D1 native export do not require those database command-line clients.</li>
+<li>An <code>rclone://...</code> destination requires <code>rclone</code>, configured for the same OS account that runs the interactive app or backup agent.</li>
+</ul>
+<p>Install the matching packages:</p>
+<ul>
+<li>Ubuntu: <code>sudo apt install postgresql-client mysql-client sqlite3 rclone</code></li>
+<li>Debian: <code>sudo apt install postgresql-client default-mysql-client sqlite3 rclone</code></li>
+<li>macOS with Homebrew: <code>brew install libpq mysql-client sqlite rclone</code></li>
+<li>Windows: install the PostgreSQL and MySQL command-line clients when those engines are used, install <code>sqlite3</code> from the <a href="https://sqlite.org/download.html">official SQLite tools downloads</a>, and install <code>rclone</code> from the <a href="https://rclone.org/downloads/">official rclone downloads</a>. Add their executable directories to the PATH of the user or system account that runs the backup agent.</li>
+</ul>
+<p>Verify the relevant tools from that same account:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="text"><code><span class="line"><span>pg_dump --version</span></span>
+<span class="line"><span>pg_restore --version</span></span>
+<span class="line"><span>psql --version</span></span>
+<span class="line"><span>mysqldump --version</span></span>
+<span class="line"><span>mysql --version</span></span>
+<span class="line"><span>sqlite3 --version</span></span>
+<span class="line"><span>rclone version</span></span></code></pre>
+<p>Homebrew’s <code>libpq</code> and <code>mysql-client</code> formulae may be keg-only, so make their <code>bin</code> directories available to the agent rather than relying only on an interactive shell profile. For remote storage, run <code>rclone config</code> and a read check such as <code>rclone lsd offsite:</code> as the agent account before saving <code>rclone://offsite/...</code>. A Windows system task cannot use a per-user mapped-drive letter; use a local path, UNC/mounted path available to that account, or rclone.</p>
+<h3 id="instant-backup">Instant backup</h3>
+<p>Press <code>Alt+B</code> from Tables, Query, or Results. Choose an absolute local/mounted folder or <code>rclone://remote/path</code>; <code>F2</code> opens the native folder chooser and <code>F3</code> refreshes destination and private-staging capacity. dbterm chooses the engine-appropriate format, refuses to overwrite an existing file, cancels safely, and publishes only a finished artifact. The default folder is <code>~/dbterm-backups</code>.</p>
+<h3 id="durable-plans">Durable plans</h3>
+<p>Open Backup Center with <code>Alt+K</code> or Dashboard <code>B</code>. Press <code>N</code> to select a saved database or add one; Dashboard <code>Ctrl+B</code> starts with its highlighted connection, and <code>Ctrl+N</code> adds another connection from inside the plan form.</p>
+<p>A plan configures:</p>
+<ul>
+<li>Manual, interval, daily, or weekly scheduling with timezone, weekdays, catch-up behavior, and enabled state.</li>
+<li>Absolute local/mounted or rclone destinations.</li>
+<li>Filename tokens: <code>{job}</code>, <code>{connection}</code>, <code>{database}</code>, <code>{engine}</code>, <code>{date}</code>, <code>{time}</code>, <code>{timestamp}</code>, and <code>{run}</code>.</li>
+<li>Count, maximum-age, and total-size retention ceilings. The newest verified artifact is always preserved.</li>
+<li>Timeout and compression: none, gzip, ZIP, or Zstandard with a chosen level.</li>
+<li>Optional age X25519 public recipient.</li>
+<li>Email policy: never, failure, success, or both; Gmail STARTTLS defaults or custom SMTP/TLS, recipients, sender, username, and app password.</li>
+</ul>
+<p>Backup Center actions include run now, enable/disable schedule, apply retention, history, inspect/restore, desktop/server agent status and controls, age key generation, edit, and delete. Deleting a job keeps its history and files.</p>
+<h3 id="agents-inspection-and-restore">Agents, inspection, and restore</h3>
+<p>Desktop/user mode requires no administrator access and starts at login. Server/system mode is an explicit elevated installation that starts at machine boot and requires existing config/state/log paths plus a chosen runtime user. Start/stop changes runtime; enable/disable changes startup policy independently. The status screen separates registration, startup, manager runtime, process lock, heartbeat, PID, uptime, memory, and current phase. Logs can be refreshed and copied.</p>
+<p>Inspection unwraps at most three gzip, Zstandard, single-entry ZIP, or age layers in private OS temporary files, with a 1 GiB decoded limit per layer by default. It identifies the database format from content, checks SHA-256 history when available, and warns about misleading extensions. Increase <strong>Max Decoded GiB</strong> only for a trusted larger artifact and provide enough temporary disk space.</p>
+<p>Restore is preview-first and always requires explicit consent. The detected engine must match the saved target. Merge is the default; clean restore is a separate destructive choice and requires the exact database name or normalized SQLite path. Valid SQL can still perform any server-side action allowed to the selected database account, so restore only trusted files.</p>
+<h2 id="configure-settings-and-shortcuts">Configure Settings and shortcuts</h2>
+<p>Open Settings with Dashboard <code>G</code>, <code>Alt+,</code>, or <code>Alt+G</code>. Settings owns:</p>
+<ul>
+<li>Dashboard health checks: <code>auto</code> or <code>manual</code>.</li>
+<li>Agent connection scope: only the active saved profile (default) or all saved profiles.</li>
+<li><strong>Allow Agent Profile Writes</strong>, disabled by default because profiles can contain credentials.</li>
+<li>Every configurable global key binding.</li>
+</ul>
+<p>Settings validates names, modifier requirements, duplicates, and reserved contextual keys before saving. <code>Ctrl+S</code> saves the form; Reset Defaults restores the built-in bindings. <code>Ctrl+Space</code>, Tab, Esc, Backspace, <code>F5</code>, <code>Ctrl+C</code>, and result-sizing keys remain context-owned and cannot be reassigned as unsafe global plain-letter shortcuts.</p>
+<p>Default configurable actions:</p>
+<table>
+<thead>
+<tr>
+<th>Default</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Alt+T</code> / <code>Alt+Q</code> / <code>Alt+R</code></td>
+<td>Focus Tables / Query / Results</td>
+</tr>
+<tr>
+<td><code>Alt+D</code></td>
+<td>Dashboard</td>
+</tr>
+<tr>
+<td><code>Alt+H</code></td>
+<td>Guide &amp; SQL Reference</td>
+</tr>
+<tr>
+<td><code>Alt+S</code></td>
+<td>Database services</td>
+</tr>
+<tr>
+<td><code>Alt+F</code></td>
+<td>Fullscreen Results</td>
+</tr>
+<tr>
+<td><code>Alt+B</code> / <code>Alt+K</code></td>
+<td>Instant backup / Backup Center</td>
+</tr>
+<tr>
+<td><code>Alt+W</code></td>
+<td>Change Profiler</td>
+</tr>
+<tr>
+<td><code>Alt+E</code></td>
+<td>CSV export</td>
+</tr>
+<tr>
+<td><code>Alt+Y</code></td>
+<td>Query history</td>
+</tr>
+<tr>
+<td><code>Alt+,</code> / <code>Alt+G</code></td>
+<td>Settings</td>
+</tr>
+<tr>
+<td><code>Alt+I</code></td>
+<td>SQL import</td>
+</tr>
+<tr>
+<td><code>Alt+M</code></td>
+<td>Schema inspection</td>
+</tr>
+<tr>
+<td><code>Alt+A</code> / <code>Alt+C</code></td>
+<td>Select all displayed rows / clear selection</td>
+</tr>
+<tr>
+<td><code>Ctrl+P</code></td>
+<td>Command palette</td>
+</tr>
+</tbody>
+</table>
+<p>The <strong>Keyboard &amp; workflows</strong> section of the in-app guide renders effective configured shortcuts, not stale defaults.</p>
+<h2 id="connect-trusted-ai-agents-through-mcp">Connect trusted AI agents through MCP</h2>
+<p><code>dbterm mcp serve</code> starts a local Model Context Protocol server over standard input/output. It opens no network port and does not require a hosted dbterm account. The complete agent guide is available at <a href="https://dbterm.shreyam1008.com.np/agents/">dbterm for agents</a> and as <a href="https://dbterm.shreyam1008.com.np/agents.md">agent-readable Markdown</a>.</p>
+<p>Register it with Codex:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#B392F0">codex</span><span style="color:#9ECBFF"> mcp</span><span style="color:#9ECBFF"> add</span><span style="color:#9ECBFF"> dbterm</span><span style="color:#79B8FF"> --</span><span style="color:#9ECBFF"> dbterm</span><span style="color:#9ECBFF"> mcp</span><span style="color:#9ECBFF"> serve</span></span></code></pre>
+<p>Or configure any MCP client with command <code>dbterm</code> and arguments <code>mcp</code>, <code>serve</code>.</p>
+<p>Available tools are <code>list_connections</code>, <code>inspect_database</code>, <code>inspect_table</code>, <code>query_read_only</code>, <code>explain_query</code>, <code>follow_record</code>, and—only after explicit Settings opt-in—<code>save_connection_profile</code>. The server also exposes <code>dbterm://mcp/instructions</code>.</p>
+<p>Runtime options:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="text"><code><span class="line"><span>--connection active|all|ID</span></span>
+<span class="line"><span>--max-rows N              default 50, range 1–200</span></span>
+<span class="line"><span>--timeout 8s              maximum 30s</span></span>
+<span class="line"><span>--deny-profile-write</span></span></code></pre>
+<p>Database execution is always read-only, one statement at a time, and bounded by query size, time, rows, columns, cell size, and response bytes. Stored passwords/tokens are never returned. Calls are audited to stderr without SQL text or credentials. Profile writes remain behind the Settings gate and secret inputs are write-only. A SELECT-only database account is still recommended because syntax checks cannot prove that every database-specific function is free of side effects.</p>
+<h2 id="database-sql-reference">Database SQL reference</h2>
+<p>These examples are starting points, not a substitute for reviewing the target database and account privileges. Replace placeholder table names and add a narrow <code>WHERE</code> clause before running writes.</p>
+<h3 id="postgresql-1">PostgreSQL</h3>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sql"><code><span class="line"><span style="color:#6A737D">-- Schema and server</span></span>
+<span class="line"><span style="color:#F97583">SELECT</span><span style="color:#E1E4E8"> table_name </span><span style="color:#F97583">FROM</span><span style="color:#79B8FF"> information_schema</span><span style="color:#E1E4E8">.</span><span style="color:#79B8FF">tables</span><span style="color:#F97583"> WHERE</span><span style="color:#E1E4E8"> table_schema </span><span style="color:#F97583">=</span><span style="color:#9ECBFF"> 'public'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">SELECT</span><span style="color:#E1E4E8"> column_name, data_type, is_nullable</span></span>
+<span class="line"><span style="color:#F97583">  FROM</span><span style="color:#79B8FF"> information_schema</span><span style="color:#E1E4E8">.</span><span style="color:#79B8FF">columns</span><span style="color:#F97583"> WHERE</span><span style="color:#E1E4E8"> table_name </span><span style="color:#F97583">=</span><span style="color:#9ECBFF"> 'TABLE'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">SELECT</span><span style="color:#E1E4E8"> indexname, indexdef </span><span style="color:#F97583">FROM</span><span style="color:#E1E4E8"> pg_indexes </span><span style="color:#F97583">WHERE</span><span style="color:#E1E4E8"> tablename </span><span style="color:#F97583">=</span><span style="color:#9ECBFF"> 'TABLE'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">SELECT</span><span style="color:#F97583"> version</span><span style="color:#E1E4E8">(), current_database(), current_user;</span></span>
+<span class="line"><span style="color:#F97583">SELECT</span><span style="color:#E1E4E8"> pg_size_pretty(pg_database_size(current_database()));</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">-- Data and performance</span></span>
+<span class="line"><span style="color:#F97583">SELECT</span><span style="color:#F97583"> *</span><span style="color:#F97583"> FROM</span><span style="color:#F97583"> TABLE</span><span style="color:#F97583"> LIMIT</span><span style="color:#79B8FF"> 100</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">SELECT</span><span style="color:#79B8FF"> COUNT</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">*</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">FROM</span><span style="color:#F97583"> TABLE</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#E1E4E8">EXPLAIN ANALYZE </span><span style="color:#F97583">SELECT</span><span style="color:#F97583"> *</span><span style="color:#F97583"> FROM</span><span style="color:#F97583"> TABLE</span><span style="color:#F97583"> WHERE</span><span style="color:#E1E4E8"> id </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> 1</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">SELECT</span><span style="color:#E1E4E8"> pg_size_pretty(pg_total_relation_size(</span><span style="color:#9ECBFF">'TABLE'</span><span style="color:#E1E4E8">));</span></span>
+<span class="line"><span style="color:#F97583">SELECT</span><span style="color:#F97583"> *</span><span style="color:#F97583"> FROM</span><span style="color:#E1E4E8"> pg_stat_activity;</span></span></code></pre>
+<h3 id="mysql-and-mariadb-1">MySQL and MariaDB</h3>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sql"><code><span class="line"><span style="color:#6A737D">-- Schema and server</span></span>
+<span class="line"><span style="color:#E1E4E8">SHOW TABLES;</span></span>
+<span class="line"><span style="color:#E1E4E8">DESCRIBE TABLE_NAME;</span></span>
+<span class="line"><span style="color:#E1E4E8">SHOW </span><span style="color:#F97583">CREATE</span><span style="color:#F97583"> TABLE</span><span style="color:#E1E4E8"> TABLE_NAME;</span></span>
+<span class="line"><span style="color:#E1E4E8">SHOW </span><span style="color:#F97583">INDEX</span><span style="color:#F97583"> FROM</span><span style="color:#E1E4E8"> TABLE_NAME;</span></span>
+<span class="line"><span style="color:#F97583">SELECT</span><span style="color:#F97583"> VERSION</span><span style="color:#E1E4E8">(), </span><span style="color:#F97583">DATABASE</span><span style="color:#E1E4E8">(), USER();</span></span>
+<span class="line"><span style="color:#E1E4E8">SHOW DATABASES;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">-- Data and performance</span></span>
+<span class="line"><span style="color:#F97583">SELECT</span><span style="color:#F97583"> *</span><span style="color:#F97583"> FROM</span><span style="color:#E1E4E8"> TABLE_NAME </span><span style="color:#F97583">LIMIT</span><span style="color:#79B8FF"> 100</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">SELECT</span><span style="color:#79B8FF"> COUNT</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">*</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">FROM</span><span style="color:#E1E4E8"> TABLE_NAME;</span></span>
+<span class="line"><span style="color:#E1E4E8">EXPLAIN </span><span style="color:#F97583">SELECT</span><span style="color:#F97583"> *</span><span style="color:#F97583"> FROM</span><span style="color:#E1E4E8"> TABLE_NAME </span><span style="color:#F97583">WHERE</span><span style="color:#E1E4E8"> id </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> 1</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#E1E4E8">SHOW </span><span style="color:#F97583">TABLE</span><span style="color:#F97583"> STATUS</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#E1E4E8">SHOW PROCESSLIST;</span></span></code></pre>
+<h3 id="sqlite-1">SQLite</h3>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sql"><code><span class="line"><span style="color:#6A737D">-- Schema and database</span></span>
+<span class="line"><span style="color:#F97583">SELECT</span><span style="color:#F97583"> name</span><span style="color:#F97583"> FROM</span><span style="color:#E1E4E8"> sqlite_master </span><span style="color:#F97583">WHERE</span><span style="color:#F97583"> type</span><span style="color:#F97583"> =</span><span style="color:#9ECBFF"> 'table'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#E1E4E8">PRAGMA table_info(TABLE_NAME);</span></span>
+<span class="line"><span style="color:#F97583">SELECT</span><span style="color:#F97583"> sql</span><span style="color:#F97583"> FROM</span><span style="color:#E1E4E8"> sqlite_master </span><span style="color:#F97583">WHERE</span><span style="color:#F97583"> name</span><span style="color:#F97583"> =</span><span style="color:#9ECBFF"> 'TABLE_NAME'</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">SELECT</span><span style="color:#E1E4E8"> sqlite_version();</span></span>
+<span class="line"><span style="color:#E1E4E8">PRAGMA database_list;</span></span>
+<span class="line"><span style="color:#E1E4E8">PRAGMA integrity_check;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">-- Data and performance</span></span>
+<span class="line"><span style="color:#F97583">SELECT</span><span style="color:#F97583"> *</span><span style="color:#F97583"> FROM</span><span style="color:#E1E4E8"> TABLE_NAME </span><span style="color:#F97583">LIMIT</span><span style="color:#79B8FF"> 100</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">SELECT</span><span style="color:#79B8FF"> COUNT</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">*</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">FROM</span><span style="color:#E1E4E8"> TABLE_NAME;</span></span>
+<span class="line"><span style="color:#E1E4E8">EXPLAIN QUERY PLAN </span><span style="color:#F97583">SELECT</span><span style="color:#F97583"> *</span><span style="color:#F97583"> FROM</span><span style="color:#E1E4E8"> TABLE_NAME </span><span style="color:#F97583">WHERE</span><span style="color:#E1E4E8"> id </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> 1</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#E1E4E8">PRAGMA optimize;</span></span>
+<span class="line"><span style="color:#E1E4E8">ANALYZE;</span></span></code></pre>
+<h3 id="turso--libsql-1">Turso / LibSQL</h3>
+<p>Turso uses SQLite-compatible catalog and query syntax through LibSQL. Start with <code>sqlite_master</code>, <code>PRAGMA table_info(TABLE_NAME)</code>, <code>SELECT sqlite_version()</code>, bounded <code>SELECT</code> queries, and <code>EXPLAIN QUERY PLAN</code>. Availability of individual pragmas can depend on the remote service.</p>
+<h3 id="cloudflare-d1-1">Cloudflare D1</h3>
+<p>D1 also uses SQLite-compatible SQL through the Cloudflare API. Use <code>sqlite_master</code>, <code>PRAGMA table_info(TABLE_NAME)</code>, bounded <code>SELECT</code> queries, and D1-supported pragmas. Account ID, database ID, and token are connection metadata, not SQL values.</p>
+<h2 id="cli-reference">CLI reference</h2>
+<h3 id="top-level-commands">Top-level commands</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dbterm</code></td>
+<td>Launch the TUI</td>
+</tr>
+<tr>
+<td><code>dbterm --help</code></td>
+<td>Print command and shortcut help</td>
+</tr>
+<tr>
+<td><code>dbterm --version</code></td>
+<td>Print version and build information</td>
+</tr>
+<tr>
+<td><code>dbterm --info</code></td>
+<td>Print executable, config, state, and runtime information</td>
+</tr>
+<tr>
+<td><code>sudo dbterm connections recover-sudo</code></td>
+<td>Merge unique connections saved by older sudo-launched versions</td>
+</tr>
+<tr>
+<td><code>dbterm mcp serve [options]</code></td>
+<td>Start the local read-only MCP server</td>
+</tr>
+<tr>
+<td><code>dbterm --update [X.Y.Z]</code></td>
+<td>Install the latest or requested release</td>
+</tr>
+<tr>
+<td><code>dbterm --uninstall [--yes] [--purge]</code></td>
+<td>Remove the binary and optionally dbterm-owned data</td>
+</tr>
+</tbody>
+</table>
+<p>Common <code>help</code>, <code>version</code>, <code>info</code>, <code>update</code>, and <code>remove</code> aliases are accepted, but scripts should use the documented forms.</p>
+<h3 id="backup-cli">Backup CLI</h3>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="text"><code><span class="line"><span>dbterm backup list|jobs [--json]</span></span>
+<span class="line"><span>dbterm backup create --connection &lt;id|name&gt; --destination &lt;folder|rclone://remote/path&gt;</span></span>
+<span class="line"><span>  [--name LABEL] [--filename TEMPLATE]</span></span>
+<span class="line"><span>  [--compression none|gzip|zip|zstd] [--level N]</span></span>
+<span class="line"><span>  [--age-recipient AGE1...] [--timeout MINUTES]</span></span>
+<span class="line"><span>dbterm backup run &lt;job-id|name&gt;</span></span>
+<span class="line"><span>dbterm backup prune --yes &lt;job-id|name&gt;</span></span>
+<span class="line"><span>dbterm backup inspect [--identity key.txt] [--max-decoded-gib N] [--json] &lt;file&gt;</span></span>
+<span class="line"><span>dbterm backup restore --connection &lt;id|name&gt; [--identity key.txt]</span></span>
+<span class="line"><span>  [--mode merge|clean] [--stop-on-error=true|false]</span></span>
+<span class="line"><span>  [--single-transaction=true|false] [--max-decoded-gib N]</span></span>
+<span class="line"><span>  [--timeout DURATION] [--confirm-clean EXACT_TARGET] --yes &lt;file&gt;</span></span>
+<span class="line"><span>dbterm backup status [--json]</span></span>
+<span class="line"><span>dbterm backup service &lt;install|uninstall|start|stop|restart|enable|disable|status&gt;</span></span>
+<span class="line"><span>  [--user|--system|--scope user|system]</span></span>
+<span class="line"><span>  [--run-as USER] [--config-dir PATH] [--state-dir PATH] [--log-dir PATH]</span></span>
+<span class="line"><span>dbterm backup service status --all</span></span>
+<span class="line"><span>dbterm backup keygen [--output identity.txt]</span></span>
+<span class="line"><span>dbterm backup notify-test &lt;job-id|name&gt;</span></span>
+<span class="line"><span>dbterm backup paths [--json]</span></span>
+<span class="line"><span>dbterm backup logs|log [--lines 1..5000] [--previous]</span></span>
+<span class="line"><span>dbterm backup agent [--poll 30s]</span></span>
+<span class="line"><span>dbterm backup run-due</span></span></code></pre>
+<p><code>backup create --timeout</code> is measured in minutes; restore <code>--timeout</code> accepts a Go duration such as <code>45m</code> and <code>0</code> disables that optional timeout. Clean mode requires <code>--confirm-clean</code> with the exact target database name or normalized absolute SQLite path. <code>--run-as</code> applies only to system service installation, which also requires explicit config, state, and log directories. <code>service status --all</code> is the only action that accepts <code>--all</code>. <code>backup agent</code> and <code>backup run-due</code> are headless/internal execution paths for containers and the native scheduler.</p>
+<p>Run <code>dbterm backup --help</code> for the exact flags accepted by the installed version.</p>
+<h2 id="files-profiles-and-recovery">Files, profiles, and recovery</h2>
+<p>Use these commands instead of guessing paths:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#B392F0">dbterm</span><span style="color:#79B8FF"> --info</span></span>
+<span class="line"><span style="color:#B392F0">dbterm</span><span style="color:#9ECBFF"> backup</span><span style="color:#9ECBFF"> paths</span></span></code></pre>
+<p>Typical roots are:</p>
+<table>
+<thead>
+<tr>
+<th>OS</th>
+<th>Config</th>
+<th>State/logs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Linux</td>
+<td><code>${XDG_CONFIG_HOME:-~/.config}/dbterm</code></td>
+<td><code>${XDG_STATE_HOME:-~/.local/state}/dbterm</code></td>
+</tr>
+<tr>
+<td>macOS</td>
+<td><code>~/Library/Application Support/dbterm</code></td>
+<td><code>~/Library/Logs/dbterm</code> plus application state</td>
+</tr>
+<tr>
+<td>Windows</td>
+<td><code>%AppData%\dbterm</code></td>
+<td><code>%LocalAppData%\dbterm</code></td>
+</tr>
+</tbody>
+</table>
+<p>dbterm keeps one stable profile for the signed-in OS user. If <code>sudo dbterm</code> is launched accidentally, the interactive app hands control back to the invoking user before reading or writing connections, settings, backup plans, or profiler state. Explicit elevated service, update, uninstall, and sudo-recovery operations retain their requested privilege.</p>
+<p>Connections have a private primary file, current recovery mirror, previous generation, and state-directory vault. Settings are mirrored to the recovery vault. Missing or unreadable primary data can be restored automatically while a corrupt original is preserved for diagnosis.</p>
+<p>Older releases could save connections under root. When detected, recover them non-destructively:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#B392F0">sudo</span><span style="color:#9ECBFF"> dbterm</span><span style="color:#9ECBFF"> connections</span><span style="color:#9ECBFF"> recover-sudo</span></span></code></pre>
+<p>The command merges only unique profiles, backs up the existing user file, restores user ownership, and leaves the older root file unchanged.</p>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<h3 id="dbterm-is-not-found-after-install">dbterm is not found after install</h3>
+<p>Open a new terminal, inspect the installer’s reported directory, and confirm it is on <code>PATH</code>. Run the binary by its full path once, then use <code>dbterm --info</code>.</p>
+<h3 id="connection-fails">Connection fails</h3>
+<p>Check host, port, database credentials, SSL mode, firewall/VPN reachability, and whether the service is running. Use the form’s <strong>Test</strong> action. For a PostgreSQL/MySQL server login, leave the database empty and use <strong>Find DBs</strong> to separate server access from a wrong database name.</p>
+<h3 id="mysql-root-works-with-sudo-but-not-dbterm">MySQL root works with sudo but not dbterm</h3>
+<p>The account probably uses local socket authentication. Use a TCP-capable MySQL account with the required database grants; do not enter the Linux sudo password as the MySQL password.</p>
+<h3 id="a-query-is-stuck-or-the-ui-is-busy">A query is stuck or the UI is busy</h3>
+<p>Press <code>Esc</code> or <code>Ctrl+C</code>. Query, import, export, refresh, backup, and profiler loaders expose safe cancellation. Wait for the final outcome before assuming the database stopped the operation.</p>
+<h3 id="results-are-too-large">Results are too large</h3>
+<p>Use filters, a narrower query, or the default bounded preview. For a complete table export, choose <strong>All matching</strong> in <code>Alt+E</code>; it streams filtered rows without rendering them all.</p>
+<h3 id="a-table-or-column-seems-missing">A table or column seems missing</h3>
+<p>Press <code>Ctrl+F5</code> to refresh schema objects. Clear Tables type-ahead with <code>Esc</code>, expand the correct schema branch, or search through <code>Ctrl+P</code>.</p>
+<h3 id="a-scheduled-backup-did-not-run">A scheduled backup did not run</h3>
+<p>Open Backup Center → <code>A</code>, or run:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#B392F0">dbterm</span><span style="color:#9ECBFF"> backup</span><span style="color:#9ECBFF"> service</span><span style="color:#9ECBFF"> status</span><span style="color:#79B8FF"> --all</span></span>
+<span class="line"><span style="color:#B392F0">dbterm</span><span style="color:#9ECBFF"> backup</span><span style="color:#9ECBFF"> status</span></span>
+<span class="line"><span style="color:#B392F0">dbterm</span><span style="color:#9ECBFF"> backup</span><span style="color:#9ECBFF"> logs</span><span style="color:#79B8FF"> --lines</span><span style="color:#79B8FF"> 200</span></span></code></pre>
+<p>Confirm registration, startup policy, manager runtime, heartbeat, job enabled state, next run, destination capacity, and that the native clients required by that job are in the agent account’s <code>PATH</code>. SQLite snapshot jobs need no <code>sqlite3</code>; local destinations need no <code>rclone</code>.</p>
+<h3 id="server-agent-installation-fails">Server agent installation fails</h3>
+<p>Run <code>dbterm backup paths</code> as the intended user, create and verify the exact directories, then use the elevated command printed by Backup Center. Server mode never silently falls back to desktop mode. On Windows, a system task cannot rely on a user’s mapped drive.</p>
+<h3 id="an-encrypted-backup-is-locked">An encrypted backup is locked</h3>
+<p>Select the matching age identity during inspection or pass <code>--identity</code>. Jobs store the public recipient, not the private key. Without that identity the encrypted contents cannot be restored.</p>
+<h3 id="restore-reports-the-wrong-or-ambiguous-engine">Restore reports the wrong or ambiguous engine</h3>
+<p>dbterm trusts file contents, not extensions. Generic SQL that cannot be identified safely is inspectable but blocked from restore. Choose an artifact created by the matching engine and review every warning.</p>
+<h3 id="update-or-uninstall-reports-a-permission-error">Update or uninstall reports a permission error</h3>
+<p>Use the package manager that owns the binary or elevate only the executable replacement/removal. Keep normal app and backup operations in the signed-in user’s profile.</p>
+<h3 id="settings-or-connections-were-recovered">Settings or connections were recovered</h3>
+<p>Read the startup notice and <code>dbterm --info</code>. dbterm preserves the unreadable original when possible and identifies the recovery source. Do not delete recovery generations until the restored profiles have been checked.</p>
+<h2 id="security-privacy-and-deliberate-limits">Security, privacy, and deliberate limits</h2>
+<ul>
+<li>dbterm has no hosted database proxy, remote MCP endpoint, OAuth service, or autonomous agent service.</li>
+<li>Connection and SMTP secrets remain local but are stored as private plaintext files/catalog fields so the app and unattended agent can use them. Use dedicated, revocable, least-privilege credentials.</li>
+<li>MCP database execution uses its separate read-only policy and transaction boundary. The normal Query workspace does not: its optional <strong>Read-Only Guard</strong> is only a first-token convenience check. <code>WITH</code>, <code>EXPLAIN</code>, and <code>PRAGMA</code> statements can bypass that check and may have side effects, so use database-enforced read-only credentials or grants when writes must be impossible.</li>
+<li>SQL import and restore can perform changes allowed by the target database account. Content detection and command guards do not make untrusted SQL safe.</li>
+<li>Change Profiler reports differences, not an authenticated writer identity.</li>
+<li>Turso/D1 backup artifacts are inspectable, but direct restore targets in this release are PostgreSQL, MySQL/MariaDB, and local SQLite.</li>
+<li>The TUI prioritizes bounded previews and keyboard workflows. Use a desktop workbench when you need visual modeling, broad driver ecosystems, or GUI-heavy administration.</li>
+</ul>
+<p>Report vulnerabilities privately through the repository’s <a href="https://github.com/shreyam1008/dbterm/security/advisories/new">security advisory flow</a>. Remove credentials, SQL data, paths, tokens, and encryption identities from diagnostics.</p>
+<h2 id="current-release-and-change-history">Current release and change history</h2>
+<p>This manual targets dbterm <strong>v0.10.0 “Beas”</strong>. That release adds searchable table-and-column schema trees, direct column navigation from the command palette, selectable result headers, smarter local SQL templates and typo recovery, remembered table context, and indexed performance for large schemas.</p>
+<p>Run <code>dbterm --version</code> for the installed build and open Dashboard <code>U</code> for its release notes and checksum-verified updater. The repository’s <a href="https://github.com/shreyam1008/dbterm/blob/main/cmd/dbterm/releases.txt">release manifest</a> is the version source used by builds, while <a href="https://github.com/shreyam1008/dbterm/releases">GitHub Releases</a> provides immutable artifacts, checksums, and historical notes. When an installed version differs from this page, prefer that binary’s <code>--help</code>, <code>backup --help</code>, and offline Guide for exact accepted flags.</p>
+<h2 id="develop-contribute-and-get-help">Develop, contribute, and get help</h2>
+<p>Source, issues, releases, and the MIT license live at <a href="https://github.com/shreyam1008/dbterm">github.com/shreyam1008/dbterm</a>. Read <code>CONTRIBUTING.md</code> before opening a pull request.</p>
+<p>Run the checkout:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> run</span><span style="color:#9ECBFF"> ./cmd/dbterm</span></span></code></pre>
+<p>Build and test:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#B392F0">make</span><span style="color:#9ECBFF"> build</span></span>
+<span class="line"><span style="color:#B392F0">make</span><span style="color:#9ECBFF"> test</span></span></code></pre>
+<p>Verify the website:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#79B8FF">cd</span><span style="color:#9ECBFF"> site</span></span>
+<span class="line"><span style="color:#B392F0">bun</span><span style="color:#9ECBFF"> install</span></span>
+<span class="line"><span style="color:#B392F0">bun</span><span style="color:#9ECBFF"> run</span><span style="color:#9ECBFF"> verify</span></span></code></pre>
+<p>For architecture and module ownership, read <a href="https://github.com/shreyam1008/dbterm/blob/main/docs/project-reference.md">the project reference</a>. For a bug, include the dbterm version, OS, database type, exact action, expected result, actual result, and a redacted reproduction.</p>
+</article></div></main><footer class="mt-24 border-t border-[var(--line)] bg-[color-mix(in_srgb,var(--bg-deep)_86%,transparent)] pt-14 pb-5"><div class="site-container grid gap-12 lg:grid-cols-[minmax(220px,1.2fr)_minmax(400px,1fr)]"><div><a class="inline-flex items-center gap-2.5 text-[var(--ink)] no-underline" href="/"><svg class="size-9" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#0b5d52"></rect><rect x="10" y="14" width="44" height="34" rx="6" fill="#f7f5ed"></rect><path d="M17 26h30M17 33h22" stroke="#0b5d52" stroke-width="4" stroke-linecap="round"></path><circle cx="49" cy="50" r="5" fill="#f0b16d"></circle></svg><span class="font-mono text-base font-semibold tracking-[-.045em]">dbterm</span></a><p class="mt-4 max-w-sm text-sm text-[var(--ink-soft)]">Connect, query, operate, and protect local or cloud databases from one terminal.</p><p class="mt-2 max-w-sm text-xs text-[var(--ink-faint)]">Created and maintained by <a href="https://shreyam1008.com.np/">Shreyam Adhikari · @shreyam1008</a>.</p></div><div class="grid grid-cols-3 gap-6 max-[680px]:grid-cols-1" aria-label="Project links"><div class="grid content-start gap-2 text-sm"><strong class="mb-1 font-mono text-[.68rem] tracking-[.1em] uppercase">Learn</strong><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href="/features/">Features</a><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href="/backup/">Backups</a><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href="/guide/">Documentation</a><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href="/agents/">Agents</a><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href="/compare/">Compare</a></div><div class="grid content-start gap-2 text-sm"><strong class="mb-1 font-mono text-[.68rem] tracking-[.1em] uppercase">Project</strong><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href="https://github.com/shreyam1008/dbterm">GitHub</a><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href="https://github.com/shreyam1008/dbterm/releases">Releases</a><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href="https://github.com/shreyam1008/dbterm/issues">Issues</a></div><div class="grid content-start gap-2 text-sm"><strong class="mb-1 font-mono text-[.68rem] tracking-[.1em] uppercase">Open source</strong><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href="/open-source/">Attribution</a><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href="https://github.com/shreyam1008/dbterm/blob/main/LICENSE">MIT license</a><a class="text-[var(--ink-soft)] no-underline hover:text-[var(--brand)]" href="https://pkg.go.dev/github.com/shreyam1008/dbterm">pkg.go.dev</a></div></div></div><div class="site-container mt-12 flex justify-between gap-4 border-t border-[var(--line)] pt-4 font-mono text-[.68rem] text-[var(--ink-faint)] max-[680px]:flex-col"><span>Built in the open.</span><span>dbterm v0.10.0 · Beas</span></div></footer><script>
       const themeButton = document.querySelector("[data-theme-toggle]");
 
       const applyTheme = (theme) => {
@@ -71,6 +684,7 @@ dbterm backup paths</code></pre></article><p class="table-hint">Scroll horizonta
       };
 
       document.querySelectorAll("[data-copy-target]").forEach((button) => {
+        button.setAttribute("aria-live", "polite");
         button.addEventListener("click", async () => {
           const source = document.getElementById(button.dataset.copyTarget || "");
           if (!source) return;

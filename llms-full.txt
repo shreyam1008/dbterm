@@ -1,66 +1,1664 @@
-# dbterm — complete product context
+# dbterm — complete product and operating documentation
 
-## Identity
+> Canonical full-text context for dbterm v0.10.0 “Beas”, generated from the repository's human manuals. dbterm is a keyboard-first local database workbench and native backup agent created by Shreyam Adhikari (shreyam1008).
 
-- Name: dbterm
-- Creator and maintainer: Shreyam Adhikari
-- Handle: shreyam1008
-- Website: https://dbterm.shreyam1008.com.np/
-- Personal site: https://shreyam1008.com.np/
-- Source: https://github.com/shreyam1008/dbterm
-- License: MIT
-- Implementation: Go
+Canonical website: https://dbterm.shreyam1008.com.np/
+Source: https://github.com/shreyam1008/dbterm
+License: MIT
 
-## What it is
+---
 
-dbterm is a keyboard-first terminal database workbench and native scheduled backup agent. It keeps common database work in one cross-platform binary: save a server login, discover accessible databases, inspect schemas and rows, sort and filter data, follow related keys, run SQL, control supported local database services and protect databases with verified backups.
+# dbterm
 
-Supported database targets are PostgreSQL, MySQL/MariaDB, SQLite, Turso/LibSQL and Cloudflare D1.
+Open-source terminal database workbench for local and cloud data.
 
-## Everyday workflow
+[![Go Reference](https://pkg.go.dev/badge/github.com/shreyam1008/dbterm.svg)](https://pkg.go.dev/github.com/shreyam1008/dbterm)
+[![CI](https://github.com/shreyam1008/dbterm/actions/workflows/ci.yml/badge.svg)](https://github.com/shreyam1008/dbterm/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/shreyam1008/dbterm)](https://github.com/shreyam1008/dbterm/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-success.svg)](https://github.com/shreyam1008/dbterm/blob/main/LICENSE)
 
-The read-focused workflow is optimized for quick data checks: browse a table, sort or refresh rows, copy an identifier, explore parent or child rows through declared keys, follow a multi-table chain, filter related data and run a small query. dbterm is not entirely read-only; it also includes broader query, data, import and export workflows.
+`dbterm` is one keyboard-first binary for connecting to database servers, exploring and querying data, operating local services, and protecting local or remote databases with durable backups.
 
-## Backup model
+Save a PostgreSQL or MySQL server login once—without memorizing a database name—then browse every database that account can access. Open one temporarily with the same credentials, choose a default, or save a separate database connection only when you need one.
 
-The native backup agent can schedule jobs through systemd, launchd or Windows Task Scheduler. A job stages an engine-appropriate artifact, verifies it, optionally compresses and encrypts it, computes its checksum and publishes it without replacing an existing artifact.
+## What ships today
 
-Sources and destinations are independent, producing four supported routes:
+| Area | Current capabilities |
+| --- | --- |
+| **Connections** | PostgreSQL, MySQL/MariaDB, SQLite, Turso/LibSQL, and Cloudflare D1; server-first PostgreSQL/MySQL logins; database discovery; optional defaults; reusable prefilled local/cloud connection forms; one stable per-user profile even after an accidental `sudo dbterm` launch. |
+| **Data workspace** | Local schema-aware SQL autocomplete, schema/object discovery, named Change Profiler anchors with row/cell/schema diffs, a command/object/recent-SQL palette, persistent table pins, query history, asynchronous cancellable execution, typed results, composable `AND` filters, sorting, first/last pagination, bidirectional related-row navigation, same-value discovery, schema inspection, and streamed CSV export. |
+| **Database operations** | PostgreSQL/MySQL SQL-dump import with progress and cancellation, plus local MySQL/PostgreSQL service status, start, stop, install guidance, saved-login connection, and server-wide database browsing. |
+| **Local agent access** | STDIO MCP server for scoped schema inspection, bounded read-only SQL, query plans, and declared relationship following; stored secrets stay hidden and profile changes require explicit opt-in. |
+| **Backup and recovery** | Instant or scheduled backups from local or remote sources to local/mounted or rclone destinations; native dumps, private staging, verification, compression, age encryption, SHA-256 history, retention, email alerts, native OS agents, content inspection, and guarded PostgreSQL/MySQL/SQLite restore. |
 
-1. local database to local or mounted storage
-2. local database to an rclone remote
-3. remote or cloud database to local or mounted storage
-4. remote or cloud database to an rclone remote
+The backup routing model covers all four combinations:
 
-rclone destinations can represent S3, SFTP, Google Drive, Azure and other configured backends. dbterm does not store rclone credentials.
+| Source | Local / mounted destination | rclone remote destination |
+| --- | --- | --- |
+| **Local database** | Supported | Supported |
+| **Remote / cloud database** | Supported | Supported |
 
-Backup support covers PostgreSQL, MySQL/MariaDB, SQLite, Turso and Cloudflare D1. Restore is deliberately narrower: PostgreSQL, MySQL/MariaDB and local SQLite.
+PostgreSQL uses custom `pg_dump` archives; MySQL/MariaDB uses single-database `mysqldump` SQL; SQLite uses a consistent built-in snapshot; Turso uses a single-transaction logical export; and D1 uses Cloudflare's native export API. Restore currently targets PostgreSQL, MySQL/MariaDB, and local SQLite.
 
-## Installation
+See the [complete feature map](https://dbterm.shreyam1008.com.np/features/) or jump to the [Backup Center handbook](https://dbterm.shreyam1008.com.np/backup.md).
 
-- Release binaries: https://github.com/shreyam1008/dbterm/releases/latest
-- Homebrew tap: https://github.com/shreyam1008/homebrew-tap
-- Scoop bucket: https://github.com/shreyam1008/scoop-bucket
-- Go install: `go install github.com/shreyam1008/dbterm/cmd/dbterm@latest`
-- APT instructions and direct installers: https://dbterm.shreyam1008.com.np/guide/
+Created and maintained by [Shreyam Adhikari (@shreyam1008)](https://shreyam1008.com.np/).
 
-## Local MCP server
+## Quick install
 
-`dbterm mcp serve` exposes a local STDIO MCP server for trusted agents. Its database tools list scoped profiles, inspect schemas and tables, run bounded read-only SQL, explain SELECT queries without ANALYZE, and follow records through declared foreign keys. Database writes are not exposed. Results have row, byte and time limits, and passwords or tokens are never returned.
+### Linux / macOS
 
-The default connection scope is the active saved profile. Exposing all saved profiles requires an explicit Settings or runtime choice. Creating or updating a connection profile is disabled by default and is exposed only after a separate profile-write opt-in.
+```bash
+curl -fsSL https://raw.githubusercontent.com/shreyam1008/dbterm/main/install.sh | bash
+```
 
-## Authoritative pages
+### Windows (PowerShell)
 
-- Feature map: https://dbterm.shreyam1008.com.np/features/
-- Product guide: https://dbterm.shreyam1008.com.np/guide/
-- Backup handbook: https://dbterm.shreyam1008.com.np/backup/
-- Factual comparison: https://dbterm.shreyam1008.com.np/compare/
-- Open-source architecture: https://dbterm.shreyam1008.com.np/open-source/
-- AI agent and MCP guide: https://dbterm.shreyam1008.com.np/agents/
-- Agent Skill index: https://dbterm.shreyam1008.com.np/.well-known/agent-skills/index.json
-- Source repository: https://github.com/shreyam1008/dbterm
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/shreyam1008/dbterm/main/install.ps1 | iex"
+```
 
-## Discovery boundary
+### Go toolchain
 
-The dbterm website documents downloadable open-source software and its local STDIO MCP server. It does not operate a hosted API, OAuth or OpenID Connect authorization service, remote MCP endpoint, commerce API or autonomous agent service. Discovery metadata for those hosted services would be inaccurate and is intentionally not published.
+```bash
+go install github.com/shreyam1008/dbterm/cmd/dbterm@latest
+```
+
+### Homebrew
+
+```bash
+brew tap shreyam1008/tap
+brew install shreyam1008/tap/dbterm
+```
+
+### Scoop
+
+```powershell
+scoop bucket add shreyam1008 https://github.com/shreyam1008/scoop-bucket
+scoop install dbterm
+```
+
+## Documentation
+
+- Website: <https://dbterm.shreyam1008.com.np/>
+- Complete feature map: <https://dbterm.shreyam1008.com.np/features/>
+- Complete user guide: <https://dbterm.shreyam1008.com.np/guide/> ([Markdown source](https://dbterm.shreyam1008.com.np/guide.md))
+- AI agent and MCP guide: <https://dbterm.shreyam1008.com.np/agents/>
+- Backup Center: <https://dbterm.shreyam1008.com.np/backup/>
+- Complete backup handbook: [docs/backup.md](https://dbterm.shreyam1008.com.np/backup.md)
+- Marketing, domain, and search plan: [docs/marketing-plan.md](https://github.com/shreyam1008/dbterm/blob/main/docs/marketing-plan.md)
+- Distribution, submission, and promotion record: [docs/distribution-log.md](https://github.com/shreyam1008/dbterm/blob/main/docs/distribution-log.md)
+- Product-domain and release contract: [docs/domain-release.md](https://github.com/shreyam1008/dbterm/blob/main/docs/domain-release.md)
+- Open-source handbook: <https://dbterm.shreyam1008.com.np/open-source/>
+- Go package page: <https://pkg.go.dev/github.com/shreyam1008/dbterm>
+
+## Supported databases
+
+| Database | Status |
+| --- | --- |
+| PostgreSQL | Query + schema inspector + custom-archive backup + content-detected restore + service controls |
+| MySQL / MariaDB | Query + schema inspector + single-database SQL backup + content-detected restore + service controls |
+| SQLite | Query + schema inspector + consistent snapshot backup + guarded staged snapshot/SQL restore |
+| Turso (LibSQL) | Cloud SQLite-compatible querying + schema inspector + transaction-backed logical SQL backup |
+| Cloudflare D1 | D1 API-backed SQL querying + schema inspector + Cloudflare-native SQL export |
+
+For MySQL or PostgreSQL, the database name is optional: save the server login once, then choose from every database visible to that account. **Save & Connect** automatically opens the database browser when no default is set. From the Dashboard, highlight a server and press **A** to browse again; **Enter** opens any database with the same saved login, **D** makes it the optional default, and **N** saves it as a separate connection only when that is useful (for example, a scheduled backup). SQLite, Turso, and Cloudflare D1 use the same Dashboard shortcut to prefill their reusable local/cloud scope details.
+
+dbterm keeps one connection profile for the signed-in OS user. Run the TUI normally; if it is accidentally launched as `sudo dbterm`, dbterm immediately hands control back to the invoking user before reading or writing connections, settings, backup plans, or state. Explicit system-service operations, updates, and uninstalls retain the requested elevation. If an older version already saved connections under root, dbterm reports that legacy profile; `sudo dbterm connections recover-sudo` merges its unique connections into the user profile, backs up an existing user file, restores user ownership, and leaves the root file unchanged. In **Services → Connect**, choose a saved local database login or enter a database username/password; the Linux sudo password is not a database password. Ubuntu's MySQL `root` account commonly uses socket-only authentication, so a TCP-capable MySQL user is needed for the interactive client.
+
+## CLI reference
+
+| Command | Purpose |
+| --- | --- |
+| `dbterm` | Launch TUI |
+| `dbterm --help` | Show help |
+| `dbterm --version` | Show version/build info |
+| `dbterm --info` | Show install/config/runtime info |
+| `sudo dbterm connections recover-sudo` | Non-destructively merge connections saved by older sudo-launched versions |
+| `dbterm mcp serve` | Start the local read-only MCP server for trusted agents |
+| `dbterm --update` | Update to latest release |
+| `dbterm --update X.Y.Z` | Update to a specific release |
+| `dbterm --uninstall` | Remove binary with confirmation |
+| `dbterm --uninstall --yes` | Remove binary without prompt |
+| `dbterm --uninstall --purge` | Remove binary + dbterm-owned config, state, and logs; chosen backup artifacts stay |
+| `dbterm backup --help` | Backup jobs, agent, inspection, encryption keys, and paths |
+| `dbterm backup create …` | Run an instant headless backup from a saved connection |
+| `dbterm backup run <job>` | Run a configured job now |
+| `dbterm backup prune --yes <job>` | Enforce count/age/size retention immediately |
+| `dbterm backup notify-test <job>` | Send a test message with a job's SMTP settings |
+| `dbterm backup inspect <file>` | Detect wrappers and database format from file contents |
+| `dbterm backup restore --connection <target> --yes <file>` | Inspect, review, and restore into a saved target |
+| `dbterm backup service install` | Install and start the desktop/user backup agent |
+| `dbterm backup service status --all` | Inspect user and system registrations |
+| `dbterm backup service enable / disable` | Change startup policy without changing the current runtime |
+| `dbterm backup logs` | Print a bounded tail of the rolling agent log |
+| `dbterm backup status` | Show agent heartbeat and configured jobs |
+
+Updating replaces only the dbterm executable. Saved connections, settings, query history, backup plans/run history, completed backup artifacts, and Change Profiler anchors remain in their per-user config/state locations. When `sudo dbterm --update` is needed for a system-installed binary, dbterm deliberately leaves the invoking user's data and running backup agent untouched instead of resolving a root-owned profile. Run `dbterm --info` without sudo before or after an update to see the exact connection, backup-catalog, and Change Profiler paths.
+
+## Core shortcuts
+
+| Shortcut | Action |
+| --- | --- |
+| `Ctrl + P` (default) | Search commands, tables, collapsed columns, database objects, and recent queries in the command palette |
+| `Alt + Q / T / R` | Focus Query / Tables / Results |
+| `Tab / Shift + Tab` | Cycle workspace panels forward / backward without losing each table, row, column, or active type-ahead position |
+| `Space` (Tables) | Pin or unpin the highlighted table at the top; saved separately for each database connection |
+| `Right / Left` or click `▸ / ▾` (Tables) | Expand or enter columns / return to the parent or collapse it; another expansion replaces the previous one |
+| Type while Tables is focused | Search every table and collapsed column; the best match is highlighted and a matching column expands automatically |
+| `Enter` | Execute query (in Query panel) |
+| `Shift + Enter` | New line in Query panel |
+| `Ctrl + Space` | Open smart SQL suggestions and selected-table templates; use Up/Down and `Tab` or `Enter` to insert |
+| `Alt + Y` | Open query history (newest first) |
+| `Alt + W` | Open Change Profiler; create a named anchor, scan/finish it, and inspect saved before/after changes |
+| `Alt + , / Alt + G` | Open Settings page |
+| `Alt + M` | Inspect selected table schema |
+| `Alt + A / Alt + C` | Select all result rows / clear selection |
+| `Alt + H` | Open the complete offline Guide & SQL Reference |
+| `G` (Dashboard) | Open Settings page from dashboard |
+| `Alt + D` | Return to dashboard |
+| `Alt + S` | Open services dashboard |
+| `Alt + K` / `B` on Dashboard | Open Backup Center |
+| `A` (Dashboard) | Browse all databases visible through the highlighted server login; open one without another saved connection |
+| `Ctrl + B` (Dashboard) | Create a backup job with the highlighted saved connection preselected |
+| `Alt + B` | Open instant backup from any workspace panel |
+| `F2 / F3` (backup forms) | Choose a local destination folder / refresh destination and staging capacity |
+| `Alt + F / Alt + I` | Toggle fullscreen results / open import modal (active connection) |
+| `I` (Dashboard) | Import SQL dump into selected saved PostgreSQL/MySQL connection |
+| `Alt + E` | Export selected rows, current page, or all matching table rows to CSV |
+| `C` (Results) | Copy only the selected cell |
+| `↑` from first result row | Enter the selectable header row; type to jump to and highlight a column, use Left/Right to move, and Down/Enter to return to its data |
+| `Shift + C` (result headers) | Copy the complete selected column name |
+| `Shift + C` / right-click (Tables) | Copy the selected table or expanded column name; expanded columns show `PK`, `FK`, `NN`, and a lazily loaded data type |
+| `/` / `V` (Results) | Build typed filters with optional `AND` conditions / apply clipboard equality (`Enter` applies, `Tab` changes controls); remembered per table for the current connection |
+| `F` / `Backspace` (Results) | Explore declared relationships in both directions / return one step through the table chain |
+| `V` (inside Related Data) | Find the selected exact value in same-named columns across tables; open any match as a typed filter |
+| `Esc` (filtered Results) | Clear the active filter; press again to return to Dashboard |
+| `Alt++ / Alt+- / Alt+0` | Increase / decrease / toggle preview rows per page (`100` ↔ safe max) |
+| `+` / `-` (Results) | Widen / narrow the selected column (remembered per table) |
+| `Ctrl++ / Ctrl+- / Ctrl+0` (Results) | Resize all columns / reset widths (remembered per table; `Ctrl+=` also widens) |
+| `>` / `<` / `0` (Results) | Terminal-safe all-column resize / reset fallback |
+| `F5 / Ctrl + F5` | Refresh table / full refresh |
+| `Ctrl + C` | Cancel an active query/import/export; otherwise quit |
+
+## SQL autocomplete
+
+Autocomplete runs entirely inside dbterm. Typing a prefix such as `sel` opens ranked SQL keywords; relation contexts such as `FROM` and `JOIN` prioritize live tables and views and tolerate small spelling mistakes; `alias.` and column contexts prioritize columns from referenced or selected tables. On an empty query, `Ctrl+Space` offers ready, read-only queries for the selected table—including preview, row count, named-column, newest-row, and useful grouped summaries when matching columns exist. After a complete table name it offers safe next clauses such as a row limit, recent-first ordering, and a non-NULL filter. The metadata catalog is refreshed off the typing path, so opening or accepting a suggestion never performs a network or database query. Use Up/Down to choose, `Tab` or `Enter` to insert, and `Esc` to dismiss. Enter executes the query when suggestions are closed.
+
+The Tables sidebar reuses that local catalog as a searchable schema tree. Right expands a table and then enters its first column; Left returns to the parent and then collapses it. Only one table is expanded at a time. Column names appear immediately; key/nullability badges and types are loaded asynchronously for the expanded table. Sidebar type-ahead and the command palette both search columns even when their tables are collapsed. Choosing a palette column expands it in the sidebar, opens its table, and selects the corresponding Results header.
+
+## Change Profiler
+
+Press `Alt+W`, then `N`, to create a named before/after anchor. The review screen estimates known table sizes, keeps risky tables excluded until explicitly selected, and lets `A` include the whole database in one step. Capture and scan loaders show the current phase, table position, rows, bytes, elapsed time, rate, approximate percentage, and table ETA when row estimates are available.
+
+The portable engine works across every supported database without installing triggers or server objects. It streams rows, compares stable-key hashes, and adaptively compresses exact before-values in the private local profiler store. PostgreSQL/MySQL use a consistent repeatable-read snapshot, SQLite/Turso use a transaction, and Cloudflare D1 is reported as best-effort. Database-native WAL/binlog capture is intentionally not enabled automatically because it requires engine-specific privileges/configuration and can retain server logs when a consumer stops.
+
+## Backup Center
+
+For a one-off copy, press `Alt+B` from Tables, Query, or Results; use `F2` for the native folder chooser, type a path, or enter `rclone://remote/path`. `F3` refreshes local destination and private-staging capacity. For durable jobs, press `B` on Dashboard or `Alt+K` anywhere. `N` then chooses an existing saved database or lets you add one; `Ctrl+N` adds another database from the plan form. `Ctrl+B` on a highlighted Dashboard connection starts with it preselected. A job binds one saved local or remote connection to:
+
+- an absolute local/mounted folder or an rclone-backed remote destination, with an optional native GUI folder chooser and local volume/free-space details;
+- manual, interval, daily, or weekly timing with an IANA timezone;
+- a safe filename template using `{job}`, `{connection}`, `{database}`, `{engine}`, `{date}`, `{time}`, `{timestamp}`, and `{run}`;
+- no compression, gzip, ZIP, or single-worker Zstandard with a chosen level;
+- optional interoperable age X25519 encryption (the job stores only the public `age1…` recipient);
+- latest-count, maximum-age, and maximum-total-size retention;
+- optional Gmail-ready or custom SMTP notifications on failure, success, or both; and
+- a timeout, enabled state, next run, live byte/phase progress, last result, SHA-256, notification outcome, and artifact history.
+
+Artifacts are staged privately, validated, synced, and published without replacing an existing file. Retention only removes successful artifacts recorded for that job and still contained by its destination; it keeps the newest success and rechecks identity, size, and checksum before deletion. Use `P` in Backup Center or `backup prune --yes` to enforce a changed policy immediately. Removing dbterm, the agent, or a job never removes unrelated or surviving backup files.
+
+“Catch up missed run” executes one overdue occurrence after sleep/restart; it does not replay every missed interval. When catch-up is off, an occurrence more than two minutes late is skipped and the cadence advances to the next future time.
+
+The headless agent has two explicit scopes. Desktop/user mode is the no-admin default:
+
+| OS | Desktop/user registration | Lifetime |
+| --- | --- | --- |
+| Linux | `systemd --user` | User manager; enable lingering explicitly for post-logout operation |
+| macOS | `launchd` LaunchAgent | Logged-in user session |
+| Windows | Task Scheduler logon task | Logged-in user session |
+
+Server/system mode is an explicit elevated installation. It starts at boot, preserves the chosen dbterm config/state/log paths, and never silently falls back to desktop mode:
+
+| OS | Server/system registration | Runs as |
+| --- | --- | --- |
+| Linux | system `systemd` unit | Selected non-root user |
+| macOS | `/Library/LaunchDaemons` LaunchDaemon | Selected non-root user |
+| Windows | Task Scheduler boot task | LocalSystem; paths must be local and accessible to SYSTEM |
+
+dbterm keeps control data in native per-user locations (run `dbterm backup paths` for the exact paths on the current machine):
+
+| OS | Config | State / catalog | Logs |
+| --- | --- | --- | --- |
+| Linux | `${XDG_CONFIG_HOME:-~/.config}/dbterm` | `${XDG_STATE_HOME:-~/.local/state}/dbterm` | state directory + `/logs` |
+| macOS | `~/Library/Application Support/dbterm` | `~/Library/Application Support/dbterm` | `~/Library/Logs/dbterm` |
+| Windows | `%AppData%\dbterm` | `%LocalAppData%\dbterm` | `%LocalAppData%\dbterm\logs` |
+
+Routine scheduler activity is written to the rolling `<logs>/dbterm-backup-agent.log`; its active file and one archive are each capped at 5 MiB. Backup Center can show/copy its tail and `dbterm backup logs` prints it over SSH. Linux/macOS also keep exceptional native-manager stdout/stderr files there. The user registrations are `dbterm-backup.service`, `io.github.shreyam1008.dbterm.backup`, and `dbterm Backup Agent`; system scope uses the machine manager (and a distinct Windows system task).
+
+Saved connections/settings are atomic private JSON files; jobs, leases, run history, checksums, and heartbeats live in `backup/backups.db`. Before wrapping a backup, dbterm keeps the raw native dump and temporary credential file under the private state path `backup/staging`; crash remnants older than 48 hours are removed on a later run. The completed artifact is written only to the destination you selected. Allow enough free space in private state for one uncompressed native dump and enough destination space for one in-progress wrapped artifact.
+
+Unattended jobs reuse the credentials in the saved connection. Those credentials are kept in dbterm's per-user `connections.json` with private-file creation; they are not stored in an OS keyring or encrypted by the backup's age recipient. SMTP app passwords likewise remain plaintext in the private `backups.db` catalog so the agent can authenticate. They are redacted from CLI JSON, UI diagnostics, logs, and SMTP errors. Protect the OS account and dbterm directories, and use dedicated revocable app passwords.
+
+Install it from Backup Center with `A`, or run:
+
+```bash
+dbterm backup service install
+dbterm backup service status
+dbterm backup service status --all
+```
+
+Start/stop controls only the current runtime. `backup service enable` and `disable` control boot/login startup independently. Server installation requires explicit existing paths and elevation; on Linux, Backup Center prints a copyable command such as:
+
+```bash
+sudo dbterm backup service install --system --run-as "$USER" \
+  --config-dir "$HOME/.config/dbterm" \
+  --state-dir "$HOME/.local/state/dbterm" \
+  --log-dir "$HOME/.local/state/dbterm/logs"
+```
+
+Resolve the paths with `dbterm backup paths` before elevation. ACL-only Unix grants may require manual review; Windows server mode cannot rely on a user's mapped drive.
+
+The native manager records the exact dbterm executable path. Service installation therefore rejects disposable `go run` executables: use an installed release or run `make build`, launch `./dbterm`, and install the agent from that stable binary.
+
+The TUI and agent share a transactional SQLite catalog with expiring per-job leases, so manual and scheduled runs cannot overlap. The foreground fallback `dbterm backup agent` is useful in containers or systems without a supported native user manager.
+
+Live progress is deliberately honest: wrapping reports a determinate byte bar and ETA; native clients that do not expose a trustworthy total report live file growth, elapsed time, and activity instead of a fabricated percentage. Agent status separates registration, startup policy, manager runtime, heartbeat, process lock, PID, uptime, resident memory, and any active scheduled phase.
+
+### Encryption
+
+Generate an age identity once:
+
+```bash
+dbterm backup keygen
+```
+
+Copy the printed public recipient into a job. Keep the private identity separately from off-site backups; it is needed only to inspect or restore encrypted artifacts. dbterm does not store backup passphrases in unattended job configuration.
+
+By default, `keygen` writes the private identity under dbterm's config directory. As a recovery safeguard, `--uninstall --purge` refuses to delete a discovered private age identity or backup-like file. Move the identity somewhere safe—or explicitly remove it yourself—before retrying a purge.
+
+### Inspect and restore
+
+Backup Center → `I` identifies gzip, Zstandard, single-entry ZIP, and age wrappers recursively, then detects PostgreSQL custom/tar/plain SQL, MySQL SQL, SQLite databases, or SQLite SQL from bytes—not the filename. Misleading extensions produce a warning. Locked age files stay “encrypted” until an identity is selected; ambiguous generic SQL is reported but deliberately blocked from restore rather than guessed.
+
+Inspection supports at most three nested wrappers. Each decoded layer defaults to a 1 GiB safety cap and is materialized in the OS temporary directory rather than held in memory. Set **Max Decoded GiB** in the TUI or pass `--max-decoded-gib N` to `inspect` and `restore` for a larger trusted backup; ensure the temporary directory has enough free space for the decoded layers.
+
+The same guarded flow is scriptable. Consent is never implied:
+
+```bash
+dbterm backup inspect --identity ./age-identity.txt ./prod.dump.zst.age
+dbterm backup restore --connection production --identity ./age-identity.txt --yes ./prod.dump.zst.age
+```
+
+Clean mode additionally requires `--confirm-clean` with the exact database name (or normalized SQLite path).
+
+Restore is preview-first. The detected engine must match the chosen saved connection. Merge is the default; PostgreSQL clean restore is opt-in and shown as destructive. PostgreSQL restores use transactional official clients where supported. MySQL warns that earlier statements may remain after a failure. SQLite snapshots and SQL dumps restore through a verified staging database while keeping a pre-restore copy; SQL is streamed through the `sqlite3` client after filesystem-escape checks.
+
+Restore only files from a source you trust. Content detection, checksum revalidation, engine matching, and client-command guards reduce accidental and client-side escape risk; the SQL itself is still allowed to change the selected database and can invoke server-side behavior permitted to that database account.
+
+PostgreSQL/MySQL backup and restore use their official clients; bounded-memory SQLite SQL restore uses `sqlite3` (SQLite snapshot backup/restore remains built in). Install matching tools and keep them in the service PATH:
+
+- Ubuntu/Debian: `sudo apt install postgresql-client mysql-client sqlite3`
+- macOS: `brew install libpq mysql-client sqlite`
+- Windows: install PostgreSQL/MySQL clients as needed and `sqlite3` from the [official SQLite downloads](https://sqlite.org/download.html)
+
+Remote sources work through saved connections, including reachable cloud databases. Destinations can be absolute local/OS-mounted folders or configured rclone remotes such as `rclone://offsite/dbterm`, so local→local, local→remote, remote→local, and remote→remote backups all use the same verified pipeline. Install rclone, run `rclone config` as the backup-agent OS account, and verify the remote with `rclone lsd offsite:`. Remote credentials stay in rclone rather than dbterm's catalog.
+
+Turso logical exports keep schema and data reads on one source transaction. Virtual/FTS tables are rejected before publication because exporting their shadow tables independently can produce an unrestorable dump. Cloudflare D1 uses Cloudflare's native export API and streams its short-lived signed HTTPS result into dbterm's private staging area; Cloudflare can temporarily make the database unavailable while that export runs. Restore in this release targets PostgreSQL, MySQL/MariaDB, and local SQLite; Turso/D1 SQL backups remain inspectable artifacts.
+
+## Settings + keymap config
+
+- Open settings with `G` from Dashboard or `Alt + ,` / `Alt + G` in workspace.
+- Settings use OS-native per-user config directories. Run `dbterm backup paths` to print config, state, logs, catalog, and private-staging locations.
+- Key bindings are validated before save (duplicate/invalid mappings are blocked).
+- `Ctrl+Space` is reserved for contextual SQL autocomplete in the Query panel.
+- Query history remains enabled per connection; saved-query snippet library is intentionally not included.
+
+## Performance footprint
+
+`dbterm` is tuned for small binary/runtime overhead while staying feature-complete:
+
+- Build strips debug and VCS metadata (`-trimpath -buildvcs=false -ldflags="-s -w -buildid="`).
+- The current stripped Linux amd64 build is about 16.0 MiB; `age`, Zstandard, timezone data, and SQLite remain compiled in rather than becoming runtime services.
+- The backup catalog opens only when needed; a cold Dashboard is roughly 13 MiB idle RSS in the isolated Linux amd64 smoke test.
+- DB pool is intentionally small (`max open=2`, `max idle=1`) for lower idle memory.
+- Read-query previews respect the active preview limit (default `100` rows).
+- Result rendering is safety-capped by row count, cell count, and estimated display budget.
+- `Alt + 0` switches preview to the largest safe page for the current result shape.
+- Scheduled work is serialized per agent/job; Zstandard uses one encoder worker and the agent sleeps between catalog checks.
+
+## Repository layout
+
+The project stays intentionally shallow:
+
+| Path | Owns |
+| --- | --- |
+| `cmd/dbterm/` | Executable entry point, CLI commands, update/uninstall, and release metadata |
+| `internal/` | All application-only Go modules, including backup, config, database access, and TUI |
+| `docs/` | Feature guides, maintainer reference, and README screenshots |
+| `site/` | Astro website, isolated from the Go application |
+| `packaging/` | AUR, Homebrew, Scoop, and WinGet definitions |
+| `scripts/` | Debian and APT release helpers |
+
+See [docs/project-reference.md](https://github.com/shreyam1008/dbterm/blob/main/docs/project-reference.md#file-map) for the module-by-module map.
+
+## Build locally
+
+Run the current checkout directly:
+
+```bash
+go run ./cmd/dbterm
+```
+
+Or build the same optimized local binary used by the release setup, then launch it:
+
+```bash
+make build
+./dbterm
+```
+
+Run tests:
+
+```bash
+make test
+```
+
+Build website:
+
+```bash
+cd site
+bun install
+bun run verify
+```
+
+For a local preview, run `bun run dev` and open the URL Astro prints.
+
+## Release automation
+
+GitHub Actions release workflow reads the first non-comment line in `cmd/dbterm/releases.txt`:
+
+```text
+<version>|<release name>|<short description>
+```
+
+On push to `main`, it builds artifacts, publishes release assets/checksums, and updates install targets.
+
+## Acknowledgments
+
+dbterm was initially inspired by [pgterm](https://github.com/nabsk911/pgterm) by @nabsk911.
+
+The project is now independently developed and has significantly expanded in scope and features.
+
+## Contributing
+
+Read `CONTRIBUTING.md` for starter-friendly guidance on submitting issues and pull requests.
+
+## License
+
+dbterm is MIT licensed.
+
+- Canonical license file: `LICENSE`
+- Open-source + license references: <https://dbterm.shreyam1008.com.np/open-source/>
+- Package docs: <https://pkg.go.dev/github.com/shreyam1008/dbterm>
+
+---
+
+# Complete user guide
+
+## Start here
+
+dbterm is a keyboard-first terminal database workbench for PostgreSQL, MySQL/MariaDB, SQLite, Turso/LibSQL, and Cloudflare D1. It combines saved connections, server-level database discovery, schema and data browsing, SQL, relationship navigation, change comparison, local service controls, import/export, and verified backups in one binary.
+
+The normal first session is:
+
+1. Install dbterm and run `dbterm`.
+2. Press `N` on the Dashboard.
+3. Choose a database type, enter the connection details, and select **Save & Connect**.
+4. For PostgreSQL or MySQL, leave **Default Database** empty if you want dbterm to show every database visible to that server login.
+5. Select a table, use `Alt+Q` to focus Query, and press `Ctrl+Space` for local suggestions and safe selected-table templates.
+6. Press `Alt+H` at any time for the offline Guide & SQL Reference.
+
+dbterm is local software. It connects directly from your computer to your databases; it does not send connection data through a hosted dbterm control plane.
+
+### Database capability matrix
+
+| Database | Query and schema | Backup | Restore | Local service controls |
+| --- | --- | --- | --- | --- |
+| PostgreSQL | Yes | Custom `pg_dump` archive | Yes, content-detected | Yes |
+| MySQL / MariaDB | Yes | Single-database `mysqldump` SQL | Yes, content-detected | Yes |
+| SQLite | Yes | Consistent built-in snapshot | Snapshot or streamed SQL | No service required |
+| Turso / LibSQL | Yes | Transaction-backed logical SQL | Inspectable only in this release | No |
+| Cloudflare D1 | Yes | Cloudflare native SQL export | Inspectable only in this release | No |
+
+## Install, verify, update, and uninstall
+
+Release binaries are available for Linux, macOS, and Windows on amd64 and arm64. The direct installers download the matching release artifact and verify it against the published checksums.
+
+### Linux and macOS installer
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/shreyam1008/dbterm/main/install.sh | bash
+```
+
+### Windows PowerShell installer
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/shreyam1008/dbterm/main/install.ps1 | iex"
+```
+
+### Go toolchain
+
+```bash
+go install github.com/shreyam1008/dbterm/cmd/dbterm@latest
+```
+
+### Homebrew tap
+
+```bash
+brew tap shreyam1008/tap
+brew install shreyam1008/tap/dbterm
+```
+
+### Scoop bucket
+
+```powershell
+scoop bucket add shreyam1008 https://github.com/shreyam1008/scoop-bucket
+scoop install dbterm
+```
+
+Homebrew and Scoop can lag behind the newest GitHub release. Check the version shown by the package manifest before choosing a channel. WinGet is not documented as an install option until its public package is merged. The published APT metadata is not yet signed, so use the direct `.deb` release artifact or the verified shell installer instead of treating that repository as authenticated.
+
+Verify the installed build and resolved paths:
+
+```bash
+dbterm --version
+dbterm --info
+```
+
+Update to the newest release or a specific version:
+
+```bash
+dbterm --update
+dbterm --update 0.10.0
+```
+
+The Dashboard `U` action opens the same Version & Update workflow. Updates verify the release checksum and replace only the executable. Saved connections, settings, query history, backup plans and history, completed artifacts, and Change Profiler anchors remain in the invoking user's profile. If a system-owned binary needs elevation, `sudo dbterm --update` preserves the invoking user's data rather than switching to a root profile.
+
+Uninstall options:
+
+```bash
+dbterm --uninstall
+dbterm --uninstall --yes
+dbterm --uninstall --purge
+```
+
+Normal uninstall removes the binary. `--purge` also removes dbterm-owned config, state, and logs, but never removes backup artifacts written to a destination you chose. Purge refuses to remove a discovered private age identity or backup-like file from dbterm's directories; move the recovery key somewhere safe or delete it explicitly before retrying. If a package manager owns the binary, uninstall through that package manager.
+
+## Create and manage connections
+
+Press `N` on the Dashboard to open the connection form. Every connection has a display name, database type, and optional **Read-Only Guard** setting. This is a convenience check in the Query workspace, not a database security boundary: it inspects only the statement's first SQL token and blocks obvious write-leading statements such as `INSERT`, `UPDATE`, `DELETE`, and `CREATE`.
+
+Statements beginning with `WITH`, `EXPLAIN`, or `PRAGMA` are classified as readable by this guard even though a data-changing CTE, `EXPLAIN ANALYZE` of a write, or a writable SQLite pragma can have side effects. For enforced protection, connect with database credentials or grants that cannot write; where applicable, also use the engine's read-only mode or a read-only filesystem. Keep the guard enabled as an extra warning, not as the only control.
+
+### PostgreSQL
+
+Provide either a PostgreSQL connection string or the structured fields:
+
+- Host and port; the default port is `5432`.
+- Database user and password.
+- Optional default database.
+- PostgreSQL SSL mode when required by the server.
+
+The form can parse URL and key/value PostgreSQL DSNs. Leave the database empty to save a server-level login and browse all accessible databases.
+
+### MySQL and MariaDB
+
+Provide either a MySQL DSN or the structured fields:
+
+- Host and port; the default port is `3306`.
+- Database user and password.
+- Optional default database.
+
+Ubuntu's MySQL `root` account often uses socket authentication and may not work over TCP. Create or use a TCP-capable MySQL account; the Linux sudo password is not a database password.
+
+### SQLite
+
+Provide the path to the local SQLite database file. SQLite does not need a username, password, port, or local service manager.
+
+### Turso / LibSQL
+
+Provide the database URL, such as `libsql://database-owner.turso.io`, and its auth token.
+
+### Cloudflare D1
+
+Provide the Cloudflare account ID, D1 database ID, and API token. dbterm uses the D1 API for queries and native exports.
+
+### Connection form actions
+
+- **Save & Connect** stores the profile, tests the selected database when appropriate, and opens it. A server-level PostgreSQL/MySQL profile opens the database picker.
+- **Save Only** stores the profile without leaving the Dashboard.
+- **Find DBs** lists databases visible to the entered PostgreSQL/MySQL login.
+- **Test** checks the current fields without saving them.
+- **Parse DSN** copies supported PostgreSQL/MySQL connection-string values into the structured fields so they can be reviewed.
+- `Esc` cancels without saving.
+
+Connection secrets are stored in a private per-user `connections.json` file so unattended jobs can reuse them. They are not stored in an OS keyring. Protect the OS account and dbterm directories, use narrowly privileged database accounts, and never paste credentials into issue reports.
+
+## Dashboard and database discovery
+
+The Dashboard owns saved logins, health checks, update access, and entry points into the major operational pages.
+
+| Key | Dashboard action |
+| --- | --- |
+| `Enter` | Connect to the highlighted profile or its default database |
+| `A` | Browse every database visible through the highlighted PostgreSQL/MySQL server login |
+| `N` / `E` / `D` | New, edit, or delete a connection |
+| `R` | Run fresh connection health checks |
+| `Ctrl+B` | Create a scheduled backup plan with the highlighted connection preselected |
+| `B` | Open Backup Center |
+| `I` | Import SQL into the highlighted PostgreSQL/MySQL connection |
+| `G` | Open Settings |
+| `H` | Open the offline guide |
+| `S` | Open local database services |
+| `U` | Open Version & Update |
+| `W` or `Esc` | Return to an already-open workspace |
+| `Q` | Quit |
+| `1`–`9`, `0` | Select one of the first ten saved connections |
+
+Inside the server database picker, `Enter` opens a database temporarily with the original login, `D` makes it the optional default, and `N` saves a separate connection. Separate saved connections are useful when a backup job needs one specific database.
+
+Dashboard health checks can run automatically or only when `R` is pressed. Change this in Settings if startup checks are slow on a network with unreachable servers.
+
+## Navigate the workspace and command palette
+
+The workspace contains Tables, Query, and Results. Direct focus shortcuts and forward/backward cycling preserve each panel's current table, row, column, scroll position, and type-ahead text.
+
+- `Alt+T`, `Alt+Q`, and `Alt+R` focus Tables, Query, and Results.
+- `Tab` and `Shift+Tab` cycle the three panels.
+- `Alt+F` toggles fullscreen Results.
+- `Alt+D` returns to the Dashboard.
+- `Esc` closes a completion or active filter first, then moves out of Query or returns to the Dashboard.
+- `Ctrl+C` cancels an active query, import, export, or cancellable loader before it quits the app.
+
+`Ctrl+P` opens the command palette. It searches documented actions, tables, collapsed columns, views, functions, procedures, triggers, recent successful SQL, backup jobs, and other database objects. Use Up/Down to select, `Enter` to open, and `Esc` to close. Palette searches are local; they do not query the database on every keystroke.
+
+## Browse tables, columns, and database objects
+
+The Tables panel is a searchable schema tree rather than a flat table list.
+
+- Type to search every table and collapsed column. A strong column match expands its table and highlights the column.
+- Right expands a table and then enters its children. Left returns to the parent and then collapses it.
+- Clicking `▸` or `▾` expands or collapses without opening rows.
+- `Enter` opens a table; on a child column it opens the table and selects that Results header.
+- `Space` pins or unpins a table at the top for the current database connection.
+- `Shift+C` or right-click copies the complete table or column name.
+- Backspace edits the active search; `Esc` clears it, then returns to the Dashboard on a second press.
+- `Alt+M` opens the selected table's columns, primary keys, foreign keys, and indexes.
+
+Expanded columns show `PK`, `FK`, `NN`, and data-type metadata. Names appear first; additional metadata loads asynchronously so large schemas remain responsive. Only one branch stays expanded at a time.
+
+Views can be opened as row data. Functions, procedures, triggers, and extensions open read-only definition/details pages when the engine exposes them.
+
+## Write SQL, use autocomplete, and query history
+
+In Query, `Enter` executes the current SQL and `Shift+Enter` or `Alt+Enter` inserts a newline. Queries have a 30-second execution timeout. Press `Esc` or `Ctrl+C` to request cancellation; dbterm keeps the interface responsive while the driver finishes the safe cancellation path.
+
+`Ctrl+Space` opens local SQL suggestions. Up/Down or `Ctrl+P`/`Ctrl+N` changes the selection; `Tab` or `Enter` inserts it; `Esc` dismisses suggestions. Completions include:
+
+- SQL keywords, clauses, functions, and routines.
+- Live tables, views, columns, schemas, and databases from the local catalog.
+- Alias-aware columns and relation-context ranking.
+- Typo-tolerant table and keyword recovery.
+- Ready read-only templates for the selected table: preview, row count, named-column, newest-row, and useful grouped summaries when matching columns exist.
+- Safe next clauses after a complete table name, including limits, recent-first ordering, and non-NULL filters.
+
+Metadata is refreshed away from the typing path, so opening or accepting a suggestion never performs a network or database query.
+
+Successful queries are stored per connection. `Alt+Y` opens newest-first history; `Enter` loads one into Query and `Esc` or Backspace closes the list. Failed and canceled statements are not presented as successful history.
+
+The full query editor can execute writes. A saved profile's **Read-Only Guard** blocks only obvious write-leading tokens; `WITH`, `EXPLAIN`, and `PRAGMA` are bypass classes and may still change data. Review destructive SQL carefully and use database-enforced read-only credentials or grants whenever writes must be impossible.
+
+## Work with result rows and columns
+
+Table browsing uses bounded server-side pages. Ad-hoc query results are also safety-limited for terminal rendering.
+
+### Navigate, find, and inspect
+
+- Arrow keys move through cells.
+- From the first data row, press Up to enter the selectable header row. Type a column name to jump, Left/Right to move, and Down or `Enter` to return to that column's data.
+- `Shift+C` on a header copies the complete column name.
+- `C` on data copies the complete cell value even when its display preview is shortened.
+- `Enter` opens a vertical row-detail view with every complete value; use arrows and `C` inside it.
+- `Space` toggles the current row selection. `Alt+A` selects every displayed row and `Alt+C` clears the selection.
+
+### Filter
+
+Press `/` to build typed predicates. Supported operators are `=`, `!=`, `>`, `>=`, `<`, `<=`, contains, starts-with, `IS NULL`, and `IS NOT NULL`. **Add AND** composes predicates; Apply updates the query; Remove Last and Clear All back out safely. Tab and Shift+Tab move between form fields.
+
+Press `V` to apply or update equality for the selected column from the clipboard or the last cell copied inside dbterm. A real SQL `NULL` becomes `IS NULL`; the text `"NULL"` remains text. Table filters are remembered for the active connection and table during the session. The first `Esc` clears filters and resets to the first page; the next returns to the Dashboard.
+
+### Follow relationships and values
+
+Press `F` on a key cell to see declared outgoing parent and incoming child relationships. Composite-key relationships use every declared component. Open a related row and repeat to build a chain; Backspace returns one hop at a time.
+
+Inside Related Data, `V` searches exact values across same-named columns in other tables and opens a match as a typed filter. This is an explicit value search, not proof of a foreign-key relationship.
+
+### Sort, page, and size
+
+- `S` toggles sorting on the selected column. Table results use server-side order; ad-hoc query results can only sort the loaded page locally.
+- `PgDn` or `]` loads the next page; `PgUp` or `[` loads the previous page; Home/End jump to first/last when the count is known.
+- `+` and `-` resize the selected column.
+- `Ctrl++` and `Ctrl+-`, or the terminal-safe `>` and `<`, resize all columns.
+- `0` or `Ctrl+0` resets the current table's remembered widths.
+- `Alt++` and `Alt+-` step through 50, 100, 250, 500, 1,000, and safe-maximum preview sizes. `Alt+0` toggles 100 rows and safe maximum.
+- `F5` refreshes the current table. `Ctrl+F5` refreshes schema objects and current data.
+
+The default preview is 100 rows. Rendering is bounded to 1,000 rows, 12,000 cells, and approximately 2 MiB of estimated display data; safe maximum chooses the largest size that stays inside those ceilings. Column widths are persisted per connection/table/column. Table pins persist per database connection. Result row and header positions are remembered per table in the current connection.
+
+## Import SQL and export CSV
+
+`Alt+I` imports a PostgreSQL or MySQL SQL dump into the active connection. Dashboard `I` performs the same operation for the highlighted saved connection. Import streams client output, supports stop-on-error behavior, has a 30-minute operation timeout, and can be canceled with `Esc` or `Ctrl+C`. SQLite, Turso, and D1 do not use this SQL-import screen.
+
+`Alt+E` exports one of three scopes:
+
+- Explicitly selected displayed rows.
+- The current displayed page.
+- Every table row matching the active filters and sort.
+
+All-matching export streams from the database instead of forcing every row into the TUI. Publication is atomic; cancellation or failure does not leave a completed-looking partial CSV.
+
+## Compare changes with Change Profiler
+
+Press `Alt+W` to open Change Profiler. It creates portable, named before/after anchors without installing triggers or server objects.
+
+1. Press `N`, name the anchor, and review the table plan.
+2. Use Space to toggle one table or `A` to explicitly include/exclude the whole database.
+3. Capture the baseline, perform the operation you want to observe, then press `S` to scan without stopping or `F` for the final scan and finish.
+4. Press `Enter` on a report to inspect changed tables, inserted/updated/deleted rows, schema changes, columns, and complete before/after values.
+5. `E` renames and `D` permanently deletes a local anchor/report.
+
+Risky, keyless, or very large tables start excluded and require explicit opt-in. Loaders show phase, table, rows, bytes, rate, elapsed time, approximate percent, and ETA when estimates are meaningful. Baselines are adaptively compressed in private local state.
+
+PostgreSQL/MySQL use a consistent repeatable-read snapshot; SQLite/Turso use a transaction; D1 is reported as best-effort. A scan must use the original connection. Cancellation preserves the last successful report and removes partial capture state.
+
+Change Profiler shows observed differences. The connection and dbterm activity are evidence, but the writer remains **Unknown** unless the database has its own audit trail. Database-native WAL/binlog tracking is not enabled automatically because it needs engine-specific privileges/configuration and can retain server logs when a consumer stops.
+
+## Operate local PostgreSQL and MySQL services
+
+Press `Alt+S` or Dashboard `S` to inspect supported local PostgreSQL/MySQL services. On supported Linux systems the page shows detected status, version, port, PID, and resident memory.
+
+- `1` toggles MySQL and `2` toggles PostgreSQL.
+- `C` or `Enter` connects through a saved login or manually entered database credentials.
+- Leave Database blank to browse everything visible to that login.
+- `R` refreshes service state and `Esc` returns.
+
+Starting/stopping a service may require a system authentication prompt. dbterm distinguishes that OS privilege from the database username/password and gives install guidance when a supported service is absent.
+
+## Back up and restore databases
+
+The same backup engine serves instant TUI backups, durable Backup Center jobs, the CLI, and the background agent. The complete field-by-field operator handbook is available at [the Backup Center documentation](https://dbterm.shreyam1008.com.np/backup.md).
+
+### Required tools and agent PATH
+
+Install only the native tools required by the databases and destinations you use:
+
+- PostgreSQL backup requires `pg_dump`; import, inspection, and restore can require `pg_restore` and `psql`.
+- MySQL/MariaDB backup requires `mysqldump`; import and restore require `mysql`.
+- SQLite snapshot backup and snapshot restore are built in. Restoring a streamed SQLite SQL dump requires `sqlite3`.
+- Turso/LibSQL logical export and Cloudflare D1 native export do not require those database command-line clients.
+- An `rclone://...` destination requires `rclone`, configured for the same OS account that runs the interactive app or backup agent.
+
+Install the matching packages:
+
+- Ubuntu: `sudo apt install postgresql-client mysql-client sqlite3 rclone`
+- Debian: `sudo apt install postgresql-client default-mysql-client sqlite3 rclone`
+- macOS with Homebrew: `brew install libpq mysql-client sqlite rclone`
+- Windows: install the PostgreSQL and MySQL command-line clients when those engines are used, install `sqlite3` from the [official SQLite tools downloads](https://sqlite.org/download.html), and install `rclone` from the [official rclone downloads](https://rclone.org/downloads/). Add their executable directories to the PATH of the user or system account that runs the backup agent.
+
+Verify the relevant tools from that same account:
+
+```text
+pg_dump --version
+pg_restore --version
+psql --version
+mysqldump --version
+mysql --version
+sqlite3 --version
+rclone version
+```
+
+Homebrew's `libpq` and `mysql-client` formulae may be keg-only, so make their `bin` directories available to the agent rather than relying only on an interactive shell profile. For remote storage, run `rclone config` and a read check such as `rclone lsd offsite:` as the agent account before saving `rclone://offsite/...`. A Windows system task cannot use a per-user mapped-drive letter; use a local path, UNC/mounted path available to that account, or rclone.
+
+### Instant backup
+
+Press `Alt+B` from Tables, Query, or Results. Choose an absolute local/mounted folder or `rclone://remote/path`; `F2` opens the native folder chooser and `F3` refreshes destination and private-staging capacity. dbterm chooses the engine-appropriate format, refuses to overwrite an existing file, cancels safely, and publishes only a finished artifact. The default folder is `~/dbterm-backups`.
+
+### Durable plans
+
+Open Backup Center with `Alt+K` or Dashboard `B`. Press `N` to select a saved database or add one; Dashboard `Ctrl+B` starts with its highlighted connection, and `Ctrl+N` adds another connection from inside the plan form.
+
+A plan configures:
+
+- Manual, interval, daily, or weekly scheduling with timezone, weekdays, catch-up behavior, and enabled state.
+- Absolute local/mounted or rclone destinations.
+- Filename tokens: `{job}`, `{connection}`, `{database}`, `{engine}`, `{date}`, `{time}`, `{timestamp}`, and `{run}`.
+- Count, maximum-age, and total-size retention ceilings. The newest verified artifact is always preserved.
+- Timeout and compression: none, gzip, ZIP, or Zstandard with a chosen level.
+- Optional age X25519 public recipient.
+- Email policy: never, failure, success, or both; Gmail STARTTLS defaults or custom SMTP/TLS, recipients, sender, username, and app password.
+
+Backup Center actions include run now, enable/disable schedule, apply retention, history, inspect/restore, desktop/server agent status and controls, age key generation, edit, and delete. Deleting a job keeps its history and files.
+
+### Agents, inspection, and restore
+
+Desktop/user mode requires no administrator access and starts at login. Server/system mode is an explicit elevated installation that starts at machine boot and requires existing config/state/log paths plus a chosen runtime user. Start/stop changes runtime; enable/disable changes startup policy independently. The status screen separates registration, startup, manager runtime, process lock, heartbeat, PID, uptime, memory, and current phase. Logs can be refreshed and copied.
+
+Inspection unwraps at most three gzip, Zstandard, single-entry ZIP, or age layers in private OS temporary files, with a 1 GiB decoded limit per layer by default. It identifies the database format from content, checks SHA-256 history when available, and warns about misleading extensions. Increase **Max Decoded GiB** only for a trusted larger artifact and provide enough temporary disk space.
+
+Restore is preview-first and always requires explicit consent. The detected engine must match the saved target. Merge is the default; clean restore is a separate destructive choice and requires the exact database name or normalized SQLite path. Valid SQL can still perform any server-side action allowed to the selected database account, so restore only trusted files.
+
+## Configure Settings and shortcuts
+
+Open Settings with Dashboard `G`, `Alt+,`, or `Alt+G`. Settings owns:
+
+- Dashboard health checks: `auto` or `manual`.
+- Agent connection scope: only the active saved profile (default) or all saved profiles.
+- **Allow Agent Profile Writes**, disabled by default because profiles can contain credentials.
+- Every configurable global key binding.
+
+Settings validates names, modifier requirements, duplicates, and reserved contextual keys before saving. `Ctrl+S` saves the form; Reset Defaults restores the built-in bindings. `Ctrl+Space`, Tab, Esc, Backspace, `F5`, `Ctrl+C`, and result-sizing keys remain context-owned and cannot be reassigned as unsafe global plain-letter shortcuts.
+
+Default configurable actions:
+
+| Default | Action |
+| --- | --- |
+| `Alt+T` / `Alt+Q` / `Alt+R` | Focus Tables / Query / Results |
+| `Alt+D` | Dashboard |
+| `Alt+H` | Guide & SQL Reference |
+| `Alt+S` | Database services |
+| `Alt+F` | Fullscreen Results |
+| `Alt+B` / `Alt+K` | Instant backup / Backup Center |
+| `Alt+W` | Change Profiler |
+| `Alt+E` | CSV export |
+| `Alt+Y` | Query history |
+| `Alt+,` / `Alt+G` | Settings |
+| `Alt+I` | SQL import |
+| `Alt+M` | Schema inspection |
+| `Alt+A` / `Alt+C` | Select all displayed rows / clear selection |
+| `Ctrl+P` | Command palette |
+
+The **Keyboard & workflows** section of the in-app guide renders effective configured shortcuts, not stale defaults.
+
+## Connect trusted AI agents through MCP
+
+`dbterm mcp serve` starts a local Model Context Protocol server over standard input/output. It opens no network port and does not require a hosted dbterm account. The complete agent guide is available at [dbterm for agents](https://dbterm.shreyam1008.com.np/agents/) and as [agent-readable Markdown](https://dbterm.shreyam1008.com.np/agents.md).
+
+Register it with Codex:
+
+```bash
+codex mcp add dbterm -- dbterm mcp serve
+```
+
+Or configure any MCP client with command `dbterm` and arguments `mcp`, `serve`.
+
+Available tools are `list_connections`, `inspect_database`, `inspect_table`, `query_read_only`, `explain_query`, `follow_record`, and—only after explicit Settings opt-in—`save_connection_profile`. The server also exposes `dbterm://mcp/instructions`.
+
+Runtime options:
+
+```text
+--connection active|all|ID
+--max-rows N              default 50, range 1–200
+--timeout 8s              maximum 30s
+--deny-profile-write
+```
+
+Database execution is always read-only, one statement at a time, and bounded by query size, time, rows, columns, cell size, and response bytes. Stored passwords/tokens are never returned. Calls are audited to stderr without SQL text or credentials. Profile writes remain behind the Settings gate and secret inputs are write-only. A SELECT-only database account is still recommended because syntax checks cannot prove that every database-specific function is free of side effects.
+
+## Database SQL reference
+
+These examples are starting points, not a substitute for reviewing the target database and account privileges. Replace placeholder table names and add a narrow `WHERE` clause before running writes.
+
+### PostgreSQL
+
+```sql
+-- Schema and server
+SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';
+SELECT column_name, data_type, is_nullable
+  FROM information_schema.columns WHERE table_name = 'TABLE';
+SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'TABLE';
+SELECT version(), current_database(), current_user;
+SELECT pg_size_pretty(pg_database_size(current_database()));
+
+-- Data and performance
+SELECT * FROM TABLE LIMIT 100;
+SELECT COUNT(*) FROM TABLE;
+EXPLAIN ANALYZE SELECT * FROM TABLE WHERE id = 1;
+SELECT pg_size_pretty(pg_total_relation_size('TABLE'));
+SELECT * FROM pg_stat_activity;
+```
+
+### MySQL and MariaDB
+
+```sql
+-- Schema and server
+SHOW TABLES;
+DESCRIBE TABLE_NAME;
+SHOW CREATE TABLE TABLE_NAME;
+SHOW INDEX FROM TABLE_NAME;
+SELECT VERSION(), DATABASE(), USER();
+SHOW DATABASES;
+
+-- Data and performance
+SELECT * FROM TABLE_NAME LIMIT 100;
+SELECT COUNT(*) FROM TABLE_NAME;
+EXPLAIN SELECT * FROM TABLE_NAME WHERE id = 1;
+SHOW TABLE STATUS;
+SHOW PROCESSLIST;
+```
+
+### SQLite
+
+```sql
+-- Schema and database
+SELECT name FROM sqlite_master WHERE type = 'table';
+PRAGMA table_info(TABLE_NAME);
+SELECT sql FROM sqlite_master WHERE name = 'TABLE_NAME';
+SELECT sqlite_version();
+PRAGMA database_list;
+PRAGMA integrity_check;
+
+-- Data and performance
+SELECT * FROM TABLE_NAME LIMIT 100;
+SELECT COUNT(*) FROM TABLE_NAME;
+EXPLAIN QUERY PLAN SELECT * FROM TABLE_NAME WHERE id = 1;
+PRAGMA optimize;
+ANALYZE;
+```
+
+### Turso / LibSQL
+
+Turso uses SQLite-compatible catalog and query syntax through LibSQL. Start with `sqlite_master`, `PRAGMA table_info(TABLE_NAME)`, `SELECT sqlite_version()`, bounded `SELECT` queries, and `EXPLAIN QUERY PLAN`. Availability of individual pragmas can depend on the remote service.
+
+### Cloudflare D1
+
+D1 also uses SQLite-compatible SQL through the Cloudflare API. Use `sqlite_master`, `PRAGMA table_info(TABLE_NAME)`, bounded `SELECT` queries, and D1-supported pragmas. Account ID, database ID, and token are connection metadata, not SQL values.
+
+## CLI reference
+
+### Top-level commands
+
+| Command | Purpose |
+| --- | --- |
+| `dbterm` | Launch the TUI |
+| `dbterm --help` | Print command and shortcut help |
+| `dbterm --version` | Print version and build information |
+| `dbterm --info` | Print executable, config, state, and runtime information |
+| `sudo dbterm connections recover-sudo` | Merge unique connections saved by older sudo-launched versions |
+| `dbterm mcp serve [options]` | Start the local read-only MCP server |
+| `dbterm --update [X.Y.Z]` | Install the latest or requested release |
+| `dbterm --uninstall [--yes] [--purge]` | Remove the binary and optionally dbterm-owned data |
+
+Common `help`, `version`, `info`, `update`, and `remove` aliases are accepted, but scripts should use the documented forms.
+
+### Backup CLI
+
+```text
+dbterm backup list|jobs [--json]
+dbterm backup create --connection <id|name> --destination <folder|rclone://remote/path>
+  [--name LABEL] [--filename TEMPLATE]
+  [--compression none|gzip|zip|zstd] [--level N]
+  [--age-recipient AGE1...] [--timeout MINUTES]
+dbterm backup run <job-id|name>
+dbterm backup prune --yes <job-id|name>
+dbterm backup inspect [--identity key.txt] [--max-decoded-gib N] [--json] <file>
+dbterm backup restore --connection <id|name> [--identity key.txt]
+  [--mode merge|clean] [--stop-on-error=true|false]
+  [--single-transaction=true|false] [--max-decoded-gib N]
+  [--timeout DURATION] [--confirm-clean EXACT_TARGET] --yes <file>
+dbterm backup status [--json]
+dbterm backup service <install|uninstall|start|stop|restart|enable|disable|status>
+  [--user|--system|--scope user|system]
+  [--run-as USER] [--config-dir PATH] [--state-dir PATH] [--log-dir PATH]
+dbterm backup service status --all
+dbterm backup keygen [--output identity.txt]
+dbterm backup notify-test <job-id|name>
+dbterm backup paths [--json]
+dbterm backup logs|log [--lines 1..5000] [--previous]
+dbterm backup agent [--poll 30s]
+dbterm backup run-due
+```
+
+`backup create --timeout` is measured in minutes; restore `--timeout` accepts a Go duration such as `45m` and `0` disables that optional timeout. Clean mode requires `--confirm-clean` with the exact target database name or normalized absolute SQLite path. `--run-as` applies only to system service installation, which also requires explicit config, state, and log directories. `service status --all` is the only action that accepts `--all`. `backup agent` and `backup run-due` are headless/internal execution paths for containers and the native scheduler.
+
+Run `dbterm backup --help` for the exact flags accepted by the installed version.
+
+## Files, profiles, and recovery
+
+Use these commands instead of guessing paths:
+
+```bash
+dbterm --info
+dbterm backup paths
+```
+
+Typical roots are:
+
+| OS | Config | State/logs |
+| --- | --- | --- |
+| Linux | `${XDG_CONFIG_HOME:-~/.config}/dbterm` | `${XDG_STATE_HOME:-~/.local/state}/dbterm` |
+| macOS | `~/Library/Application Support/dbterm` | `~/Library/Logs/dbterm` plus application state |
+| Windows | `%AppData%\dbterm` | `%LocalAppData%\dbterm` |
+
+dbterm keeps one stable profile for the signed-in OS user. If `sudo dbterm` is launched accidentally, the interactive app hands control back to the invoking user before reading or writing connections, settings, backup plans, or profiler state. Explicit elevated service, update, uninstall, and sudo-recovery operations retain their requested privilege.
+
+Connections have a private primary file, current recovery mirror, previous generation, and state-directory vault. Settings are mirrored to the recovery vault. Missing or unreadable primary data can be restored automatically while a corrupt original is preserved for diagnosis.
+
+Older releases could save connections under root. When detected, recover them non-destructively:
+
+```bash
+sudo dbterm connections recover-sudo
+```
+
+The command merges only unique profiles, backs up the existing user file, restores user ownership, and leaves the older root file unchanged.
+
+## Troubleshooting
+
+### dbterm is not found after install
+
+Open a new terminal, inspect the installer's reported directory, and confirm it is on `PATH`. Run the binary by its full path once, then use `dbterm --info`.
+
+### Connection fails
+
+Check host, port, database credentials, SSL mode, firewall/VPN reachability, and whether the service is running. Use the form's **Test** action. For a PostgreSQL/MySQL server login, leave the database empty and use **Find DBs** to separate server access from a wrong database name.
+
+### MySQL root works with sudo but not dbterm
+
+The account probably uses local socket authentication. Use a TCP-capable MySQL account with the required database grants; do not enter the Linux sudo password as the MySQL password.
+
+### A query is stuck or the UI is busy
+
+Press `Esc` or `Ctrl+C`. Query, import, export, refresh, backup, and profiler loaders expose safe cancellation. Wait for the final outcome before assuming the database stopped the operation.
+
+### Results are too large
+
+Use filters, a narrower query, or the default bounded preview. For a complete table export, choose **All matching** in `Alt+E`; it streams filtered rows without rendering them all.
+
+### A table or column seems missing
+
+Press `Ctrl+F5` to refresh schema objects. Clear Tables type-ahead with `Esc`, expand the correct schema branch, or search through `Ctrl+P`.
+
+### A scheduled backup did not run
+
+Open Backup Center → `A`, or run:
+
+```bash
+dbterm backup service status --all
+dbterm backup status
+dbterm backup logs --lines 200
+```
+
+Confirm registration, startup policy, manager runtime, heartbeat, job enabled state, next run, destination capacity, and that the native clients required by that job are in the agent account's `PATH`. SQLite snapshot jobs need no `sqlite3`; local destinations need no `rclone`.
+
+### Server agent installation fails
+
+Run `dbterm backup paths` as the intended user, create and verify the exact directories, then use the elevated command printed by Backup Center. Server mode never silently falls back to desktop mode. On Windows, a system task cannot rely on a user's mapped drive.
+
+### An encrypted backup is locked
+
+Select the matching age identity during inspection or pass `--identity`. Jobs store the public recipient, not the private key. Without that identity the encrypted contents cannot be restored.
+
+### Restore reports the wrong or ambiguous engine
+
+dbterm trusts file contents, not extensions. Generic SQL that cannot be identified safely is inspectable but blocked from restore. Choose an artifact created by the matching engine and review every warning.
+
+### Update or uninstall reports a permission error
+
+Use the package manager that owns the binary or elevate only the executable replacement/removal. Keep normal app and backup operations in the signed-in user's profile.
+
+### Settings or connections were recovered
+
+Read the startup notice and `dbterm --info`. dbterm preserves the unreadable original when possible and identifies the recovery source. Do not delete recovery generations until the restored profiles have been checked.
+
+## Security, privacy, and deliberate limits
+
+- dbterm has no hosted database proxy, remote MCP endpoint, OAuth service, or autonomous agent service.
+- Connection and SMTP secrets remain local but are stored as private plaintext files/catalog fields so the app and unattended agent can use them. Use dedicated, revocable, least-privilege credentials.
+- MCP database execution uses its separate read-only policy and transaction boundary. The normal Query workspace does not: its optional **Read-Only Guard** is only a first-token convenience check. `WITH`, `EXPLAIN`, and `PRAGMA` statements can bypass that check and may have side effects, so use database-enforced read-only credentials or grants when writes must be impossible.
+- SQL import and restore can perform changes allowed by the target database account. Content detection and command guards do not make untrusted SQL safe.
+- Change Profiler reports differences, not an authenticated writer identity.
+- Turso/D1 backup artifacts are inspectable, but direct restore targets in this release are PostgreSQL, MySQL/MariaDB, and local SQLite.
+- The TUI prioritizes bounded previews and keyboard workflows. Use a desktop workbench when you need visual modeling, broad driver ecosystems, or GUI-heavy administration.
+
+Report vulnerabilities privately through the repository's [security advisory flow](https://github.com/shreyam1008/dbterm/security/advisories/new). Remove credentials, SQL data, paths, tokens, and encryption identities from diagnostics.
+
+## Current release and change history
+
+This manual targets dbterm **v0.10.0 “Beas”**. That release adds searchable table-and-column schema trees, direct column navigation from the command palette, selectable result headers, smarter local SQL templates and typo recovery, remembered table context, and indexed performance for large schemas.
+
+Run `dbterm --version` for the installed build and open Dashboard `U` for its release notes and checksum-verified updater. The repository's [release manifest](https://github.com/shreyam1008/dbterm/blob/main/cmd/dbterm/releases.txt) is the version source used by builds, while [GitHub Releases](https://github.com/shreyam1008/dbterm/releases) provides immutable artifacts, checksums, and historical notes. When an installed version differs from this page, prefer that binary's `--help`, `backup --help`, and offline Guide for exact accepted flags.
+
+## Develop, contribute, and get help
+
+Source, issues, releases, and the MIT license live at [github.com/shreyam1008/dbterm](https://github.com/shreyam1008/dbterm). Read `CONTRIBUTING.md` before opening a pull request.
+
+Run the checkout:
+
+```bash
+go run ./cmd/dbterm
+```
+
+Build and test:
+
+```bash
+make build
+make test
+```
+
+Verify the website:
+
+```bash
+cd site
+bun install
+bun run verify
+```
+
+For architecture and module ownership, read [the project reference](https://github.com/shreyam1008/dbterm/blob/main/docs/project-reference.md). For a bug, include the dbterm version, OS, database type, exact action, expected result, actual result, and a redacted reproduction.
+
+---
+
+# dbterm Backup Center
+
+This document is the operating and maintenance guide for dbterm backups. It
+covers one-off backups, durable schedules, native background services,
+retention, notifications, inspection, and restore.
+
+## What the Backup Center protects
+
+| Database | Backup format | Restore support |
+| --- | --- | --- |
+| PostgreSQL | Native custom archive from `pg_dump` | Previewed restore through official PostgreSQL clients |
+| MySQL / MariaDB | Single-database SQL from `mysqldump` | Previewed SQL restore through official MySQL clients |
+| SQLite | Consistent database snapshot | Guarded, staged snapshot or SQL restore |
+| Turso / LibSQL | Single-transaction logical SQL export | Inspectable; virtual/FTS schemas fail closed; automatic restore is not enabled yet |
+| Cloudflare D1 | Cloudflare native SQL export API | Inspectable; automatic restore is not enabled yet |
+
+The source can be local or remote. For example, a saved PostgreSQL connection
+to an AWS-hosted database can write backups to a local disk, an OS-mounted
+volume, or any configured rclone remote. The four source/destination pairings
+are supported: local-to-local, local-to-remote, remote-to-local, and
+remote-to-remote.
+
+Turso schema and data reads stay on one source transaction. dbterm rejects
+virtual/FTS tables before publication because separately exporting their shadow
+tables can create an unrestorable artifact. D1 backups use Cloudflare's own
+export API instead of reconstructing rows through the SQL driver, then stream
+the short-lived signed HTTPS download into private staging. Cloudflare may make
+the D1 database temporarily unavailable while its native export runs.
+
+## The normal workflow
+
+1. Save and test the database connection in the dbterm Dashboard.
+2. Open Backup Center with `Alt+K`, press `N`, then choose an existing saved
+   database or add one. Alternatively, press `Ctrl+B` on the selected Dashboard
+   connection to start with it preselected.
+3. Choose a destination, schedule, and whether the policy is enabled.
+4. Keep the storage, security, and notification defaults unless the backup has
+   a specific operational requirement.
+5. Save the job and install either the desktop or server backup agent.
+6. Run the job once manually. Confirm its path, checksum, duration, and history
+   entry before relying on the schedule.
+7. Periodically test inspection and restore with a non-production target.
+
+Instant backup remains available with `Alt+B` from any active workspace panel.
+It uses the same engine-aware native dump and verification pipeline but does not
+create a durable schedule. Press `F2` to choose a folder, type an absolute path,
+or enter `rclone://remote/path`; `F3` refreshes local destination and
+private-staging capacity.
+
+### Backup Center controls
+
+| Key | Action |
+| --- | --- |
+| `Ctrl+B` on Dashboard | Start a new job with the highlighted saved connection selected |
+| `B` on Dashboard / `Alt+K` | Open Backup Center |
+| `Alt+B` in a workspace | Create an instant backup of the active database |
+| `N` | Choose a saved database or add a connection for a new job |
+| `Enter` | Edit the highlighted job |
+| `Ctrl+N` in the plan form | Add and select another saved database |
+| `Space` | Enable or disable a timed schedule; manual plans stay on demand |
+| `R` | Run the highlighted job now with live progress |
+| `P` | Review and apply retention now |
+| `H` | Open run, artifact, and notification history |
+| `I` | Inspect a backup and enter the guarded restore flow |
+| `A` | Inspect and manage desktop/server agent scopes and logs |
+| `G` | Generate an age X25519 identity |
+| `D` | Delete the job definition; completed artifacts remain |
+| `F2` / `F3` in instant and plan forms | Choose a folder / refresh destination and staging capacity |
+
+## Job form and defaults
+
+The form is ordered by operational importance and uses progressive disclosure.
+
+### Essential
+
+- **Saved connection:** stable connection identity; renaming or reordering the
+  Dashboard cannot silently redirect a job.
+- **Job name:** used in history, logs, notifications, and optional filenames.
+- **Destination:** an absolute local/mounted path, or a configured rclone path
+  such as `rclone://offsite/dbterm`. Local paths can be typed or chosen with the
+  native folder dialog when a desktop session is available.
+- **Schedule and enabled state:** manual, interval, daily, or weekly.
+
+The default policy uses Zstandard compression, a daily 02:00 local schedule,
+missed-run catch-up, a 30-minute timeout, and conservative retention. Required
+fields are at the top; naming, compression, encryption, retention, and email
+are advanced sections.
+
+### Timing
+
+- **Manual:** runs only when requested from Backup Center or the CLI.
+- **Interval:** every N minutes.
+- **Daily:** once at an `HH:MM` time.
+- **Weekly:** at `HH:MM` on selected weekdays.
+- **Timezone:** `Local` or an IANA timezone such as `Asia/Kolkata`.
+- **Catch up missed run:** after sleep, reboot, or downtime, run one overdue
+  occurrence. It never replays every missed interval.
+
+With catch-up disabled, an occurrence more than two minutes late is skipped and
+the schedule advances to its next future time.
+
+### Destination and capacity
+
+Backup Center shows local volume capacity when the OS exposes it. Remote quota
+is provider-specific; use `rclone about remote:` when that backend supports
+quota reporting. The progress view reports the destination and bytes written.
+dbterm still needs private temporary space for the native dump and, for a
+remote destination, the completed wrapped artifact before upload.
+
+Configure a remote once under the same OS account that runs the backup agent:
+
+```bash
+rclone config
+rclone lsd offsite:
+dbterm backup create --connection production \
+  --destination rclone://offsite/dbterm --name offsite
+```
+
+The text before the first slash is the rclone remote name; the remainder is its
+folder/object prefix. dbterm does not store remote credentials. It invokes
+rclone non-interactively, creates the prefix when needed, uploads with immutable
+semantics, verifies the reported remote size, and records the canonical
+`rclone://...` artifact path. Make the rclone config available to a desktop or
+server agent exactly as it is to an interactive `rclone` command.
+
+The folder chooser is a convenience, not a requirement. On a headless server,
+over SSH, or when no supported desktop chooser is installed, type or paste the
+absolute path or rclone URI. dbterm creates local folders when the job is saved;
+the first run validates rclone and prepares its remote prefix.
+
+### File names
+
+The default filename is unique per run. Templates support:
+
+- `{job}`
+- `{connection}`
+- `{database}`
+- `{engine}`
+- `{date}`
+- `{time}`
+- `{timestamp}`
+- `{run}`
+
+Path separators and unknown tokens are rejected. Existing files are never
+silently replaced.
+
+### Compression
+
+- **Zstandard:** default; single worker and lower-memory mode.
+- **gzip:** interoperable stream compression.
+- **ZIP:** a single named backup entry.
+- **None:** useful when an external system handles compression.
+
+Compression and encryption stream through bounded buffers. The entire dump is
+not loaded into memory.
+
+### Encryption
+
+Jobs can encrypt artifacts with an age X25519 public recipient. Generate an
+identity with:
+
+```bash
+dbterm backup keygen
+```
+
+Only the public `age1...` recipient belongs in a job. Keep the private identity
+separately from the backup destination and include it in the disaster-recovery
+plan. Losing it makes encrypted artifacts unrecoverable.
+
+### Retention
+
+Retention can combine three ceilings:
+
+- keep the latest N successful artifacts;
+- remove artifacts older than N days; and
+- cap the total recorded artifact size, pruning oldest successful artifacts
+  first.
+
+The newest successful artifact is always retained. Cleanup only considers
+successful artifacts recorded for that exact job and still contained by that
+job's destination. Before deletion, dbterm verifies size and the recorded
+SHA-256 when available. Remote checksum verification streams the object back
+through `rclone cat`, which can incur provider download/egress usage. A changed
+file, symlink, remote name, or path outside the destination is refused rather
+than deleted.
+
+Deleting a job, stopping the service, updating dbterm, or uninstalling dbterm
+does not delete chosen backup artifacts.
+
+Changing a retention policy affects later successful runs. To enforce it now,
+review the ceilings and use Backup Center's prune action or explicit CLI
+consent:
+
+```bash
+dbterm backup prune --yes <job-id-or-name>
+```
+
+## Progress and history
+
+The live view uses determinate progress where a byte total is known and an
+indeterminate activity bar otherwise. It shows:
+
+- current phase: preflight, native dump, verification, wrapping, publication,
+  retention, or notification;
+- bytes produced and total bytes when known;
+- elapsed time, current transfer rate, and estimated remaining time when those
+  values are meaningful; and
+- the last diagnostic message.
+
+Native PostgreSQL/MySQL clients do not expose a reliable row-level percentage.
+For those engines, dbterm reports live dump-file growth and elapsed time rather
+than inventing a percentage. Wrapping can use the completed raw dump size for
+an exact byte percentage.
+
+Every durable run records status, timestamps, trigger, error, artifact path,
+size, format, checksum, and verification state. Interrupted runs are reconciled
+as failed after their lease expires so they do not stay “running” forever.
+
+## Email notifications
+
+Each job can notify:
+
+- never;
+- on failure only;
+- on success only; or
+- on both success and failure.
+
+Gmail defaults are `smtp.gmail.com`, port `587`, with STARTTLS. Port `465` uses
+implicit TLS. Custom SMTP servers, ports, senders, recipients, and TLS mode are
+supported. Gmail normally requires 2-Step Verification and a dedicated app
+password; use the full Gmail address as the username.
+
+Notification delivery happens only after the run result is durably recorded.
+An email failure is logged and shown in diagnostics but never changes a valid
+backup into a failed backup. Passwords are redacted from errors and logs.
+
+The SMTP app password is stored locally in the private backup catalog so the
+headless agent can authenticate. It is not protected by the backup artifact's
+age recipient and is not an OS-keyring secret. Protect the OS account and
+dbterm state directory, use a dedicated/revocable app password, and rotate it
+if the machine or account is compromised. Plain SMTP should only be used for a
+trusted local relay; encrypted transport is the default.
+
+Send a test without running a backup or changing the saved job:
+
+```bash
+dbterm backup notify-test <job-id-or-name>
+```
+
+## Background-agent modes
+
+The agent is serialized and low-overhead. A global process lock prevents two
+schedulers from executing the same catalog concurrently, while per-job leases
+prevent manual and scheduled overlap.
+
+### Desktop/user mode
+
+This is the default and requires no administrator access.
+
+| OS | Registration | Lifetime |
+| --- | --- | --- |
+| Linux | `systemd --user` | User manager; enable lingering for post-logout operation |
+| macOS | `launchd` LaunchAgent | Logged-in user session |
+| Windows | Task Scheduler logon task | Logged-in user session |
+
+On Linux, `loginctl enable-linger <user>` lets the user manager start at boot
+and remain after logout. That is often the cleanest server setup when permitted
+by the administrator.
+
+### Server/system mode
+
+Server mode is an explicit elevated install. It registers at system boot and
+uses the selected dbterm config, state, and log paths rather than silently
+switching to an administrator's profile.
+
+| OS | Registration | Elevation |
+| --- | --- | --- |
+| Linux | system `systemd` unit, configured to run as the invoking user | root/sudo required |
+| macOS | `/Library/LaunchDaemons` LaunchDaemon with an explicit user | administrator required |
+| Windows | boot-triggered Task Scheduler registration | Administrator required |
+
+Permission failures explain the exact manager, definition path, and elevation
+needed. There is no automatic fallback from server mode to desktop mode.
+
+Install from Backup Center's **Agent** view, or use the CLI:
+
+```bash
+dbterm backup service install
+dbterm backup service status --all
+```
+
+For server scope, first run `dbterm backup paths`, create and permission the
+three directories for the intended runtime user, then execute the exact
+elevated command shown by Backup Center. On Linux, for example:
+
+```bash
+sudo dbterm backup service install --system --run-as backupuser \
+  --config-dir /home/backupuser/.config/dbterm \
+  --state-dir /home/backupuser/.local/state/dbterm \
+  --log-dir /home/backupuser/.local/state/dbterm/logs
+```
+
+macOS server mode also requires `--run-as`. Windows server mode runs as
+LocalSystem, so it omits `--run-as` and its three paths must be local and
+accessible to SYSTEM. A mapped drive in an interactive Windows account is not
+a machine-service destination.
+
+The manager records the exact executable path. Build or install a stable binary
+first; disposable `go run` executables are rejected.
+
+The foreground fallback is useful in containers or a supervisor you already
+operate:
+
+```bash
+dbterm backup agent
+```
+
+## Service health
+
+Backup Center separates four facts that are easy to confuse:
+
+- whether a native registration exists;
+- whether startup is enabled;
+- whether the manager reports it running; and
+- whether the dbterm heartbeat and global scheduler lock are healthy.
+
+When available, status also shows PID, process name, uptime, resident memory,
+last heartbeat, manager, scope, and registration detail. Process metrics are
+diagnostic only; failure to read them never stops a backup.
+
+## Logs and diagnostics
+
+Routine agent logs are written to:
+
+```text
+<dbterm log directory>/dbterm-backup-agent.log
+```
+
+The active log and one archive are each bounded to 5 MiB. Backup Center can
+show a tail with the exact path, and the CLI prints paths with:
+
+```bash
+dbterm backup paths
+dbterm backup logs --lines 200
+dbterm backup logs --previous
+```
+
+Native managers may also create exceptional stdout/stderr files in the same
+directory. A good error includes the failed phase, database/client involved,
+destination, and corrective action without printing database or SMTP secrets.
+
+Useful checks:
+
+```bash
+dbterm backup status
+dbterm backup service status --all
+dbterm backup list
+dbterm backup paths
+dbterm backup logs --lines 200
+```
+
+## Inspect and restore
+
+Inspection identifies gzip, Zstandard, single-entry ZIP, and age wrappers,
+then detects PostgreSQL custom/tar/plain SQL, MySQL SQL, SQLite databases, or
+SQLite SQL from bytes rather than trusting the extension. Misleading names
+produce warnings.
+
+Inspection and restore currently accept a local file. Download an rclone-backed
+artifact first, then inspect the downloaded copy:
+
+```bash
+rclone copyto offsite:dbterm/orders.dump.zst ./orders.dump.zst
+dbterm backup inspect ./orders.dump.zst
+```
+
+```bash
+dbterm backup inspect ./backup-file
+dbterm backup inspect --identity ./age-identity.txt ./backup-file.age
+```
+
+Inspection unwraps at most three layers. Each decoded layer defaults to a 1 GiB
+safety cap and uses private OS temporary files, not memory. Increase the cap
+only for a trusted larger artifact and ensure temporary storage has enough
+space:
+
+```bash
+dbterm backup inspect --max-decoded-gib 8 ./large-backup.zst
+```
+
+Restore is preview-first. The detected engine must match the selected saved
+connection, explicit consent is required, and destructive clean mode requires
+the exact database name or normalized SQLite path.
+
+```bash
+dbterm backup restore --connection staging --yes ./backup-file
+```
+
+PostgreSQL clean restore is opt-in. MySQL warns that non-transactional or
+already-applied statements may remain after a client failure. SQLite restores
+use a verified staging database and preserve a pre-restore copy.
+
+## Native files and paths
+
+Run `dbterm backup paths` for authoritative paths on the current machine.
+
+| OS | Config | State/catalog | Logs |
+| --- | --- | --- | --- |
+| Linux | `${XDG_CONFIG_HOME:-~/.config}/dbterm` | `${XDG_STATE_HOME:-~/.local/state}/dbterm` | state + `/logs` |
+| macOS | `~/Library/Application Support/dbterm` | same application-support tree | `~/Library/Logs/dbterm` |
+| Windows | `%AppData%\dbterm` | `%LocalAppData%\dbterm` | state + `\logs` |
+
+Saved database credentials remain in private `connections.json`. Jobs,
+schedules, SMTP settings, leases, run history, checksums, and heartbeats live
+in `backup/backups.db`. Raw dumps and temporary database-client credential
+files are staged in the private state area and cleaned after use. Old crash
+partials are cleaned on a later run.
+
+## Reliability checklist
+
+- Keep the dbterm binary and native database clients at stable paths.
+- Run the first backup manually and inspect its history entry.
+- Keep destination capacity above one raw dump plus one wrapped artifact.
+- Use count, age, and/or size retention rather than an unbounded directory.
+- Encrypt off-machine artifacts and store the age identity separately.
+- Use a dedicated SMTP app password and failure notifications.
+- Confirm the agent heartbeat, startup state, uptime, and recent log after OS
+  updates or credential changes.
+- Perform a real restore drill into an isolated target on a schedule.
+- Monitor both successful backups and the absence of expected backups.
+
+## Maintainer verification
+
+Backup changes should pass unit tests, the race detector, vet, site validation,
+and cross-builds for Linux, macOS, and Windows on amd64 and arm64. Platform
+service definitions and folder-picker behavior need build-tagged tests; native
+runtime testing is still required before claiming a platform-specific manager
+change production-ready.
+
+---
+
+# dbterm MCP server
+
+dbterm includes a local Model Context Protocol server so a trusted agent can inspect and query databases through saved dbterm connection profiles.
+
+## Start it
+
+```sh
+dbterm mcp serve
+```
+
+The process uses MCP over standard input/output. It does not listen on a network port and dbterm does not advertise a hosted MCP endpoint.
+
+Example client configuration:
+
+```json
+{
+  "mcpServers": {
+    "dbterm": {
+      "command": "dbterm",
+      "args": ["mcp", "serve"]
+    }
+  }
+}
+```
+
+Restart the agent client after changing its MCP configuration. The exact configuration filename and UI vary by client.
+
+## Tools
+
+- `list_connections` returns safe profile metadata. It never returns passwords or tokens.
+- `inspect_database` lists schemas and tables.
+- `inspect_table` returns columns, primary keys, and declared foreign keys.
+- `query_read_only` runs one bounded read-only SQL statement.
+- `explain_query` validates a `SELECT` and asks the database for a plan without `ANALYZE`.
+- `follow_record` loads one exact record and follows declared incoming and outgoing foreign keys by one hop.
+- `save_connection_profile` is available only when profile writes are explicitly enabled. Password and token inputs are write-only.
+
+The server also publishes `dbterm://mcp/instructions` as an MCP resource with the active safety contract.
+
+## Scope and profile writes
+
+Configure Agent Access in dbterm Settings. The safe default exposes only the active saved connection and does not expose profile writes.
+
+Runtime options can narrow or explicitly change that choice:
+
+```sh
+dbterm mcp serve --connection active
+dbterm mcp serve --connection all
+dbterm mcp serve --connection CONNECTION_ID
+dbterm mcp serve --deny-profile-write
+```
+
+Enabling profile writes in dbterm Settings lets an agent persist credentials into dbterm's existing local connection store. There is no command-line flag that can bypass this settings gate. It does not let the agent retrieve stored secrets. An update fully replaces non-secret profile fields; an empty `password` or `auth_token` preserves that stored secret.
+
+## SQL safety
+
+Database writes are not supported by this MCP server. The query surface rejects multiple statements, mutation and administration keywords, MySQL/MariaDB executable comments, unsafe SQLite pragmas, `SELECT INTO`, and `EXPLAIN ANALYZE`. It limits query size, duration, rows, columns, cell size, and total response bytes. Security-relevant audit records go to stderr and contain an audit ID, tool name, connection ID, status, and duration—not SQL text or credentials.
+
+dbterm requests a read-only database transaction. If a driver cannot enforce one, queries fail unless the saved profile is explicitly marked read-only. A database account with `SELECT`-only grants is still recommended: syntax checks cannot prove that every database-specific or user-defined function has no external side effects.
+
+`follow_record` only uses validated identifiers, parameterized values, and declared foreign keys. It does not guess relationships from similar column names.
+
+---
+
+# Change Profiler architecture
+
+Change Profiler answers “what changed after this named point?” without changing the tracked database. The default engine is deliberately portable across PostgreSQL, MySQL/MariaDB, SQLite, Turso/libSQL, and Cloudflare D1.
+
+## Portable exact mode
+
+1. Preflight discovers tables, columns, stable row keys, and inexpensive size/row estimates.
+2. The user reviews scope. Risky tables begin excluded; `A` explicitly includes the whole database.
+3. Capture streams selected rows through a consistent source snapshot where the driver supports one.
+4. Each normalized row receives a stable key hash and row hash. Exact before-values use adaptive per-row Zstandard compression in dbterm's private local SQLite store.
+5. A scan streams current rows, looks up baseline hashes, and persists only inserted, updated, deleted, and schema-change records.
+6. Finish removes the full baseline while preserving the compact report.
+
+The loader reports phase, table position, row count, bytes processed, elapsed time, rate, percentage, and an ETA when a row estimate is available. PostgreSQL and MySQL estimates come from their catalogs. SQLite uses existing `ANALYZE` statistics when present, then a fast indexed rowid-range estimate; it does not add a full `COUNT(*)` pass.
+
+Exact portable mode must still read every selected row at capture and scan time. Compression reduces local I/O and storage but cannot remove that source read.
+
+## Why database logs are not the universal default
+
+- PostgreSQL logical decoding requires logical WAL, replication privileges, and a persistent slot. An abandoned slot can retain WAL and consume server storage.
+- MySQL/MariaDB change streaming requires accessible binary logs and a compatible row-based format.
+- SQLite's session extension is disabled in default builds, requires declared primary keys, and observes only writes made through the attached SQLite connection.
+- Turso/libSQL WAL replication is a replication interface, not a stable cross-product row-audit API exposed by dbterm's SQL connection.
+- Cloudflare D1 Time Travel provides restore bookmarks, not a row-level change stream.
+
+Native-log adapters are therefore an optional future acceleration mode. They must be capability-detected, explicitly enabled, monitored for retained-log growth, and cleaned up safely. Snapshot mode remains the compatibility fallback and the correctness oracle.
+
+Official references:
+
+- [PostgreSQL logical decoding](https://www.postgresql.org/docs/current/logicaldecoding.html)
+- [MySQL binary log](https://dev.mysql.com/doc/refman/8.0/en/binary-log.html)
+- [MariaDB row binlog events](https://mariadb.com/docs/server/server-management/server-monitoring-logs/binary-log/row-binlog-events)
+- [SQLite session extension](https://sqlite.org/sessionintro.html)
+- [Cloudflare D1 Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/)
+- [libSQL replication and incremental snapshots](https://github.com/tursodatabase/libsql/blob/main/docs/USER_GUIDE.md)
+
+---
+
+# Security policy
+
+Please report suspected vulnerabilities privately through GitHub's **Report a vulnerability** flow for this repository. Do not include credentials, private database content, or exploitable details in a public issue.
+
+The latest released version receives security fixes. Reports should include the dbterm version, operating system, affected database or backup mode, reproduction steps, and the security impact. Ordinary bugs and feature requests belong in the public issue tracker.
+
+dbterm handles database credentials and backup artifacts locally. Before sharing diagnostics, remove connection strings, usernames, file paths, SQL data, tokens, and encryption identities.
+
+---
+
+# Release manifest
+
+```text
+# dbterm release manifest
+#
+# HOW TO UPDATE THIS FILE:
+# 1) Add a new entry as the FIRST non-comment line (top of this list).
+# 2) Format for each entry:
+#      <version>|<release name>|<short description>
+# 3) Version must be SemVer without "v" (example: 0.3.4).
+# 4) Commit and push to main.
+#    The release workflow reads only the first non-comment line and creates that GitHub release.
+# 5) If that tag already exists, the workflow skips release creation safely.
+#
+# Newest entry first:
+0.10.0|Beas|Searchable table-and-column schema trees, direct column palette navigation, selectable result headers, smart SQL templates and typo recovery, remembered table context, and indexed large-schema performance.
+0.9.2|Jhelum|Remembered per-table result positions, direct table-name copy, and consistent effective shortcuts across Help, Settings, the command palette, and responsive TUI hints.
+0.9.1|Ravi|Stable non-moving user profiles, self-healing private connection snapshots, sudo-update data guards, and verified in-app updates.
+0.9.0|Chenab|Instant local schema-aware SQL autocomplete, stable top-row result navigation, and sudo-update protection for per-user connections, backups, and Change Profiler anchors.
+0.8.0|Sutlej|Named Change Profiler anchors with compressed whole-database tracking, live progress, and bidirectional relationship navigation.
+0.7.1|Karnali|Clean local-agent shutdown handling for the dbterm MCP stdio server.
+0.7.0|Karnali|Local read-only MCP tools for trusted agents, scoped saved connections, relationship following, and opt-in connection profile setup.
+0.6.4|Bhagirathi|Persistent per-database table pins with a conflict-free Space shortcut, type-ahead search, command-palette access, and clear contextual guidance.
+0.6.3|Alaknanda|One canonical user profile across sudo and updates, plus server-first PostgreSQL/MySQL connections with accessible database browsing and safe legacy recovery.
+0.6.2|Teesta|First-class rclone destinations for local and remote database backups, with verified uploads, safe remote retention, and clearer table browsing state.
+0.6.1|Mandakini|Uniform resizable result columns with per-table widths that persist across navigation and app restarts.
+0.6.0|Mahanadi|A native scheduled backup agent with guarded restore, content detection, compression, age encryption, retention, and cross-platform service management.
+0.5.0|Brahmaputra|A fuzzy command palette, composable typed filters, foreign-key navigation, scoped full-value CSV export, and cancellable race-safe data workflows.
+0.4.5|Yamuna|Faster table navigation, selected-cell copy, clipboard-powered exact column filters, clearer help, and reliable result resizing.
+0.4.4|Godavari|Discover accessible MySQL and PostgreSQL databases from new-connection credentials and select one without typing its name.
+0.4.3|Narmada|Database-scoped browsing and reliable MySQL view, trigger, function, and procedure selection.
+0.4.2|Kaveri|Cancellable query lifecycle, safer async UI updates, bounded dashboard checks, and stable connection forms.
+0.4.1|Indra|Guarded result paging, engine-aware backups, and schema inspection.
+0.4.0|Hampi|Added support for PostgreSQL and MSSQL dump import.
+0.4.0|Ganpatipapa|Import sql dump, setting paage with custom key binds, and much more.
+0.3.9|Fakir|Crash tolerance.
+0.3.8|Eshwor|Dynamic column width management in results and added comprehensive project reference documentation.
+0.3.7|Dhurv|GOPI PREM DIWAS SPECIAL.
+0.3.6|Chakra|better installer experience.
+0.3.5|Bhakti|Download loader with dbterm, improved installer flow, and Windows ARM64 artifacts.
+0.3.4|Aarati|Cross-platform one-command installer flow, Windows ARM64 artifacts, shortcut/help sync, and direct dbterm uninstall support.
+0.3.3|Production Installer Rollout|Cross-platform one-command installer flow, Windows ARM64 artifacts, shortcut/help sync, and direct dbterm uninstall support.
+```
