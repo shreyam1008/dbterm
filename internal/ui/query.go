@@ -79,15 +79,7 @@ func (a *App) executeQueryWorker(ctx context.Context, finish func(), db *sql.DB,
 			blockedToken = "UNKNOWN"
 		}
 		a.queueUpdateDraw(func() {
-			a.ShowAlert(
-				fmt.Sprintf(
-					"%s Read-only connection \"%s\" blocks write queries.\n\nBlocked statement: %s\n\nRun a read query (SELECT/SHOW/EXPLAIN/PRAGMA) or disable Read-Only in connection settings.",
-					iconWarn,
-					connectionName,
-					blockedToken,
-				),
-				"main",
-			)
+			a.ShowAlert(readOnlyGuardBlockedMessage(connectionName, blockedToken), "main")
 		})
 		return
 	}
@@ -226,6 +218,15 @@ func isReadSQLToken(firstToken string) bool {
 	}
 }
 
+func readOnlyGuardBlockedMessage(connectionName, blockedToken string) string {
+	return fmt.Sprintf(
+		"%s Read-Only Guard on \"%s\" blocked a statement beginning with %s.\n\nThis convenience check inspects only the first SQL token. WITH, EXPLAIN, and PRAGMA can still have side effects; it is not database-enforced.\n\nUse database-enforced read-only credentials or grants for protection, or disable the guard to run this statement.",
+		iconWarn,
+		connectionName,
+		blockedToken,
+	)
+}
+
 func (a *App) handleQueryCancellation(err error) bool {
 	if err == nil || (!errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded)) {
 		return false
@@ -265,7 +266,7 @@ func (a *App) showQueryError(err error, query string) {
 	case strings.Contains(errLower, "does not exist"):
 		hint = "\n\n💡 Hint: Check the referenced database object name and schema. Ctrl+Space can show local catalog matches."
 	case strings.Contains(errLower, "syntax error") || strings.Contains(errLower, "near"):
-		hint = fmt.Sprintf("\n\n💡 Hint: Check your SQL syntax. Press %s for cheatsheets.", a.escapedActionShortcut(actionHelp))
+		hint = fmt.Sprintf("\n\n💡 Hint: Check your SQL syntax. Press %s for the Guide & SQL Reference.", a.escapedActionShortcut(actionHelp))
 	case strings.Contains(errLower, "permission denied") || strings.Contains(errLower, "access denied"):
 		hint = "\n\n💡 Hint: Your user may not have sufficient privileges for this operation."
 	case strings.Contains(errLower, "duplicate") || strings.Contains(errLower, "unique constraint"):

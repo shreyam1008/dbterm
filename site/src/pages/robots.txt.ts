@@ -8,7 +8,7 @@ export const GET: APIRoute = ({ site }) => {
 
   const robots = [
     "User-agent: *",
-    "Content-Signal: search=yes, ai-input=yes, ai-train=yes",
+    "Content-Signal: search=yes, ai-input=yes, ai-train=yes, use=full",
     "Allow: /",
     `Sitemap: ${normalizedRoot}sitemap.xml`
   ].join("\n");

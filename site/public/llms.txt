@@ -2,29 +2,36 @@
 
 > Keyboard-first terminal database workbench and native backup agent for PostgreSQL, MySQL/MariaDB, SQLite, Turso and Cloudflare D1.
 
-dbterm is created and maintained by Shreyam Adhikari (`shreyam1008`). It is an MIT-licensed Go project distributed as a cross-platform binary.
+dbterm is created and maintained by Shreyam Adhikari (`shreyam1008`). It is an MIT-licensed Go project distributed as one cross-platform binary. The canonical product origin is `https://dbterm.shreyam1008.com.np/` and the source of truth is `https://github.com/shreyam1008/dbterm`.
 
-## Canonical identity
+Important scope: backup supports all five database targets; restore currently supports PostgreSQL, MySQL/MariaDB, and local SQLite. The MCP server is local STDIO with read-only database execution. dbterm does not expose a hosted API, OAuth service, remote MCP endpoint, or autonomous agent endpoint.
 
-- Product: https://dbterm.shreyam1008.com.np/
-- Source: https://github.com/shreyam1008/dbterm
-- Maintainer: https://shreyam1008.com.np/
-- GitHub: https://github.com/shreyam1008
+## Documentation
 
-## Product documentation
+- [Complete user guide](https://dbterm.shreyam1008.com.np/guide.md): Installation, connections, dashboard, workspace, SQL, results, relationships, Change Profiler, services, backup, settings, CLI, paths, security, and troubleshooting.
+- [Backup Center handbook](https://dbterm.shreyam1008.com.np/backup.md): Full backup job, agent, storage, retention, encryption, notification, inspection, and restore reference.
+- [Local MCP server guide](https://dbterm.shreyam1008.com.np/agents.md): Agent setup, tools, scope controls, runtime flags, and read-only safety model.
+- [Change Profiler architecture](https://dbterm.shreyam1008.com.np/change-profiler.md): Portable before/after capture model and its attribution boundary.
+- [Complete combined context](https://dbterm.shreyam1008.com.np/llms-full.txt): Repository overview plus every primary operating manual in one document.
 
-- Agent-readable overview: https://dbterm.shreyam1008.com.np/product.md
-- Complete agent-readable context: https://dbterm.shreyam1008.com.np/llms-full.txt
-- Features: https://dbterm.shreyam1008.com.np/features/
-- Guide: https://dbterm.shreyam1008.com.np/guide/
-- Backup Center: https://dbterm.shreyam1008.com.np/backup/
-- Comparison: https://dbterm.shreyam1008.com.np/compare/
-- Open-source handbook: https://dbterm.shreyam1008.com.np/open-source/
-- AI agent and MCP guide: https://dbterm.shreyam1008.com.np/agents/
-- Agent Skill index: https://dbterm.shreyam1008.com.np/.well-known/agent-skills/index.json
-- Use dbterm Agent Skill: https://dbterm.shreyam1008.com.np/.well-known/agent-skills/use-dbterm/SKILL.md
-- Go package: https://pkg.go.dev/github.com/shreyam1008/dbterm
+## Product and project
 
-## Scope boundary
+- [Product overview](https://dbterm.shreyam1008.com.np/product.md): Concise product identity, daily workflow, MCP access, and backup routes.
+- [Product metadata](https://dbterm.shreyam1008.com.np/product.json): Versioned distribution and canonical-identity metadata generated from the repository record.
+- [Repository README](https://dbterm.shreyam1008.com.np/readme.md): Current capabilities, install commands, shortcuts, performance, and contributor workflow.
+- [Security policy](https://dbterm.shreyam1008.com.np/security.md): Private reporting and redaction guidance.
+- [Source repository](https://github.com/shreyam1008/dbterm): MIT-licensed Go source, issues, releases, and repository documentation.
+- [Maintainer](https://shreyam1008.com.np/): Shreyam Adhikari's canonical identity page.
 
-Backup supports PostgreSQL, MySQL/MariaDB, SQLite, Turso and Cloudflare D1. Restore currently supports PostgreSQL, MySQL/MariaDB and local SQLite. dbterm includes a local STDIO MCP server with read-only database tools; it does not expose a hosted API, OAuth service, remote MCP endpoint or autonomous agent endpoint.
+## Agent integration
+
+- [Agent Skill discovery index](https://dbterm.shreyam1008.com.np/.well-known/agent-skills/index.json): Machine-readable index and digest for the public dbterm skill.
+- [Use dbterm Agent Skill](https://dbterm.shreyam1008.com.np/.well-known/agent-skills/use-dbterm/SKILL.md): Installable operating and safety instructions for agents using dbterm MCP.
+
+## Optional
+
+- [Human documentation](https://dbterm.shreyam1008.com.np/guide/): Styled, navigable HTML version of the complete user guide.
+- [Feature map](https://dbterm.shreyam1008.com.np/features/): Visual product feature tour.
+- [Database tool comparison](https://dbterm.shreyam1008.com.np/compare/): Factual scope comparison with desktop and terminal alternatives.
+- [Open-source handbook](https://dbterm.shreyam1008.com.np/open-source/): License, attribution, architecture, and canonical project links.
+- [Go package reference](https://pkg.go.dev/github.com/shreyam1008/dbterm): Public Go package documentation.

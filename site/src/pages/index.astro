@@ -2,6 +2,7 @@
 import BaseLayout from "../layouts/BaseLayout.astro";
 import InteractiveDemo from "../components/InteractiveDemo.astro";
 import ShaderField from "../components/ShaderField.astro";
+import { currentRelease } from "../lib/release";
 
 const title = "dbterm — Connect, Query, Operate & Back Up Databases";
 const description =
@@ -130,10 +131,10 @@ const softwareJsonLd = {
   applicationCategory: "DeveloperApplication",
   applicationSubCategory: "Database client",
   operatingSystem: "Linux, macOS, Windows",
-  softwareVersion: "0.10.0",
+  softwareVersion: currentRelease.version,
   description,
   url: "https://dbterm.shreyam1008.com.np/",
-  downloadUrl: "https://github.com/shreyam1008/dbterm/releases/tag/v0.10.0",
+  downloadUrl: currentRelease.url,
   softwareHelp: "https://dbterm.shreyam1008.com.np/guide/",
   codeRepository: "https://github.com/shreyam1008/dbterm",
   license: "https://github.com/shreyam1008/dbterm/blob/main/LICENSE",
@@ -207,6 +208,7 @@ const faqJsonLd = {
   ogImage="assets/command-palette.png"
   ogImageAlt="dbterm command palette over a PostgreSQL result table"
   jsonLd={[websiteJsonLd, softwareJsonLd, sourceJsonLd, faqJsonLd]}
+  markdownUrl={withBase("/product.md")}
 >
   <section class="relative isolate overflow-hidden border-b border-[var(--line)] py-16 sm:py-20 lg:py-24">
     <ShaderField />
@@ -214,11 +216,11 @@ const faqJsonLd = {
       <div class="grid items-start gap-10 lg:grid-cols-[minmax(0,1.05fr)_minmax(390px,.95fr)] lg:gap-16">
       <div>
         <a
-          href="https://github.com/shreyam1008/dbterm/releases/tag/v0.10.0"
+          href={currentRelease.url}
           class="mb-6 inline-flex items-center gap-2 rounded-full border border-[var(--line)] bg-[color-mix(in_srgb,var(--surface)_84%,transparent)] px-3 py-1.5 font-mono text-[.68rem] font-semibold tracking-wide text-[var(--brand-strong)] no-underline backdrop-blur-md hover:border-[var(--brand)]"
         >
           <span class="size-1.5 rounded-full bg-[var(--brand)] shadow-[0_0_0_4px_color-mix(in_srgb,var(--brand)_12%,transparent)]"></span>
-          v0.10.0 · Beas
+          {currentRelease.label}
           <span aria-hidden="true">↗</span>
         </a>
         <p class="mb-4 font-mono text-[.7rem] font-semibold tracking-[.15em] text-[var(--brand-strong)] uppercase">
@@ -250,7 +252,7 @@ const faqJsonLd = {
             <p class="mb-1 font-mono text-[.62rem] tracking-[.13em] text-[#a6e3a1] uppercase">Install</p>
             <h2 id="install-title" class="mb-0 text-xl tracking-[-.035em] text-white">One command, then <code class="text-[#a6e3a1]">dbterm</code>.</h2>
           </div>
-          <span class="rounded border border-[#45475a] px-2 py-1 font-mono text-[.62rem] text-[#a6adc8]">v0.10.0</span>
+          <span class="rounded border border-[#45475a] px-2 py-1 font-mono text-[.62rem] text-[#a6adc8]">v{currentRelease.version}</span>
         </div>
         <div class="mb-3 flex gap-1 border-b border-[#313244]" role="tablist" aria-label="Installation platform">
           <button class="install-tab" type="button" role="tab" aria-selected="true" aria-controls="install-unix-panel" data-install-tab="unix">Linux / macOS</button>
@@ -269,7 +271,7 @@ const faqJsonLd = {
           </div>
         </div>
         <div class="mt-4 flex flex-wrap gap-x-5 gap-y-2 font-mono text-[.66rem]">
-          <a class="text-[#a6e3a1]" href="https://github.com/shreyam1008/dbterm/releases/tag/v0.10.0">Binaries ↗</a>
+          <a class="text-[#a6e3a1]" href={currentRelease.url}>Binaries ↗</a>
           <a class="text-[#a6e3a1]" href={withBase("/guide/")}>Install guide →</a>
         </div>
       </aside>

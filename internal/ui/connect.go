@@ -79,7 +79,7 @@ func cloneConnectionConfig(cfg *config.ConnectionConfig) *config.ConnectionConfi
 const (
 	connLabelName       = "Name (*)"
 	connLabelType       = "Type (*) " + iconDropdown
-	connLabelReadOnly   = "Read-Only (block writes)"
+	connLabelReadOnly   = "Read-Only Guard (not DB-enforced)"
 	connLabelDSN        = "Connection String (Optional)"
 	connLabelHost       = "Host"
 	connLabelPort       = "Port"

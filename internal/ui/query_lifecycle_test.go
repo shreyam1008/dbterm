@@ -11,13 +11,27 @@ import (
 func TestIsReadSQLToken(t *testing.T) {
 	for _, token := range []string{"SELECT", "SHOW", "DESCRIBE", "DESC", "EXPLAIN", "PRAGMA", "WITH"} {
 		if !isReadSQLToken(token) {
-			t.Fatalf("expected %q to be read-only", token)
+			t.Fatalf("expected %q to be classified as readable by the first-token guard", token)
 		}
 	}
 
 	for _, token := range []string{"INSERT", "UPDATE", "DELETE", "CREATE", ""} {
 		if isReadSQLToken(token) {
-			t.Fatalf("expected %q not to be read-only", token)
+			t.Fatalf("expected %q to be blocked by the first-token guard", token)
+		}
+	}
+}
+
+func TestReadOnlyGuardWarningNamesItsSecurityBoundary(t *testing.T) {
+	message := readOnlyGuardBlockedMessage("production", "DELETE")
+	for _, required := range []string{
+		"first SQL token",
+		"WITH, EXPLAIN, and PRAGMA",
+		"not database-enforced",
+		"database-enforced read-only credentials or grants",
+	} {
+		if !strings.Contains(message, required) {
+			t.Fatalf("read-only guard warning %q is missing %q", message, required)
 		}
 	}
 }

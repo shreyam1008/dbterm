@@ -549,8 +549,8 @@ func dashboardFooterText(hasConnections, hasWorkspace bool, width int, paletteSh
 				iconConnect, iconServices, iconRefresh, paletteShortcut, iconBack)
 			return footerTextThatFits(width, full, medium, short, minimal)
 		}
-		medium := fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [blue]A[-] All DBs  │  [green]B[-] Center  │  [yellow]G[-] Settings  │  [teal]H[-] Help %s", iconConnect, iconHelp)
-		full := fmt.Sprintf("  [green]Enter[-] Connect %s  │  [blue]A[-] All server DBs  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [yellow]I[-] Import  │  [green]Ctrl+B[-] Schedule selected  │  [green]B[-] Backup Center  │  [#94e2d5]S[-] Services %s  │  [yellow]R[-] Recheck %s  │  [yellow]%s[-] Palette  │  [yellow]G[-] Settings  │  [yellow]U[-] Update  │  [teal]H[-] Help %s  │  [#cba6f7]Q[-] Quit",
+		medium := fmt.Sprintf("  [yellow]Enter[-] Connect %s  │  [blue]A[-] All DBs  │  [green]B[-] Center  │  [yellow]G[-] Settings  │  [teal]H[-] Guide %s", iconConnect, iconHelp)
+		full := fmt.Sprintf("  [green]Enter[-] Connect %s  │  [blue]A[-] All server DBs  │  [yellow]N[-] New  │  [blue]E[-] Edit  │  [red]D[-] Delete  │  [yellow]I[-] Import  │  [green]Ctrl+B[-] Schedule selected  │  [green]B[-] Backup Center  │  [#94e2d5]S[-] Services %s  │  [yellow]R[-] Recheck %s  │  [yellow]%s[-] Palette  │  [yellow]G[-] Settings  │  [yellow]U[-] Update  │  [teal]H[-] Guide %s  │  [#cba6f7]Q[-] Quit",
 			iconConnect, iconServices, iconRefresh, paletteShortcut, iconHelp)
 		return footerTextThatFits(width, full, medium, short, minimal)
 	}
@@ -560,7 +560,7 @@ func dashboardFooterText(hasConnections, hasWorkspace bool, width int, paletteSh
 		full := fmt.Sprintf("  [yellow]N[-] New Connection  │  [green]B[-] Backups  │  [#94e2d5]S[-] Services %s  │  [yellow]%s[-] Palette  │  [yellow]G[-] Settings  │  [yellow]U[-] Update  │  [yellow]W/Esc[-] Back %s  │  [#cba6f7]Q[-] Quit", iconServices, paletteShortcut, iconBack)
 		return footerTextThatFits(width, full, short, minimal)
 	}
-	short := fmt.Sprintf("  [yellow]N[-] New  │  [green]B[-] Backups  │  [teal]H[-] Help %s  │  [#cba6f7]Q[-] Quit", iconHelp)
-	full := fmt.Sprintf("  [yellow]N[-] New Connection  │  [green]B[-] Backups  │  [#94e2d5]S[-] Services %s  │  [yellow]%s[-] Palette  │  [yellow]G[-] Settings  │  [yellow]U[-] Update  │  [teal]H[-] Help %s  │  [#cba6f7]Q[-] Quit", iconServices, paletteShortcut, iconHelp)
+	short := fmt.Sprintf("  [yellow]N[-] New  │  [green]B[-] Backups  │  [teal]H[-] Guide %s  │  [#cba6f7]Q[-] Quit", iconHelp)
+	full := fmt.Sprintf("  [yellow]N[-] New Connection  │  [green]B[-] Backups  │  [#94e2d5]S[-] Services %s  │  [yellow]%s[-] Palette  │  [yellow]G[-] Settings  │  [yellow]U[-] Update  │  [teal]H[-] Guide %s  │  [#cba6f7]Q[-] Quit", iconServices, paletteShortcut, iconHelp)
 	return footerTextThatFits(width, full, short, minimal)
 }

@@ -16,6 +16,19 @@
   "installDocs": "README.md",
   "rollbackDocs": "docs/domain-release.md",
   "screenshotManifest": "docs/screenshots.json",
+  "documentation": {
+    "html": "https://dbterm.shreyam1008.com.np/guide/",
+    "markdown": "https://dbterm.shreyam1008.com.np/guide.md",
+    "backup": "https://dbterm.shreyam1008.com.np/backup.md",
+    "agents": "https://dbterm.shreyam1008.com.np/agents.md",
+    "changeProfiler": "https://dbterm.shreyam1008.com.np/change-profiler.md",
+    "fullCorpus": "https://dbterm.shreyam1008.com.np/llms-full.txt"
+  },
+  "agentDiscovery": {
+    "llms": "https://dbterm.shreyam1008.com.np/llms.txt",
+    "skillIndex": "https://dbterm.shreyam1008.com.np/.well-known/agent-skills/index.json",
+    "mcpTransport": "local-stdio-only"
+  },
   "distributions": [
     {
       "channel": "Product website",

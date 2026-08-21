@@ -2,11 +2,22 @@ package ui
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/rivo/tview"
 	"github.com/shreyam1008/dbterm/internal/config"
 )
+
+func TestReadOnlyConnectionLabelDoesNotPromiseWriteEnforcement(t *testing.T) {
+	label := strings.ToLower(connLabelReadOnly)
+	if !strings.Contains(label, "guard") || !strings.Contains(label, "not db-enforced") {
+		t.Fatalf("read-only connection label must disclose its guard boundary: %q", connLabelReadOnly)
+	}
+	if strings.Contains(label, "block writes") {
+		t.Fatalf("read-only connection label overpromises write enforcement: %q", connLabelReadOnly)
+	}
+}
 
 func newConnectionTestForm(typeIndex int) *tview.Form {
 	dbTypes := []string{"PostgreSQL", "MySQL", "SQLite", "Turso", "Cloudflare D1"}

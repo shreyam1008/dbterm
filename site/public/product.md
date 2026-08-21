@@ -28,8 +28,17 @@ Backup covers PostgreSQL, MySQL/MariaDB, SQLite, Turso and Cloudflare D1. Restor
 ## Read more
 
 - [Feature map](https://dbterm.shreyam1008.com.np/features/)
-- [Product guide](https://dbterm.shreyam1008.com.np/guide/)
-- [AI agent and MCP guide](https://dbterm.shreyam1008.com.np/agents/)
+- [Complete user guide](https://dbterm.shreyam1008.com.np/guide/)
 - [Backup Center](https://dbterm.shreyam1008.com.np/backup/)
+- [AI agent and MCP guide](https://dbterm.shreyam1008.com.np/agents/)
 - [Source code](https://github.com/shreyam1008/dbterm)
 - [Go package](https://pkg.go.dev/github.com/shreyam1008/dbterm)
+
+## Machine-readable documentation
+
+- [Complete user guide (Markdown)](https://dbterm.shreyam1008.com.np/guide.md)
+- [Backup and restore handbook (Markdown)](https://dbterm.shreyam1008.com.np/backup.md)
+- [AI agent and MCP guide (Markdown)](https://dbterm.shreyam1008.com.np/agents.md)
+- [Change Profiler guide (Markdown)](https://dbterm.shreyam1008.com.np/change-profiler.md)
+- [Full documentation corpus](https://dbterm.shreyam1008.com.np/llms-full.txt)
+- [Structured product metadata (JSON)](https://dbterm.shreyam1008.com.np/product.json)

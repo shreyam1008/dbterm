@@ -13,7 +13,7 @@ func keyboardHelpText() string {
 }
 
 func keyboardHelpTextFor(a *App) string {
-	template := `[::b][#cba6f7]━━━ ` + iconHelp + ` dbterm Help ━━━[-][-]
+	template := `[::b][#cba6f7]━━━ ` + iconHelp + ` dbterm Guide & SQL Reference ━━━[-][-]
 
 [#f9e2af]START HERE — COMMON WORKFLOWS[-]
   [#89b4fa]Find a table[-]       [yellow]{{focus_tables}}[-] → type its name → [yellow]Enter[-]
@@ -94,7 +94,7 @@ func keyboardHelpTextFor(a *App) string {
   [yellow]{{dashboard}}[-]            Dashboard                [yellow]{{backup_center}}[-] Backup Center
   [yellow]{{change_profiler}}[-]            Change Profiler: named before/after anchors and saved reports
   [yellow]{{services}}[-]            Database services
-  [yellow]{{settings}}[-]    Settings                 [yellow]{{help}}[-] This help
+  [yellow]{{settings}}[-]    Settings                 [yellow]{{help}}[-] This guide
   [yellow]Esc[-]              Back/close/cancel        [yellow]Backspace[-] Back in supported lists/results, edit in fields
   [yellow]Ctrl+C[-]           Cancel active work / quit
 
@@ -102,7 +102,7 @@ func keyboardHelpTextFor(a *App) string {
   [yellow]Enter[-] Connect/default DB   [yellow]A[-] All DBs on selected server   [yellow]N[-] New   [yellow]E[-] Edit   [yellow]D[-] Delete
   [yellow]R[-] Health check
   [yellow]Ctrl+B[-] New backup job for highlighted connection   [yellow]B[-] Backup Center   [yellow]I[-] Import
-  [yellow]G[-] Settings   [yellow]H[-] Help   [yellow]W / Esc[-] Workspace   [yellow]Q[-] Quit
+  [yellow]G[-] Settings   [yellow]H[-] Guide   [yellow]W / Esc[-] Workspace   [yellow]Q[-] Quit
   [yellow]1–9 / 0[-] Quick-select the first ten connections
 
 [#a6e3a1]BACKUP CENTER ({{backup_center}}) ` + iconBackup + `[-]
@@ -298,50 +298,176 @@ func (a *App) showHelp() {
 
 `
 
-	// Show the connected DB cheatsheet first
-	var content string
+	sections := manualGuideSections(a)
+	// keyboardHelpTextFor is already the first manual section.
+	sections[0].body = helpText
+
+	sqlSections := []guideSection{
+		{title: "PostgreSQL SQL reference", summary: "Schema, server, CRUD, and performance queries", body: cheatPG},
+		{title: "MySQL SQL reference", summary: "Schema, server, CRUD, and performance queries", body: cheatMySQL},
+		{title: "SQLite SQL reference", summary: "Schema, database, CRUD, and performance queries", body: cheatSQLite},
+		{title: "Turso / LibSQL SQL reference", summary: "Schema, database, and common queries", body: cheatTurso},
+		{title: "Cloudflare D1 SQL reference", summary: "Schema, database, and common queries", body: cheatD1},
+	}
 	if a.db != nil {
+		preferred := 0
 		switch a.dbType {
 		case config.MySQL:
-			content = helpText + cheatMySQL + cheatPG + cheatSQLite
+			preferred = 1
 		case config.SQLite:
-			content = helpText + cheatSQLite + cheatPG + cheatMySQL
+			preferred = 2
 		case config.Turso:
-			content = helpText + cheatTurso + cheatPG + cheatMySQL
+			preferred = 3
 		case config.CloudflareD1:
-			content = helpText + cheatD1 + cheatPG + cheatMySQL
-		default:
-			content = helpText + cheatPG + cheatMySQL + cheatSQLite
+			preferred = 4
 		}
-	} else {
-		content = helpText + cheatPG + cheatMySQL + cheatSQLite
+		sqlSections[0], sqlSections[preferred] = sqlSections[preferred], sqlSections[0]
 	}
+	sections = append(sections, sqlSections...)
 
-	helpView := tview.NewTextView().
+	sectionList := tview.NewList().ShowSecondaryText(true)
+	sectionList.SetBorder(true).
+		SetTitle(" Contents ").
+		SetBorderColor(surface1).
+		SetTitleColor(mauve)
+	sectionList.SetMainTextColor(text).
+		SetSecondaryTextColor(overlay0).
+		SetSelectedTextColor(crust).
+		SetSelectedBackgroundColor(mauve)
+
+	article := tview.NewTextView().
 		SetDynamicColors(true).
-		SetText(content).
-		SetScrollable(true)
-	helpView.SetBorder(true).
-		SetTitle(" " + iconHelp + " Help & Cheatsheets [yellow](↑/↓ scroll • Esc/" + tview.Escape(a.effectiveActionShortcut(actionHelp)) + " close)[-] ").
+		SetScrollable(true).
+		SetWrap(true).
+		SetWordWrap(true)
+	article.SetBorder(true).
 		SetBorderColor(surface1).
 		SetTitleColor(mauve)
 
-	helpView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEscape {
+	body := tview.NewFlex()
+	screenWidth, _ := a.getScreenSize()
+	currentWidth := screenWidth
+	narrowLayout := false
+	readingArticle := false
+	updateFooter := func() {}
+	var rebuildBody func(width int)
+	showContents := func() {
+		readingArticle = false
+		rebuildBody(currentWidth)
+		a.app.SetFocus(sectionList)
+	}
+	showArticle := func() {
+		readingArticle = true
+		rebuildBody(currentWidth)
+		a.app.SetFocus(article)
+	}
+
+	showSection := func(index int) {
+		if index < 0 || index >= len(sections) {
+			return
+		}
+		article.SetTitle(" " + tview.Escape(sections[index].title) + " ")
+		article.SetText(sections[index].body)
+		article.ScrollToBeginning()
+	}
+	for _, section := range sections {
+		sectionList.AddItem(section.title, section.summary, 0, nil)
+	}
+	sectionList.SetChangedFunc(func(index int, _, _ string, _ rune) {
+		showSection(index)
+	})
+	sectionList.SetSelectedFunc(func(index int, _, _ string, _ rune) {
+		showSection(index)
+		showArticle()
+	})
+	showSection(0)
+
+	sectionList.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyEscape:
 			a.closeHelp()
+			return nil
+		case tcell.KeyRight, tcell.KeyTab:
+			showSection(sectionList.GetCurrentItem())
+			showArticle()
+			return nil
+		}
+		return event
+	})
+	article.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyEscape:
+			a.closeHelp()
+			return nil
+		case tcell.KeyLeft, tcell.KeyBackspace, tcell.KeyBackspace2, tcell.KeyTab, tcell.KeyBacktab:
+			showContents()
 			return nil
 		}
 		return event
 	})
 
-	a.pages.AddAndSwitchToPage("help", helpView, true)
-	a.app.SetFocus(helpView)
+	version := strings.TrimSpace(a.buildInfo.Version)
+	if version == "" {
+		version = "dev"
+	}
+	header := tview.NewTextView().
+		SetDynamicColors(true).
+		SetTextAlign(tview.AlignCenter).
+		SetText("[::b][#cba6f7]" + iconHelp + " dbterm Guide & SQL Reference[-][-]  [#6c7086]v" + tview.Escape(version) + " · offline full manual[-]")
+	header.SetBackgroundColor(bg)
+
+	footer := tview.NewTextView().
+		SetDynamicColors(true).
+		SetTextAlign(tview.AlignCenter)
+	footer.SetBackgroundColor(crust)
+	updateFooter = func() {
+		footer.SetText(guideFooterText(currentWidth, a.effectiveActionShortcut(actionHelp), readingArticle))
+	}
+	rebuildBody = func(width int) {
+		if width <= 0 {
+			return
+		}
+		currentWidth = width
+		narrowLayout = width < 80
+		body.Clear()
+		if narrowLayout {
+			if readingArticle {
+				body.AddItem(article, 0, 1, true)
+			} else {
+				body.AddItem(sectionList, 0, 1, true)
+			}
+		} else {
+			body.AddItem(sectionList, 32, 0, !readingArticle).
+				AddItem(article, 0, 1, readingArticle)
+		}
+		updateFooter()
+	}
+	sectionList.SetFocusFunc(func() {
+		readingArticle = false
+		updateFooter()
+	})
+	article.SetFocusFunc(func() {
+		readingArticle = true
+		updateFooter()
+	})
+	a.guideResize = rebuildBody
+	rebuildBody(screenWidth)
+
+	layout := tview.NewFlex().
+		SetDirection(tview.FlexRow).
+		AddItem(header, 1, 0, false).
+		AddItem(body, 0, 1, true).
+		AddItem(footer, 1, 0, false)
+
+	a.pages.AddAndSwitchToPage("help", layout, true)
+	a.app.SetFocus(sectionList)
 }
 
 func (a *App) closeHelp() {
 	returnState := loadingReturnState{page: a.helpReturnPage, focus: a.helpReturnFocus}
 	a.helpReturnPage = ""
 	a.helpReturnFocus = nil
+	a.guideResize = nil
 	a.pages.RemovePage("help")
 	if returnState.page != "" && a.pages.HasPage(returnState.page) {
 		a.pages.ShowPage(returnState.page)
@@ -354,4 +480,26 @@ func (a *App) closeHelp() {
 		return
 	}
 	a.showDashboard()
+}
+
+func guideFooterText(width int, helpShortcut string, readingArticle bool) string {
+	closeWithShortcut := "[yellow]Esc/" + tview.Escape(helpShortcut) + "[-] Close"
+	if readingArticle {
+		return footerTextThatFits(width,
+			" [yellow]↑/↓ · PgUp/PgDn · Home/End[-] Scroll  │  [yellow]←/Tab[-] Contents  │  "+closeWithShortcut+" ",
+			" [yellow]PgUp/PgDn[-] Scroll  │  [yellow]←/Tab[-] Contents  │  "+closeWithShortcut+" ",
+			" [yellow]PgUp/PgDn[-] Scroll  │  [yellow]←[-] Contents  │  [yellow]Esc[-] Close ",
+			" [yellow]Esc[-] Close ",
+			"[yellow]Esc[-]",
+			"",
+		)
+	}
+	return footerTextThatFits(width,
+		" [yellow]↑/↓[-] Section  │  [yellow]Enter/→/Tab[-] Read  │  "+closeWithShortcut+" ",
+		" [yellow]↑/↓[-] Choose  │  [yellow]Enter/→[-] Read  │  "+closeWithShortcut+" ",
+		" [yellow]↑/↓[-] Choose  │  [yellow]Enter[-] Read  │  [yellow]Esc[-] Close ",
+		" [yellow]Esc[-] Close ",
+		"[yellow]Esc[-]",
+		"",
+	)
 }

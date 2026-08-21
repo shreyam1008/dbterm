@@ -72,7 +72,7 @@ scoop install dbterm
 
 - Website: <https://dbterm.shreyam1008.com.np/>
 - Complete feature map: <https://dbterm.shreyam1008.com.np/features/>
-- Product guide: <https://dbterm.shreyam1008.com.np/guide/>
+- Complete user guide: <https://dbterm.shreyam1008.com.np/guide/> ([Markdown source](docs/user-guide.md))
 - AI agent and MCP guide: <https://dbterm.shreyam1008.com.np/agents/>
 - Backup Center: <https://dbterm.shreyam1008.com.np/backup/>
 - Complete backup handbook: [docs/backup.md](docs/backup.md)
@@ -144,7 +144,7 @@ Updating replaces only the dbterm executable. Saved connections, settings, query
 | `Alt + , / Alt + G` | Open Settings page |
 | `Alt + M` | Inspect selected table schema |
 | `Alt + A / Alt + C` | Select all result rows / clear selection |
-| `Alt + H` | Open help + SQL cheatsheets |
+| `Alt + H` | Open the complete offline Guide & SQL Reference |
 | `G` (Dashboard) | Open Settings page from dashboard |
 | `Alt + D` | Return to dashboard |
 | `Alt + S` | Open services dashboard |

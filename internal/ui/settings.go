@@ -35,7 +35,7 @@ var keymapFieldSpecs = []keymapFieldSpec{
 	{Action: config.ActionFocusQuery, Label: "Focus Query"},
 	{Action: config.ActionFocusResults, Label: "Focus Results"},
 	{Action: config.ActionDashboard, Label: "Go Dashboard"},
-	{Action: config.ActionHelp, Label: "Open Help"},
+	{Action: config.ActionHelp, Label: "Open Guide"},
 	{Action: config.ActionServices, Label: "Open Services"},
 	{Action: config.ActionFullscreen, Label: "Toggle Fullscreen"},
 	{Action: config.ActionBackup, Label: "Open Backup"},

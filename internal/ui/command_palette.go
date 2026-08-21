@@ -89,7 +89,7 @@ var commandPaletteActionSpecs = []commandPaletteActionSpec{
 	{actionFocusQuery, "Focus Query Editor", "Move focus to the SQL editor and keep the current query text intact.", "sql statement editor write", ""},
 	{actionFocusResults, "Focus Results", "Move focus to the result grid for cell navigation, filtering, and row actions.", "data grid cells rows navigation", ""},
 	{actionDashboard, "Open Dashboard", "Open saved connections, connection health, and connection management.", "connections home back manage", ""},
-	{actionHelp, "Open Help & SQL Cheatsheets", "Show dbterm keyboard workflows and database-specific SQL reference sheets.", "shortcuts keys documentation postgres mysql sqlite", ""},
+	{actionHelp, "Open Guide & SQL Reference", "Open the complete offline manual, effective shortcuts, troubleshooting, CLI, and database-specific SQL references.", "help manual shortcuts keys documentation postgres mysql sqlite mcp backup", ""},
 	{actionServices, "Open Database Services", "Inspect and manage supported local MySQL and PostgreSQL services.", "system local mysql postgresql start stop status", ""},
 	{actionBackupCenter, "Open Backup Center", "Create schedules, run or prune backups, restore artifacts, and manage the agent. N chooses a saved database or adds one; Ctrl+N adds a database from the plan form. Dashboard Ctrl+B starts preselected.", "new saved database connection scheduled automatic restore agent history retention encryption zstd zip ctrl n", ""},
 	{actionChangeProfiler, "Open Change Profiler", "Create named anchors, scan for row and schema changes, and inspect saved before/after reports.", "diff snapshot anchor track changes inserted updated deleted audit", ""},
@@ -243,9 +243,7 @@ func (a *App) showCommandPalette() {
 		if index < 0 || index >= len(matches) {
 			return
 		}
-		item := matches[index].item
-		a.dismissCommandPalette(false)
-		a.executeCommandPaletteItem(item)
+		a.executeCommandPaletteSelection(matches[index].item)
 	}
 
 	moveSelection := func(delta int) {
@@ -303,6 +301,16 @@ func (a *App) showCommandPalette() {
 	refreshMatches("")
 	a.pages.AddPage(pageCommandPalette, grid, true, true)
 	a.app.SetFocus(searchInput)
+}
+
+func (a *App) executeCommandPaletteSelection(item commandPaletteItem) {
+	guideAlreadyOpen := item.kind == commandPaletteAction && item.action == actionHelp && a.paletteReturnPage == "help"
+	restoreFocus := item.kind == commandPaletteAction && item.action == actionHelp
+	a.dismissCommandPalette(restoreFocus)
+	if guideAlreadyOpen {
+		return
+	}
+	a.executeCommandPaletteItem(item)
 }
 
 func (a *App) dismissCommandPalette(restoreFocus bool) {
@@ -1031,6 +1039,7 @@ func (a *App) executeCommandPaletteAction(action keymapAction, title string) {
 		a.showCommandPaletteWorkspace(a.results)
 	case actionDashboard:
 		a.pages.HidePage("main")
+		a.guideResize = nil
 		a.pages.RemovePage("help")
 		a.showDashboard()
 	case actionHelp:

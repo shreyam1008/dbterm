@@ -3,7 +3,7 @@
 Owner: Shreyam Adhikari (`@shreyam1008`)
 Canonical product URL: <https://dbterm.shreyam1008.com.np/>
 Repository: <https://github.com/shreyam1008/dbterm>
-Last verified: 19 August 2026
+Last verified: 20 August 2026
 
 This is the execution record for dbterm's public distribution, directory submissions, community posts, authorship links, package listings, and agent-discovery surfaces. Update this file after every submission or status change. Do not mark a platform **live** until a public URL can be opened without the submitting account.
 
@@ -78,13 +78,15 @@ These were made before the 16 August launch campaign. They remain useful history
 | --- | --- | --- | --- |
 | `robots.txt` | **Live** | <https://dbterm.shreyam1008.com.np/robots.txt> | Search crawler rules and sitemap location. |
 | Sitemap | **Live** | <https://dbterm.shreyam1008.com.np/sitemap.xml> | Canonical product pages for search discovery. |
-| Product Markdown | **Live** | <https://dbterm.shreyam1008.com.np/product.md> | Compact machine-readable product description. The homepage also serves this representation when an agent requests Markdown. |
+| Product Markdown | **Live** | <https://dbterm.shreyam1008.com.np/product.md> | Compact machine-readable product description at a direct static endpoint. The GitHub Pages origin does not negotiate Markdown from the homepage. |
 | `llms.txt` | **Live** | <https://dbterm.shreyam1008.com.np/llms.txt> | Short agent-readable product, docs, package, and scope index. |
-| `llms-full.txt` | **Live** | <https://dbterm.shreyam1008.com.np/llms-full.txt> | Expanded agent-readable product and operating information. |
+| `llms-full.txt` | **Live; replacement prepared** | <https://dbterm.shreyam1008.com.np/llms-full.txt> | The current public file is compact. The next site deployment replaces it with the generated full repository-backed manual corpus. |
+| Product JSON | **Prepared** | <https://dbterm.shreyam1008.com.np/product.json> | Public structured product and documentation metadata is generated from the repository record and requires the next site deployment. |
 | Agent guide | **Live** | <https://dbterm.shreyam1008.com.np/agents/> | Explains the local MCP server, safety boundary, and agent setup. |
 | Agent Skill | **Live** | <https://dbterm.shreyam1008.com.np/.well-known/agent-skills/use-dbterm/SKILL.md> | Installable instructions for agents that use dbterm's local MCP server. |
 | Skill index | **Live** | <https://dbterm.shreyam1008.com.np/.well-known/agent-skills/index.json> | Machine-readable Agent Skill discovery index. |
-| RFC 8288 discovery headers | **Live** | <https://dbterm.shreyam1008.com.np/> | Cloudflare Worker advertises the Markdown, `llms.txt`, `llms-full.txt`, and guide representations through HTTP `Link` headers. |
+| Documentation Markdown endpoints | **Prepared** | <https://dbterm.shreyam1008.com.np/guide.md> | Direct Markdown endpoints for the user guide, backup handbook, MCP guide, Change Profiler guide, README, and security policy are implemented locally and require the next site deployment before they can be marked live. |
+| RFC 8288 discovery headers | **Not done** | <https://dbterm.shreyam1008.com.np/> | The current GitHub Pages origin does not emit sitewide HTTP `Link` headers. Discovery uses direct Markdown endpoints, `llms.txt`, and page-level HTML alternate links instead. |
 
 ## Not completed yet
 

@@ -98,7 +98,7 @@ const jsonLd = [
 ];
 ---
 
-<BaseLayout title={title} description={description} jsonLd={jsonLd}>
+<BaseLayout title={title} description={description} jsonLd={jsonLd} markdownUrl={withBase("/backup.md")}>
   <section class="border-b border-[var(--line)] py-16 sm:py-20 lg:py-24">
     <div class="site-container grid items-center gap-12 lg:grid-cols-[minmax(0,.92fr)_minmax(430px,1.08fr)] lg:gap-16">
       <div>
@@ -107,7 +107,7 @@ const jsonLd = [
         <p class="mt-6 max-w-xl text-lg leading-relaxed text-[var(--ink-soft)]">Choose an existing saved connection or add one, then set the destination and time. dbterm handles verification, wrapping, retention, history and alerts.</p>
         <div class="mt-7 flex flex-wrap gap-3">
           <a class="button primary" href={withBase('/#install')}>Install dbterm</a>
-          <a class="button outline" href={withBase('/guide/#backup-center')}>Read setup guide</a>
+          <a class="button outline" href={withBase('/guide/#back-up-and-restore-databases')}>Read setup guide</a>
         </div>
         <p class="mt-5 font-mono text-[.68rem] text-[var(--ink-faint)]">Alt+B instant · Alt+K then N scheduled · Dashboard Ctrl+B preselected</p>
         <p class="mt-2 font-mono text-[.68rem] text-[var(--ink-faint)]">PostgreSQL · MySQL / MariaDB · SQLite · Turso · Cloudflare D1</p>
@@ -245,7 +245,7 @@ dbterm backup restore \
   <section class="py-16 text-center sm:py-20">
     <div class="site-container">
       <h2 class="text-[clamp(2.5rem,6vw,5.4rem)] leading-none tracking-[-.065em]">Save the connection.<br />Schedule the protection.</h2>
-      <div class="mt-8 flex flex-wrap justify-center gap-3"><a class="button primary" href={withBase('/#install')}>Install dbterm</a><a class="button outline" href="https://github.com/shreyam1008/dbterm/blob/main/docs/backup.md">Complete backup handbook ↗</a></div>
+      <div class="mt-8 flex flex-wrap justify-center gap-3"><a class="button primary" href={withBase('/#install')}>Install dbterm</a><a class="button outline" href={withBase('/backup.md')}>Complete backup handbook</a></div>
     </div>
   </section>
 </BaseLayout>

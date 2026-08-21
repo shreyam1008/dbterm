@@ -149,6 +149,7 @@ type App struct {
 	focusedPanel       tview.Primitive // cached focus target (avoids lock-unsafe GetFocus calls)
 	paletteReturnFocus tview.Primitive
 	paletteReturnPage  string
+	guideResize        func(width int)
 
 	// Import runtime state
 	importMu              sync.Mutex
@@ -431,10 +432,10 @@ func (a *App) updateStatusBar(extra string, rowCount int) {
 			return
 		}
 		if width < 80 {
-			a.statusBar.SetText(fmt.Sprintf("  [gray]○ offline[-]  │  %s Help  │  [yellow]Q[-] Quit", helpKey))
+			a.statusBar.SetText(fmt.Sprintf("  [gray]○ offline[-]  │  %s Guide  │  [yellow]Q[-] Quit", helpKey))
 			return
 		}
-		a.statusBar.SetText(fmt.Sprintf("  [gray]○ offline[-]  │  %s no DB  │  [yellow]%s[-] Palette  │  %s Help  │  [yellow]Q[-] Quit", iconConnect, tview.Escape(a.commandPaletteShortcutHint()), helpKey))
+		a.statusBar.SetText(fmt.Sprintf("  [gray]○ offline[-]  │  %s no DB  │  [yellow]%s[-] Palette  │  %s Guide  │  [yellow]Q[-] Quit", iconConnect, tview.Escape(a.commandPaletteShortcutHint()), helpKey))
 		return
 	}
 
@@ -1108,6 +1109,9 @@ func (a *App) setupKeyBindings() {
 					if page == "main" {
 						a.pages.HidePage(page)
 					} else {
+						if page == "help" {
+							a.guideResize = nil
+						}
 						a.pages.RemovePage(page)
 					}
 					a.showDashboard()
@@ -1608,6 +1612,13 @@ func (a *App) applyResponsiveLayout(width, height int) {
 	}
 	a.lastScreenW = width
 	a.lastScreenH = height
+	if a.guideResize != nil {
+		if a.pages != nil && a.pages.HasPage("help") {
+			a.guideResize(width)
+		} else {
+			a.guideResize = nil
+		}
+	}
 
 	if a.tableExpanded {
 		return
@@ -1704,7 +1715,7 @@ func (a *App) statusActionText(width int) string {
 		return fmt.Sprintf("[yellow]Space[-] Select  │  %s CSV  │  [yellow]Esc[-] Back", exportKey)
 	case width < 90:
 		if inQuery {
-			return fmt.Sprintf("[yellow]Enter[-] Run ▶  │  [yellow]Shift+Enter[-] Newline  │  [yellow]Esc[-] Back  │  %s Help %s", helpKey, iconHelp)
+			return fmt.Sprintf("[yellow]Enter[-] Run ▶  │  [yellow]Shift+Enter[-] Newline  │  [yellow]Esc[-] Back  │  %s Guide %s", helpKey, iconHelp)
 		}
 		if inResults {
 			if filterActive {
@@ -1731,7 +1742,7 @@ func (a *App) statusActionText(width int) string {
 			iconRefresh, selectAllKey, clearSelectionKey, exportKey, dashboardKey, iconDashboard)
 	default:
 		if inQuery {
-			return fmt.Sprintf("[yellow]Enter[-] Run ▶  │  [yellow]Shift+Enter[-] Newline  │  [yellow]F5[-] %s  │  %s Help %s  │  [yellow]Esc/Bksp[-] Dashboard %s",
+			return fmt.Sprintf("[yellow]Enter[-] Run ▶  │  [yellow]Shift+Enter[-] Newline  │  [yellow]F5[-] %s  │  %s Guide %s  │  [yellow]Esc/Bksp[-] Dashboard %s",
 				iconRefresh, helpKey, iconHelp, iconDashboard)
 		}
 		if inResults {
@@ -1743,7 +1754,7 @@ func (a *App) statusActionText(width int) string {
 			}
 			return fmt.Sprintf("[yellow]C[-] Copy  │  [yellow]Space[-] Select  │  [yellow]Enter[-] Detail  │  %s CSV  │  [yellow]%s[-] Palette  │  %s %s", exportKey, paletteKey, helpKey, iconHelp)
 		}
-		return fmt.Sprintf("[yellow]F5[-] %s  │  [yellow]Space[-] Toggle Sel  │  %s All  │  %s Clear  │  %s CSV  │  [yellow]Enter[-] Detail  │  %s Help %s  │  [yellow]Esc/Bksp[-] Dashboard %s",
+		return fmt.Sprintf("[yellow]F5[-] %s  │  [yellow]Space[-] Toggle Sel  │  %s All  │  %s Clear  │  %s CSV  │  [yellow]Enter[-] Detail  │  %s Guide %s  │  [yellow]Esc/Bksp[-] Dashboard %s",
 			iconRefresh, selectAllKey, clearSelectionKey, exportKey, helpKey, iconHelp, iconDashboard)
 	}
 }

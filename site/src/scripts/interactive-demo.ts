@@ -665,7 +665,7 @@ class DbtermDemo {
       {
         id: "help",
         kind: "ACTION",
-        label: "Open Help & SQL Cheatsheets",
+        label: "Open Guide & SQL Reference",
         description: "Show dbterm keyboard workflows and the browser demo key map.",
         keywords: "commands shortcuts keys alt h",
         shortcut: "Alt+H",

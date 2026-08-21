@@ -1,11 +1,11 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
+import * as guide from "../../../docs/user-guide.md";
+import { currentRelease } from "../lib/release";
 
-const title = "dbterm Guide | Setup, Workflow, and Shortcuts";
+const title = "dbterm Documentation | Complete User Guide and CLI Reference";
 const description =
-  "Production-focused dbterm guide for setup, dashboard workflow, SQL execution, services, backups, shortcuts, and troubleshooting.";
-const keywords =
-  "dbterm guide, dbterm shortcuts, dbterm backup, dbterm services, postgresql mysql sqlite turso d1";
+  "Complete dbterm documentation for installation, connections, SQL, results, Change Profiler, backup and restore, MCP agents, settings, CLI commands, security, and troubleshooting.";
 
 const baseUrl = import.meta.env.BASE_URL;
 const withBase = (path: string) => {
@@ -14,393 +14,107 @@ const withBase = (path: string) => {
   return `${trimmedBase}/${trimmedPath}`.replace(/\/{2,}/g, "/");
 };
 
-const quickStartSteps = [
-  {
-    step: "Install dbterm",
-    detail: "Use the shell installer for Linux/macOS or PowerShell installer for Windows."
-  },
-  {
-    step: "Create a connection",
-    detail: "Press N and enter the MySQL/PostgreSQL server login. The database is optional: Save & Connect opens every accessible database when no default is set."
-  },
-  {
-    step: "Run your first query",
-    detail: "Select a table, focus Query (Alt+Q), and press Ctrl+Space for ready read-only queries; type SQL for context-ranked tables and columns."
-  },
-  {
-    step: "Inspect and iterate",
-    detail: "Use Alt+T and Alt+R directly, or Tab and Shift+Tab, to move between table and column searches without losing their position."
-  }
-];
-
-const workspacePanels = [
-  {
-    panel: "Dashboard",
-    behavior: "Manage saved server logins, browse every accessible database, enter Backup Center, and reconnect quickly.",
-    keys: "N, E, D, Enter, A, B, R"
-  },
-  {
-    panel: "Query",
-    behavior: "Write SQL with local typo-tolerant table, column, clause, keyword, and schema suggestions, or insert a ready read-only query for the selected table.",
-    keys: "Alt+Q, Ctrl+Space, ↑/↓, Tab, Enter, Shift+Enter"
-  },
-  {
-    panel: "Tables",
-    behavior: "Search every table and collapsed column, expand one schema branch with lazy PK/FK/NN/type metadata, pin tables, and open a column directly in Results.",
-    keys: "Alt+T, type, →/←, click ▸/▾, Space, Enter, Shift+C"
-  },
-  {
-    panel: "Results",
-    behavior: "Press Up from the first data row to search selectable column headers, then filter values, follow relationships, page, sort, inspect, and export.",
-    keys: "Alt+R, ↑ then type, ←/→, ↓, Shift+C, /, V, F, S"
-  }
-];
-
-const shortcutRows = [
-  { combo: "Ctrl + P", action: "Search commands, tables, collapsed columns, database objects, and recent SQL (default binding)" },
-  { combo: "Alt + Q / T / R", action: "Focus Query, Tables, or Results panel" },
-  { combo: "Tab / Shift + Tab", action: "Cycle workspace panels forward / backward while preserving each panel's position and type-ahead search" },
-  { combo: "Space (Tables)", action: "Pin or unpin the highlighted table at the top for this database connection" },
-  { combo: "Right / Left or click ▸ / ▾ (Tables)", action: "Expand or enter columns / return to the parent or collapse it; one table stays expanded" },
-  { combo: "Type (Tables)", action: "Search tables and collapsed columns; a matching column expands and highlights automatically" },
-  { combo: "Enter", action: "Execute query (in Query panel)" },
-  { combo: "Shift + Enter", action: "New line in query (multiline SQL)" },
-  { combo: "Ctrl + Space / ↑ / ↓ / Tab / Enter", action: "Open smart local suggestions or ready selected-table queries, then navigate and insert" },
-  { combo: "Alt + Y", action: "Open per-connection query history" },
-  { combo: "Alt + W", action: "Open Change Profiler; A selects the whole database and live progress shows percent/rate/ETA" },
-  { combo: "Alt + A / Alt + C", action: "Select all result rows / clear selection" },
-  { combo: "Space (Results)", action: "Toggle current row selection" },
-  { combo: "C (Results)", action: "Copy the selected cell's complete value" },
-  { combo: "↑ from first result row, then type", action: "Enter the header row, jump to and highlight a matching column; Down or Enter returns to its data" },
-  { combo: "Shift + C (result headers)", action: "Copy the selected column's complete name" },
-  { combo: "/ / V (Results)", action: "Build typed AND filters / filter the selected column by clipboard value" },
-  { combo: "F / Backspace (Results)", action: "Explore declared relationships in both directions / return one step through the table chain" },
-  { combo: "Alt + E", action: "Export selected rows, the current page, or all rows matching active table filters" },
-  { combo: "Alt + I", action: "Open SQL import modal for active connection (PostgreSQL/MySQL)" },
-  { combo: "I (Dashboard)", action: "Import SQL dump into selected saved PostgreSQL/MySQL connection" },
-  { combo: "A (Dashboard)", action: "Browse every database visible through the highlighted PostgreSQL/MySQL server login" },
-  { combo: "G (Dashboard) / Alt + ,", action: "Open keymap settings page" },
-  { combo: "Alt + H", action: "Toggle help + SQL cheatsheets" },
-  { combo: "Alt + D", action: "Back to dashboard" },
-  { combo: "Alt + S", action: "Open services dashboard" },
-  { combo: "Alt + K / B (Dashboard)", action: "Open Backup Center for schedules, history, inspection, restore, and agent status" },
-  { combo: "Ctrl + B (Dashboard)", action: "Create a backup policy from the highlighted saved connection" },
-  { combo: "F5 / Ctrl + F5", action: "Refresh current table / refresh list + table" },
-  { combo: "PgUp / PgDn, Home / End", action: "Navigate previous/next and first/last result pages" },
-  { combo: "Alt + F", action: "Toggle fullscreen results" },
-  { combo: "Alt + B", action: "Instant backup from any workspace panel; F2 chooses a folder and F3 refreshes disk capacity" },
-  { combo: "N (Backup Center)", action: "Choose an existing saved database or add one for a new plan" },
-  { combo: "Ctrl + N (plan form)", action: "Add another saved database without leaving the backup workflow" },
-  { combo: "Alt + = / - / 0", action: "Adjust preview row limit" },
-  { combo: "Ctrl + = / -", action: "Resize all columns (remembered per table)" },
-  { combo: "Ctrl + 0", action: "Reset this table's column widths" },
-  { combo: "+ / -", action: "Resize selected column (remembered per table)" },
-  { combo: "Ctrl + C", action: "Cancel an active query/import/export; otherwise quit" }
-];
-
-const serviceOps = [
-  {
-    title: "Inspect service state",
-    detail: "Press Alt+S from anywhere to view MySQL/PostgreSQL status and quick actions."
-  },
-  {
-    title: "Toggle MySQL/PostgreSQL",
-    detail: "Inside services, use key 1 for MySQL and key 2 for PostgreSQL start/stop."
-  },
-  {
-    title: "Connect directly from services",
-    detail: "Use C or Enter, select a saved database login or enter credentials, and leave Database blank to browse every accessible database."
-  },
-  {
-    title: "Keep instant backup",
-    detail: "Press Alt+B from Tables, Query, or Results for a one-off engine-appropriate backup. Type a destination or press F2; F3 refreshes destination and staging capacity."
-  },
-  {
-    title: "Schedule the durable path",
-    detail: "Highlight a saved connection and press Ctrl+B, or open Backup Center and press N to choose a saved database or add one. Essentials stay first; advanced controls expand only when needed."
-  },
-  {
-    title: "Choose desktop or server mode",
-    detail: "Desktop mode needs no administrator access. Server mode registers at machine boot, uses explicit data paths, and clearly shows the elevated command required."
-  },
-  {
-    title: "Watch storage and progress",
-    detail: "See the destination volume and free space before saving, then follow phase, bytes, elapsed time, rate, and ETA without a fabricated database-row percentage."
-  },
-  {
-    title: "Bound and report every job",
-    detail: "Combine count, age, and total-size retention; prune oldest eligible artifacts now; and notify by Gmail defaults or custom SMTP on failure, success, both, or never."
-  },
-  {
-    title: "Inspect before restore",
-    detail: "Press I. dbterm unwraps gzip, zstd, ZIP, or age and detects the database format from content before a destination can be selected."
-  }
-];
-
-const cliRows = [
-  ["dbterm", "Launch interactive TUI"],
-  ["dbterm --help", "Show command help"],
-  ["dbterm --version", "Show version + build details"],
-  ["dbterm --info", "Show install path, config path, and runtime info"],
-  ["dbterm --update", "Update to latest release"],
-  ["dbterm --update X.Y.Z", "Update to a specific release"],
-  ["dbterm --uninstall", "Uninstall binary with confirmation"],
-  ["dbterm --uninstall --purge", "Remove binary + dbterm-owned config/state/logs; chosen backup artifacts stay"],
-  ["dbterm --uninstall --yes", "Uninstall without prompt"]
-  , ["dbterm backup --help", "Show backup and agent commands"]
-  , ["dbterm backup list", "List durable jobs and next runs"]
-  , ["dbterm backup run <job>", "Run a job immediately"]
-  , ["dbterm backup inspect <file>", "Detect wrappers, engine, checksum, and warnings"]
-  , ["dbterm backup restore --connection <target> --yes <file>", "Run the guarded, content-inspected restore flow"]
-  , ["dbterm backup service install", "Install and start the native current-user agent"]
-  , ["dbterm backup service status --all", "Inspect desktop and server registrations, startup, runtime, and heartbeat"]
-  , ["dbterm backup service enable", "Enable automatic startup independently of starting the agent now"]
-  , ["dbterm backup prune --yes <job>", "Apply the job's retention ceilings immediately"]
-  , ["dbterm backup notify-test <job>", "Send a test message using the job's SMTP settings"]
-  , ["dbterm backup logs --lines 200", "Read the bounded agent log tail locally or over SSH"]
-  , ["dbterm backup keygen", "Generate an age X25519 identity and public recipient"]
-  , ["dbterm backup paths", "Print OS-native config, state, log, and catalog paths"]
-];
-
-const troubleshooting = [
-  "Connection issues: run `dbterm --info`, verify host/port/credentials, then reconnect from dashboard.",
-  "Query errors: open in-app cheatsheets with Alt+H to validate SQL syntax and DB-specific clauses.",
-  "Permission errors removing a package-managed binary: use the owning installer/package manager or ask an administrator to remove only that binary; keep backup-agent and data operations in your normal user account.",
-  "Large result sets: keep a safe on-screen preview and choose All matching in Alt+E; dbterm streams the full filtered export with progress and cancellation."
-  , "Scheduled job did not run: open Backup Center → A or run `dbterm backup service status`; then verify the database client tool is available in the agent PATH."
-  , "Server agent cannot install: use the exact elevated command shown by Backup Center and supply existing absolute config, state, and log directories accessible to the selected runtime user."
-  , "Encrypted backup is locked: provide the matching age identity during inspection; jobs intentionally store only the public recipient."
-];
-
-const installUnix =
-  "curl -fsSL https://raw.githubusercontent.com/shreyam1008/dbterm/main/install.sh | bash";
-const installWindows =
-  'powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/shreyam1008/dbterm/main/install.ps1 | iex"';
-
-const howToJsonLd = {
+const { Content } = guide;
+const headings = guide.getHeadings();
+const sections = headings.filter((heading) => heading.depth === 2);
+const canonical = "https://dbterm.shreyam1008.com.np/guide/";
+const articleJsonLd = {
   "@context": "https://schema.org",
-  "@type": "HowTo",
-  name: "How to start using dbterm",
+  "@type": "TechArticle",
+  headline: "Complete dbterm user guide",
   description,
-  totalTime: "PT5M",
-  step: quickStartSteps.map((entry) => ({
-    "@type": "HowToStep",
-    name: entry.step,
-    text: entry.detail
-  }))
+  url: canonical,
+  mainEntityOfPage: canonical,
+  datePublished: "2026-08-20",
+  dateModified: "2026-08-20",
+  inLanguage: "en",
+  author: {
+    "@type": "Person",
+    name: "Shreyam Adhikari",
+    alternateName: "shreyam1008",
+    url: "https://shreyam1008.com.np/",
+    sameAs: ["https://github.com/shreyam1008"]
+  },
+  about: {
+    "@type": "SoftwareApplication",
+    name: "dbterm",
+    applicationCategory: "DeveloperApplication",
+    operatingSystem: "Linux, macOS, Windows",
+    softwareVersion: currentRelease.version,
+    codeRepository: "https://github.com/shreyam1008/dbterm"
+  },
+  image: "https://dbterm.shreyam1008.com.np/assets/command-palette.png"
+};
+
+const breadcrumbJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  itemListElement: [
+    {
+      "@type": "ListItem",
+      position: 1,
+      name: "dbterm",
+      item: "https://dbterm.shreyam1008.com.np/"
+    },
+    {
+      "@type": "ListItem",
+      position: 2,
+      name: "Documentation",
+      item: canonical
+    }
+  ]
 };
 ---
 
-<BaseLayout title={title} description={description} keywords={keywords} jsonLd={howToJsonLd}>
-  <section class="hero-panel">
-    <p class="eyebrow">Practical reference for daily usage</p>
-    <h1>dbterm guide</h1>
+<BaseLayout
+  title={title}
+  description={description}
+  jsonLd={[articleJsonLd, breadcrumbJsonLd]}
+  markdownUrl={withBase("/guide.md")}
+>
+  <section class="hero-panel docs-hero" aria-labelledby="guide-title">
+    <p class="eyebrow">Complete manual · dbterm {currentRelease.label}</p>
+    <h1 id="guide-title">dbterm documentation</h1>
     <p>
-      This page documents the real app workflow from connection setup to production-safe operations.
-      Keep it open while onboarding new users.
+      One operational reference for installing dbterm, connecting every supported database,
+      using the TUI and CLI, protecting data, and connecting trusted local agents.
     </p>
+    <div class="docs-actions" aria-label="Documentation formats and focused guides">
+      <a class="button primary" href="#start-here">Read the manual</a>
+      <a class="button outline" href={withBase("/guide.md")}>Plain Markdown</a>
+      <a class="button outline" href={withBase("/backup.md")}>Backup handbook</a>
+      <a class="button outline" href={withBase("/agents.md")}>Agent guide</a>
+    </div>
     <div class="page-meta" aria-label="Guide metadata">
-      <span>Setup + workflow</span>
-      <span>Keybindings by context</span>
-      <span>Services + backup actions</span>
-      <span>Troubleshooting tips</span>
+      <span>Maintained by <a href="https://shreyam1008.com.np/">Shreyam Adhikari</a></span>
+      <span>Updated 20 August 2026</span>
+      <span>{sections.length} documented topics</span>
+      <span>Static HTML + Markdown</span>
+      <span>Offline guide: Alt+H</span>
     </div>
   </section>
 
-  <section class="panel" id="setup">
-    <h2>1. Start in 60 seconds</h2>
-    <p class="lead">Install, connect, run SQL, then iterate in panel-focused flow.</p>
-
-    <div class="copy-stack">
-      <article class="copy-shell">
-        <header>
-          <h3>Install on Linux / macOS</h3>
-          <button
-            type="button"
-            class="button outline small copy-button"
-            data-copy-target="guide-install-unix"
-            data-default-label="Copy"
-          >
-            Copy
-          </button>
-        </header>
-        <pre><code id="guide-install-unix">{installUnix}</code></pre>
-      </article>
-
-      <article class="copy-shell">
-        <header>
-          <h3>Install on Windows</h3>
-          <button
-            type="button"
-            class="button outline small copy-button"
-            data-copy-target="guide-install-windows"
-            data-default-label="Copy"
-          >
-            Copy
-          </button>
-        </header>
-        <pre><code id="guide-install-windows">{installWindows}</code></pre>
-      </article>
-    </div>
-
-    <div class="step-grid">
-      {quickStartSteps.map((entry, index) => (
-        <article class="step-item">
-          <h3>{index + 1}. {entry.step}</h3>
-          <p>{entry.detail}</p>
-        </article>
-      ))}
-    </div>
-  </section>
-
-  <section class="panel" id="workspace">
-    <h2>2. Understand the workspace</h2>
-    <p class="lead">dbterm is optimized around panel focus and keyboard flow.</p>
-
-    <p class="table-hint">Scroll horizontally to inspect every column.</p>
-    <div class="table-wrap" tabindex="0" role="region" aria-label="Workspace panels table; scroll horizontally for all columns">
-      <table class="command-table">
-        <thead>
-          <tr>
-            <th>Panel</th>
-            <th>Primary behavior</th>
-            <th>Core keys</th>
-          </tr>
-        </thead>
-        <tbody>
-          {workspacePanels.map((item) => (
-            <tr>
-              <td>{item.panel}</td>
-              <td>{item.behavior}</td>
-              <td><code>{item.keys}</code></td>
-            </tr>
+  <div class="docs-layout">
+    <aside class="docs-sidebar" aria-label="Documentation table of contents">
+      <nav>
+        <p class="section-label">On this page</p>
+        <ol>
+          {sections.map((section) => (
+            <li><a href={`#${section.slug}`}>{section.text}</a></li>
           ))}
-        </tbody>
-      </table>
-    </div>
-  </section>
+        </ol>
+      </nav>
+      <div class="docs-sidebar-links">
+        <strong>Focused references</strong>
+        <a href={withBase("/backup/")}>Backup overview</a>
+        <a href={withBase("/agents/")}>AI agents and MCP</a>
+        <a href="https://github.com/shreyam1008/dbterm/releases">Release history</a>
+        <a href="https://github.com/shreyam1008/dbterm/issues">Report a problem</a>
+      </div>
+    </aside>
 
-  <section class="panel" id="shortcuts">
-    <h2>3. Essential shortcuts</h2>
-    <p class="lead">Use these to avoid context switching and keep query loops fast.</p>
-
-    <p class="table-hint">Scroll horizontally to inspect every shortcut and action.</p>
-    <div class="table-wrap" tabindex="0" role="region" aria-label="Essential shortcuts table; scroll horizontally for all columns">
-      <table class="shortcut-table">
-        <thead>
-          <tr>
-            <th>Shortcut</th>
-            <th>Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          {shortcutRows.map((row) => (
-            <tr>
-              <td><code>{row.combo}</code></td>
-              <td>{row.action}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-
-    <p class="notice">
-      Use <kbd>Esc</kbd> and <kbd>Backspace</kbd> to back out safely from most views if you lose focus.
-    </p>
-  </section>
-
-  <section class="panel" id="backup-center">
-    <h2>4. Instant backup, scheduled agent, guarded restore</h2>
-    <p class="lead">One backup engine serves the TUI, CLI, and background agent. See the focused <a href={withBase("/backup/")}>Backup Center guide</a> for the complete operator model.</p>
-
-    <div class="guide-flow">
-      {serviceOps.map((item) => (
-        <article class="guide-box">
-          <h3>{item.title}</h3>
-          <p>{item.detail}</p>
-        </article>
-      ))}
-    </div>
-
-    <div class="copy-stack">
-      <article class="copy-shell">
-        <header><h3>Headless setup</h3></header>
-        <pre><code>dbterm backup keygen
-dbterm backup service install
-dbterm backup service status --all
-dbterm backup logs --lines 200
-dbterm backup inspect --identity ./age-identity.txt ./prod.dump.zst.age
-dbterm backup restore --connection production --identity ./age-identity.txt --yes ./prod.dump.zst.age</code></pre>
-      </article>
-    </div>
-
-    <p class="notice">
-      Scheduled destinations can be absolute local/mounted folders or <code>rclone://remote/path</code> locations. Configure rclone under the backup agent’s OS account. PostgreSQL/MySQL require their official clients; SQLite SQL restore requires <code>sqlite3</code>. Restore supports PostgreSQL, MySQL/MariaDB, and local SQLite. Merge is the restore default; clean restore is explicit and destructive.
-    </p>
-    <p class="notice">Retention can combine newest-count, maximum-age, and total-size ceilings. Backup Center previews capacity and can apply the policy immediately; cleanup is restricted to verified artifacts recorded for that exact job, and always preserves its newest successful backup.</p>
-    <p class="notice">Per-job email can report failures, successes, both, or neither. Gmail defaults to STARTTLS on port 587; custom SMTP and implicit TLS are available. Test delivery before relying on it, and protect the locally stored app password.</p>
-    <p class="notice">Desktop scope is the no-admin default. Server scope runs at machine boot without an interactive login and requires elevation plus explicit existing config, state, and log paths. Runtime start/stop and startup enable/disable are deliberately separate controls.</p>
-
-    <div class="guide-flow" aria-label="Backup control data locations">
-      <article class="guide-box"><h3>Linux</h3><p><code>XDG_CONFIG_HOME/dbterm</code><br /><code>XDG_STATE_HOME/dbterm</code></p></article>
-      <article class="guide-box"><h3>macOS</h3><p><code>~/Library/Application Support/dbterm</code><br /><code>~/Library/Logs/dbterm</code></p></article>
-      <article class="guide-box"><h3>Windows</h3><p><code>%AppData%\dbterm</code><br /><code>%LocalAppData%\dbterm</code></p></article>
-    </div>
-    <p class="notice">Run <code>dbterm backup paths</code> for exact resolved paths. Raw dumps are wrapped in private state staging before the finished artifact is published to your destination, so private state needs room for one uncompressed dump. The live view shows real phase, byte growth, elapsed time, rate, and ETA where a meaningful total exists. Uninstalling only the agent never removes completed artifacts.</p>
-    <p class="notice">Restore only trusted files: dbterm rechecks content, checksum, engine, and client-side commands, but valid SQL can still perform any server-side action allowed to the selected database account. Turso exports use one source transaction and reject virtual/FTS schemas; D1 uses Cloudflare's native export API, which can briefly make that database unavailable.</p>
-    <p class="notice">Inspection unwraps at most three layers. Every decoded gzip, zstd, ZIP, or age layer has a 1 GiB default cap and uses private OS temporary storage; raise it with the TUI’s Max Decoded GiB field or <code>--max-decoded-gib N</code>, with enough temporary disk space available.</p>
-    <p class="notice"><code>backup keygen</code> defaults the private identity into dbterm config. For recovery safety, <code>--uninstall --purge</code> refuses to remove a private age identity or backup-like file it discovers there; move the key somewhere safe or delete it explicitly before retrying.</p>
-  </section>
-
-  <section class="panel" id="cli">
-    <h2>5. CLI maintenance reference</h2>
-    <p class="lead">Press <code>U</code> on the Dashboard for the in-app Version &amp; Update screen, or use CLI mode for updates, diagnostics, and uninstall operations.</p>
-
-    <p class="notice">Connection profiles are stored in a private primary file plus a current recovery mirror, one previous generation, and a separate state-directory vault; settings are mirrored into that vault too. A missing or unreadable primary is restored automatically. With <code>sudo dbterm --update</code>, elevation applies only to replacing the executable; the invoking user’s config, backup catalog, artifacts, and Change Profiler state are guarded in their normal user profile.</p>
-
-    <article class="copy-shell">
-      <header>
-        <h3>CLI command set</h3>
-        <button
-          type="button"
-          class="button outline small copy-button"
-          data-copy-target="guide-cli-cmds"
-          data-default-label="Copy"
-        >
-          Copy
-        </button>
-      </header>
-      <pre><code id="guide-cli-cmds">{cliRows.map(([cmd]) => cmd).join("\n")}</code></pre>
+    <article class="docs-content" aria-label="Complete dbterm user guide">
+      <Content />
     </article>
-
-    <p class="table-hint">Scroll horizontally to inspect every command and purpose.</p>
-    <div class="table-wrap" tabindex="0" role="region" aria-label="CLI commands table; scroll horizontally for all columns">
-      <table class="command-table">
-        <thead>
-          <tr>
-            <th>Command</th>
-            <th>Purpose</th>
-          </tr>
-        </thead>
-        <tbody>
-          {cliRows.map(([command, desc]) => (
-            <tr>
-              <td><code>{command}</code></td>
-              <td>{desc}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  </section>
-
-  <section class="panel" id="troubleshooting">
-    <h2>6. Troubleshooting quick list</h2>
-    <ul class="list-tight">
-      {troubleshooting.map((point) => (
-        <li>{point}</li>
-      ))}
-    </ul>
-  </section>
-
+  </div>
 </BaseLayout>

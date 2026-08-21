@@ -82,7 +82,7 @@ func main() {
 	fmt.Printf("  \033[38;2;137;180;250m⬢\033[0m PostgreSQL   \033[38;2;249;226;175m⬡\033[0m MySQL   \033[38;2;166;227;161m◆\033[0m SQLite   \033[38;2;148;226;213m◇\033[0m Turso / D1\n")
 	fmt.Printf("  \033[38;2;108;112;134mConfig: %s\033[0m\n", configPath())
 	fmt.Println()
-	fmt.Println("  \033[38;2;166;227;161mStarting...\033[0m Press \033[33mCtrl+P\033[0m for the palette or \033[33mAlt+H\033[0m for help.")
+	fmt.Println("  \033[38;2;166;227;161mStarting...\033[0m Press \033[33mCtrl+P\033[0m for the palette or \033[33mAlt+H\033[0m for the guide.")
 	fmt.Println()
 
 	app := ui.NewAppWithBuildInfo(ui.BuildInfo{
@@ -115,7 +115,7 @@ func printHelp() {
     dbterm backup --help      Backup jobs, agent, inspection & restore
     dbterm mcp serve          Start the local read-only MCP server for agents
     dbterm --update           Update to latest release
-    dbterm --update 0.3.4     Update to a specific version
+    dbterm --update ` + buildVersion() + `     Update to a specific version
     dbterm --uninstall        Uninstall dbterm binary
     dbterm --uninstall --yes  Uninstall without confirmation prompt
     dbterm --uninstall --purge Uninstall binary + dbterm-owned data
@@ -127,7 +127,7 @@ func printHelp() {
     1. Run ` + "\033[32m" + `dbterm` + "\033[0m" + `
     2. Press ` + "\033[32m" + `N` + "\033[0m" + ` → add a new database connection
     3. Fill in details → Save & Connect
-    4. Press ` + "\033[33m" + `Alt+H` + "\033[0m" + ` for SQL cheatsheets per DB
+    4. Press ` + "\033[33m" + `Alt+H` + "\033[0m" + ` for the complete offline guide and SQL reference
 
   ` + "\033[33m" + `KEY BINDINGS` + "\033[0m" + `
     Ctrl+P     Search commands, objects, and recent SQL
@@ -139,11 +139,11 @@ func printHelp() {
     PgUp/PgDn  Previous/next page      Home/End  First/last page
     +/-        Selected column         Ctrl+/-  All-column zoom
     Alt+/-/0   Preview rows            Alt+B  Instant backup
-    Alt+K      Backup Center           Alt+H  Help
+    Alt+K      Backup Center           Alt+H  Guide
     Alt+D      Dashboard
     Ctrl+C     Cancel active work or quit
 
-  ` + "\033[38;2;108;112;134m" + `Docs: https://dbterm.shreyam1008.com.np/
+  ` + "\033[38;2;108;112;134m" + `Docs: https://dbterm.shreyam1008.com.np/guide/
   Open source: https://dbterm.shreyam1008.com.np/open-source/
   Package docs: https://pkg.go.dev/github.com/shreyam1008/dbterm
   Source: https://github.com/shreyam1008/dbterm

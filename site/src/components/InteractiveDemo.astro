@@ -1,3 +1,7 @@
+---
+import { currentRelease } from "../lib/release";
+---
+
 <section
   class="dbt-demo"
   id="playground"
@@ -25,7 +29,7 @@
   <div class="demo-terminal" data-demo-terminal data-focus="tables">
     <div class="demo-terminal-titlebar" aria-hidden="true">
       <span>dbterm 132×40</span>
-      <span>v0.10.0 · Beas</span>
+      <span>{currentRelease.label}</span>
     </div>
 
     <div class="demo-workspace" data-demo-workspace>
@@ -112,7 +116,7 @@
       <span data-demo-sort-status>sort: none</span>
       <button type="button" data-demo-run><kbd>Enter</kbd> Run ▶</button>
       <button type="button" data-demo-open-palette><kbd>Ctrl+P</kbd> Palette</button>
-      <button type="button" data-demo-open-help><kbd>Alt+H</kbd> Help</button>
+      <button type="button" data-demo-open-help><kbd>Alt+H</kbd> Guide</button>
       <span class="demo-live" data-demo-status role="status" aria-live="polite">Tables focused · Space pin/unpin · type to find</span>
     </div>
 
@@ -182,7 +186,7 @@
   <dialog class="demo-dialog demo-help-dialog" data-demo-help-dialog aria-labelledby="demo-help-title">
     <div class="demo-modal-shell">
       <section class="demo-help-frame">
-        <div class="demo-help-heading"><h3 id="demo-help-title">❓ Help &amp; Cheatsheets</h3><button type="button" data-demo-help-close aria-label="Close help">×</button></div>
+        <div class="demo-help-heading"><h3 id="demo-help-title">❓ Guide &amp; SQL Reference</h3><button type="button" data-demo-help-close aria-label="Close guide">×</button></div>
         <div class="demo-help-grid">
           <div><kbd>Tab</kbd><span>Cycle Tables → Query → Results</span></div>
           <div><kbd>Alt+T/Q/R</kbd><span>Focus a panel</span></div>
