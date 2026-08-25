@@ -72,7 +72,7 @@ Update to the newest release or a specific version:
 
 ```bash
 dbterm --update
-dbterm --update 0.10.0
+dbterm --update 0.10.1
 ```
 
 The Dashboard `U` action opens the same Version & Update workflow. Updates verify the release checksum and replace only the executable. Saved connections, settings, query history, backup plans and history, completed artifacts, and Change Profiler anchors remain in the invoking user's profile. If a system-owned binary needs elevation, `sudo dbterm --update` preserves the invoking user's data rather than switching to a root profile.
@@ -179,7 +179,8 @@ The workspace contains Tables, Query, and Results. Direct focus shortcuts and fo
 
 The Tables panel is a searchable schema tree rather than a flat table list.
 
-- Type to search every table and collapsed column. A strong column match expands its table and highlights the column.
+- Type to search tables, views, and other database objects without mixing in columns. Up/Down cycles through matches; Enter opens the highlighted item.
+- On wide terminal layouts, drag the Tables panel's right border to resize the sidebar.
 - Right expands a table and then enters its children. Left returns to the parent and then collapses it.
 - Clicking `▸` or `▾` expands or collapses without opening rows.
 - `Enter` opens a table; on a child column it opens the table and selects that Results header.
@@ -626,7 +627,7 @@ Report vulnerabilities privately through the repository's [security advisory flo
 
 ## Current release and change history
 
-This manual targets dbterm **v0.10.0 “Beas”**. That release adds searchable table-and-column schema trees, direct column navigation from the command palette, selectable result headers, smarter local SQL templates and typo recovery, remembered table context, and indexed performance for large schemas.
+This manual targets dbterm **v0.10.1 “Parvati”**. It adds a mouse-resizable Tables sidebar and object-only sidebar type-ahead with direct Up/Down match navigation, while keeping collapsed-column discovery in the command palette.
 
 Run `dbterm --version` for the installed build and open Dashboard `U` for its release notes and checksum-verified updater. The repository's [release manifest](https://github.com/shreyam1008/dbterm/blob/main/cmd/dbterm/releases.txt) is the version source used by builds, while [GitHub Releases](https://github.com/shreyam1008/dbterm/releases) provides immutable artifacts, checksums, and historical notes. When an installed version differs from this page, prefer that binary's `--help`, `backup --help`, and offline Guide for exact accepted flags.
 

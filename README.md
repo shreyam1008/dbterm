@@ -135,7 +135,8 @@ Updating replaces only the dbterm executable. Saved connections, settings, query
 | `Tab / Shift + Tab` | Cycle workspace panels forward / backward without losing each table, row, column, or active type-ahead position |
 | `Space` (Tables) | Pin or unpin the highlighted table at the top; saved separately for each database connection |
 | `Right / Left` or click `▸ / ▾` (Tables) | Expand or enter columns / return to the parent or collapse it; another expansion replaces the previous one |
-| Type while Tables is focused | Search every table and collapsed column; the best match is highlighted and a matching column expands automatically |
+| Type while Tables is focused | Search tables, views, and other database objects; use Up/Down to move through matches and Enter to open the highlighted item |
+| Drag the Tables right border | Resize the sidebar on wide terminal layouts |
 | `Enter` | Execute query (in Query panel) |
 | `Shift + Enter` | New line in Query panel |
 | `Ctrl + Space` | Open smart SQL suggestions and selected-table templates; use Up/Down and `Tab` or `Enter` to insert |
@@ -175,7 +176,7 @@ Updating replaces only the dbterm executable. Saved connections, settings, query
 
 Autocomplete runs entirely inside dbterm. Typing a prefix such as `sel` opens ranked SQL keywords; relation contexts such as `FROM` and `JOIN` prioritize live tables and views and tolerate small spelling mistakes; `alias.` and column contexts prioritize columns from referenced or selected tables. On an empty query, `Ctrl+Space` offers ready, read-only queries for the selected table—including preview, row count, named-column, newest-row, and useful grouped summaries when matching columns exist. After a complete table name it offers safe next clauses such as a row limit, recent-first ordering, and a non-NULL filter. The metadata catalog is refreshed off the typing path, so opening or accepting a suggestion never performs a network or database query. Use Up/Down to choose, `Tab` or `Enter` to insert, and `Esc` to dismiss. Enter executes the query when suggestions are closed.
 
-The Tables sidebar reuses that local catalog as a searchable schema tree. Right expands a table and then enters its first column; Left returns to the parent and then collapses it. Only one table is expanded at a time. Column names appear immediately; key/nullability badges and types are loaded asynchronously for the expanded table. Sidebar type-ahead and the command palette both search columns even when their tables are collapsed. Choosing a palette column expands it in the sidebar, opens its table, and selects the corresponding Results header.
+The Tables sidebar reuses that local catalog as a searchable schema tree. Right expands a table and then enters its first column; Left returns to the parent and then collapses it. Only one table is expanded at a time. Column names appear immediately; key/nullability badges and types are loaded asynchronously for the expanded table. Sidebar type-ahead searches tables, views, and other database objects without mixing in columns; Up/Down cycles through matching objects and Enter opens the highlighted match. The command palette still searches collapsed columns, and choosing a palette column expands it in the sidebar, opens its table, and selects the corresponding Results header. On wide layouts, drag the Tables panel's right border to resize the sidebar.
 
 ## Change Profiler
 

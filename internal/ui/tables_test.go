@@ -75,22 +75,32 @@ func TestSidebarRightLeftUsesAccordionTableExpansion(t *testing.T) {
 	}
 }
 
-func TestSidebarSearchFindsColumnInsideCollapsedTable(t *testing.T) {
+func TestSidebarSearchSkipsColumnsAndNavigatesDatabaseObjects(t *testing.T) {
 	app := testExpandableSidebarApp()
+	app.tables.AddItem("[#6c7086]── Views (1) ──[-]", "", 0, nil)
+	app.tables.AddItem("  [#a6adc8]👁[-] active_users", "", 0, nil)
+	app.databaseObjects[3] = databaseObjectListItem{name: "active_users"}
+
+	for _, r := range "USER" {
+		app.handleTableListInput(tcell.NewEventKey(tcell.KeyRune, r, tcell.ModNone))
+	}
+	if app.expandedSidebarTable != "" {
+		t.Fatalf("object search unexpectedly expanded %q", app.expandedSidebarTable)
+	}
+	if got := app.tables.GetCurrentItem(); got != 0 {
+		t.Fatalf("best object search index = %d, want users table at 0", got)
+	}
+	app.handleTableListInput(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone))
+	if got := app.tables.GetCurrentItem(); got != 3 {
+		t.Fatalf("next object search index = %d, want view at 3", got)
+	}
+
+	app.clearTableSearch()
 	for _, r := range "EMAIL" {
 		app.handleTableListInput(tcell.NewEventKey(tcell.KeyRune, r, tcell.ModNone))
 	}
-	if app.expandedSidebarTable != "users" {
-		t.Fatalf("column search expanded %q, want users", app.expandedSidebarTable)
-	}
-	index := app.tables.GetCurrentItem()
-	column, ok := app.tableColumnItems[index]
-	if !ok || column.table != "users" || column.column != "email" {
-		t.Fatalf("column search selection = %#v, want users.email", column)
-	}
-	label, _ := app.tables.GetItemText(index)
-	if !strings.Contains(label, "[black:#f9e2af:b]email[-:-:-]") {
-		t.Fatalf("column search match is not highlighted: %q", label)
+	if app.firstTableSearchMatch(app.tableSearch) != -1 {
+		t.Fatal("sidebar search should not match collapsed columns")
 	}
 }
 
@@ -252,14 +262,14 @@ func BenchmarkSidebarApplySearchLargeSchema(b *testing.B) {
 	}
 	app.sidebarSearchIndex = buildSidebarSearchIndex(tables, catalog, nil)
 	app.rebuildTableSidebar(sidebarSelection{})
-	app.tableSearch = "table_4999.column_19"
+	app.tableSearch = "table_4999"
 	app.applyTableSearch()
 	b.ResetTimer()
 	for iteration := range b.N {
 		if iteration%2 == 0 {
-			app.tableSearch = "table_4999.column_18"
+			app.tableSearch = "table_4998"
 		} else {
-			app.tableSearch = "table_4999.column_19"
+			app.tableSearch = "table_4999"
 		}
 		app.applyTableSearch()
 	}

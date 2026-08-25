@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 	"unicode"
@@ -422,9 +423,17 @@ func (a *App) handleTableListInput(event *tcell.EventKey) *tcell.EventKey {
 
 	switch event.Key() {
 	case tcell.KeyUp:
+		if a.hasActiveTableSearch() {
+			a.moveTableSearchSelection(-1)
+			return nil
+		}
 		a.moveSidebarSelection(-1)
 		return nil
 	case tcell.KeyDown:
+		if a.hasActiveTableSearch() {
+			a.moveTableSearchSelection(1)
+			return nil
+		}
 		a.moveSidebarSelection(1)
 		return nil
 	case tcell.KeyHome:
@@ -457,7 +466,7 @@ func (a *App) handleTableListInput(event *tcell.EventKey) *tcell.EventKey {
 		if !a.hasActiveTableSearch() {
 			return event
 		}
-		matched := a.firstTableSearchMatch(a.tableSearch) >= 0
+		matched := a.sidebarIndexMatchesSearch(a.tables.GetCurrentItem(), a.tableSearch)
 		a.clearTableSearch()
 		if matched {
 			return event
@@ -490,6 +499,97 @@ func (a *App) handleTableListInput(event *tcell.EventKey) *tcell.EventKey {
 	}
 
 	return event
+}
+
+type tableSearchMatch struct {
+	index int
+	score int
+}
+
+// tableSearchMatches returns only openable database objects. Columns remain
+// available through schema expansion and the command palette, but sidebar
+// type-ahead intentionally stays at the table/view/object level.
+func (a *App) tableSearchMatches(query string) []tableSearchMatch {
+	if a == nil || a.tables == nil {
+		return nil
+	}
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "" {
+		return nil
+	}
+
+	matches := make([]tableSearchMatch, 0)
+	for index := 0; index < a.tables.GetItemCount(); index++ {
+		name, ok := a.sidebarSearchableName(index)
+		if !ok {
+			continue
+		}
+		folded := strings.ToLower(name)
+		score := 0
+		switch {
+		case strings.Contains(folded, query):
+			score = sidebarTextMatchScore(folded, query)
+		default:
+			fuzzyScore, matched := foldedSubsequenceScore(folded, query)
+			if !matched {
+				continue
+			}
+			score = 80 + fuzzyScore
+		}
+		matches = append(matches, tableSearchMatch{index: index, score: score})
+	}
+
+	sort.SliceStable(matches, func(i, j int) bool {
+		if matches[i].score == matches[j].score {
+			return matches[i].index < matches[j].index
+		}
+		return matches[i].score < matches[j].score
+	})
+	return matches
+}
+
+func (a *App) sidebarSearchableName(index int) (string, bool) {
+	if table, ok := a.tableIdentifiers[index]; ok && strings.TrimSpace(table) != "" {
+		return table, true
+	}
+	if object, ok := a.databaseObjects[index]; ok && strings.TrimSpace(object.name) != "" {
+		return object.name, true
+	}
+	return "", false
+}
+
+func (a *App) sidebarIndexMatchesSearch(index int, query string) bool {
+	for _, match := range a.tableSearchMatches(query) {
+		if match.index == index {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *App) moveTableSearchSelection(direction int) bool {
+	if direction == 0 {
+		return false
+	}
+	matches := a.tableSearchMatches(a.tableSearch)
+	if len(matches) == 0 {
+		return false
+	}
+	current := a.tables.GetCurrentItem()
+	position := -1
+	for index, match := range matches {
+		if match.index == current {
+			position = index
+			break
+		}
+	}
+	if position < 0 {
+		position = 0
+	} else {
+		position = (position + direction + len(matches)) % len(matches)
+	}
+	a.renderTableSidebarSearchIndex(matches[position].index, true)
+	return true
 }
 
 func isTableNameCopyKey(event *tcell.EventKey) bool {
@@ -704,59 +804,69 @@ func (a *App) applyTableSearch() {
 	if a == nil || a.tables == nil {
 		return
 	}
-	a.ensureSidebarSearchIndex()
-
-	match, matched := a.bestSidebarSearchMatch(a.tableSearch)
-	if matched && match.column != "" && a.expandedSidebarTable != match.table {
-		a.expandedSidebarTable = match.table
-		a.rebuildTableSidebarItems(sidebarSelection{table: match.table, column: match.column})
-		a.renderTableSidebarSearchMatch(match, true)
-		a.scheduleSidebarMetadataLoad(match.table)
+	matches := a.tableSearchMatches(a.tableSearch)
+	if len(matches) == 0 {
+		a.renderTableSidebarSearchIndex(-1, false)
 		return
 	}
-	a.renderTableSidebarSearchMatch(match, matched)
-	if matched {
-		a.selectSidebarSelection(sidebarSelection{table: match.table, column: match.column})
-	}
+	a.renderTableSidebarSearchIndex(matches[0].index, true)
 }
 
 func (a *App) renderTableSidebarSearch() {
 	if a == nil || a.tables == nil {
 		return
 	}
-	a.ensureSidebarSearchIndex()
-	match, matched := a.bestSidebarSearchMatch(a.tableSearch)
-	a.renderTableSidebarSearchMatch(match, matched)
-	if matched {
-		a.selectSidebarSelection(sidebarSelection{table: match.table, column: match.column})
+	matches := a.tableSearchMatches(a.tableSearch)
+	if len(matches) == 0 {
+		a.renderTableSidebarSearchIndex(-1, false)
+		return
 	}
+	a.renderTableSidebarSearchIndex(matches[0].index, true)
 }
 
-func (a *App) renderTableSidebarSearchMatch(match sidebarSearchEntry, matched bool) {
+func (a *App) renderTableSidebarSearchIndex(index int, matched bool) {
 	if a == nil || a.tables == nil {
 		return
 	}
 	next := sidebarSelection{}
 	if matched && strings.TrimSpace(a.tableSearch) != "" {
-		next = sidebarSelection{table: match.table, column: match.column}
+		next = sidebarSelection{index: index, indexed: true}
 	}
 	if a.sidebarRenderedSearch != next {
 		a.setSidebarSearchItemLabel(a.sidebarRenderedSearch, "")
 	}
 	query := strings.TrimSpace(a.tableSearch)
-	if next.table != "" {
-		if next.column != "" {
-			if dot := strings.LastIndex(query, "."); dot >= 0 {
-				query = query[dot+1:]
-			}
-		}
+	if next.indexed {
 		a.setSidebarSearchItemLabel(next, query)
+		a.tables.SetCurrentItem(next.index)
 	}
 	a.sidebarRenderedSearch = next
 	a.updateTableListTitle()
 }
 
 func (a *App) setSidebarSearchItemLabel(selection sidebarSelection, query string) {
+	if selection.indexed {
+		if identifier, ok := a.tableIdentifiers[selection.index]; ok {
+			identifierLabel := tview.Escape(identifier)
+			if query != "" {
+				if highlighted, matched := highlightTableSearchMatch(identifier, query); matched {
+					identifierLabel = highlighted
+				}
+			}
+			a.tables.SetItemText(selection.index, a.tableSidebarLabel(identifier, identifierLabel), "")
+			return
+		}
+		if object, ok := a.databaseObjects[selection.index]; ok {
+			nameLabel := tview.Escape(object.name)
+			if query != "" {
+				if highlighted, matched := highlightTableSearchMatch(object.name, query); matched {
+					nameLabel = highlighted
+				}
+			}
+			a.tables.SetItemText(selection.index, fmt.Sprintf("  [#a6adc8]%s[-] %s", objectTypeIcon(object.objType), nameLabel), "")
+		}
+		return
+	}
 	if selection.column != "" {
 		for index, column := range a.tableColumnItems {
 			if column.table == selection.table && strings.EqualFold(column.column, selection.column) {
@@ -842,24 +952,49 @@ func (a *App) firstTableSearchMatch(query string) int {
 	if a == nil || query == "" || a.tables == nil {
 		return -1
 	}
-	a.ensureSidebarSearchIndex()
-	match, ok := a.bestSidebarSearchMatch(query)
-	if !ok {
+	matches := a.tableSearchMatches(query)
+	if len(matches) == 0 {
 		return -1
 	}
-	if match.column != "" {
-		for index, column := range a.tableColumnItems {
-			if column.table == match.table && strings.EqualFold(column.column, match.column) {
-				return index
-			}
+	return matches[0].index
+}
+
+// handleWorkspaceMouse turns the shared border between Tables and the
+// workspace into a drag handle on wide layouts.
+func (a *App) handleWorkspaceMouse(event *tcell.EventMouse, action tview.MouseAction) (*tcell.EventMouse, tview.MouseAction) {
+	if a == nil || event == nil || a.tables == nil || a.mainFlex == nil || a.pages == nil {
+		return event, action
+	}
+	page, _ := a.pages.GetFrontPage()
+	if page != "main" || a.tableExpanded || a.lastScreenW < 110 {
+		if action == tview.MouseLeftUp {
+			a.sidebarDragging = false
+		}
+		return event, action
+	}
+
+	x, y := event.Position()
+	tableX, tableY, tableWidth, tableHeight := a.tables.GetRect()
+	switch action {
+	case tview.MouseLeftDown:
+		borderX := tableX + tableWidth - 1
+		if x == borderX && y >= tableY && y < tableY+tableHeight {
+			a.sidebarDragging = true
+			return nil, action
+		}
+	case tview.MouseMove:
+		if a.sidebarDragging {
+			mainX, _, mainWidth, _ := a.mainFlex.GetRect()
+			a.sidebarWidth = clamp(x-mainX+1, 18, max(18, mainWidth-48))
+			a.mainFlex.ResizeItem(a.tables, a.sidebarWidth, 0)
+		}
+	case tview.MouseLeftUp:
+		if a.sidebarDragging {
+			a.sidebarDragging = false
+			return nil, action
 		}
 	}
-	for index, table := range a.tableIdentifiers {
-		if table == match.table {
-			return index
-		}
-	}
-	return -1
+	return event, action
 }
 
 func highlightTableSearchMatch(identifier, query string) (string, bool) {

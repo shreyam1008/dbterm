@@ -39,7 +39,8 @@ func keyboardHelpTextFor(a *App) string {
   [yellow]Click ▸ / ▾[-]      Mouse-expand or collapse without opening table rows
   [#6c7086]Column badges[-]    [#f9e2af]PK[-] primary key  [#cba6f7]FK[-] foreign key  [#89b4fa]NN[-] not null; types load lazily without blocking input
   [yellow]Space[-]            Pin/unpin the selected table at the top (saved per database connection)
-  [yellow]Type[-]             Search every table and collapsed column; the best column match expands and highlights
+  [yellow]Type[-]             Search tables, views, and other objects; [yellow]↑/↓[-] moves through matches
+  [yellow]Drag right border[-] Resize the Tables sidebar on wide layouts
   [yellow]Backspace[-]        Edit the table search
   [yellow]Enter[-]            Open a table, or open a child column directly in the Results header
   [yellow]Shift+C / Right-click[-] Copy the selected table or column name (lowercase letters remain type-to-find)

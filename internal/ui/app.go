@@ -137,6 +137,11 @@ type App struct {
 	rightFlex *tview.Flex
 	mainFlex  *tview.Flex
 
+	// Sidebar resizing is session-local. Dragging the Tables panel's right
+	// border updates the fixed width without disturbing the responsive stack.
+	sidebarWidth    int
+	sidebarDragging bool
+
 	// Sorting state
 	sortColumn int    // current sort column index (-1 = none)
 	sortAsc    bool   // true = ascending
@@ -258,6 +263,7 @@ func (a *App) setupUI() {
 		SetTitleColor(peach)
 	a.tables.SetInputCapture(a.handleTableListInput)
 	a.tables.SetMouseCapture(a.handleTableListMouse)
+	a.app.SetMouseCapture(a.handleWorkspaceMouse)
 
 	// ── Query Input ──
 	a.queryInput = tview.NewTextArea().
@@ -1659,7 +1665,11 @@ func (a *App) applyResponsiveLayout(width, height int) {
 		return
 	}
 
-	tablesWidth := clamp(width/4, 24, 38)
+	tablesWidth := a.sidebarWidth
+	if tablesWidth <= 0 {
+		tablesWidth = clamp(width/4, 24, 38)
+	}
+	tablesWidth = clamp(tablesWidth, 18, max(18, width-48))
 	a.mainFlex.SetDirection(tview.FlexColumn)
 	a.mainFlex.AddItem(a.tables, tablesWidth, 0, true)
 	a.mainFlex.AddItem(a.rightFlex, 0, 1, false)
@@ -1694,8 +1704,8 @@ func (a *App) statusActionText(width int) string {
 		return footerTextThatFits(max(1, width-2), full, medium, short, minimal)
 	}
 	if inTables {
-		full := fmt.Sprintf("[yellow]→/←[-] Expand/collapse  │  [yellow]Type[-] Find table/column  │  [yellow]Space[-] Pin  │  [yellow]Enter[-] Open  │  [yellow]Shift+C/Right-click[-] Copy  │  %s Schema  │  [yellow]%s[-] Palette", schemaKey, paletteKey)
-		medium := fmt.Sprintf("[yellow]→/←[-] Schema  │  [yellow]Type[-] Find all  │  [yellow]Space[-] Pin  │  [yellow]Enter[-] Open  │  [yellow]Shift+C[-] Copy  │  [yellow]%s[-] Palette", paletteKey)
+		full := fmt.Sprintf("[yellow]→/←[-] Expand/collapse  │  [yellow]Type + ↑/↓[-] Find objects  │  [yellow]Drag edge[-] Resize  │  [yellow]Space[-] Pin  │  [yellow]Enter[-] Open  │  [yellow]Shift+C/Right-click[-] Copy  │  %s Schema  │  [yellow]%s[-] Palette", schemaKey, paletteKey)
+		medium := fmt.Sprintf("[yellow]→/←[-] Schema  │  [yellow]Type + ↑/↓[-] Find objects  │  [yellow]Space[-] Pin  │  [yellow]Enter[-] Open  │  [yellow]Shift+C[-] Copy  │  [yellow]%s[-] Palette", paletteKey)
 		short := "[yellow]→/←[-] Schema  │  [yellow]Space[-] Pin  │  [yellow]Enter[-] Open  │  [yellow]Shift+C[-] Copy  │  [yellow]Esc[-] Back"
 		compact := "[yellow]Enter[-] Open  │  [yellow]Shift+C[-] Copy  │  [yellow]Esc[-] Back"
 		minimal := "[yellow]Shift+C[-] Copy  │  [yellow]Esc[-] Back"

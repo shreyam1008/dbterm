@@ -43,8 +43,10 @@ type sidebarSearchLookup struct {
 }
 
 type sidebarSelection struct {
-	table  string
-	column string
+	table   string
+	column  string
+	index   int
+	indexed bool
 }
 
 func buildSidebarSearchIndex(tableOrder []string, catalog sqlCompletionCatalog, metadata map[string][]sidebarColumnMeta) []sidebarSearchEntry {

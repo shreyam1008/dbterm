@@ -109,7 +109,11 @@ func (a *App) loadDatabaseObjects() {
 				totalObjects += len(g.names)
 			}
 			a.databaseObjectCount = totalObjects
-			a.updateTableListTitle()
+			if a.hasActiveTableSearch() {
+				a.applyTableSearch()
+			} else {
+				a.updateTableListTitle()
+			}
 			a.sqlCompletionRoutines = sqlCompletionRoutinesFromObjects(a.databaseObjects)
 			if a.focusedPanel == a.queryInput {
 				a.refreshSQLCompletions(false)
