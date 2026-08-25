@@ -1704,7 +1704,7 @@ func (a *App) statusActionText(width int) string {
 		return footerTextThatFits(max(1, width-2), full, medium, short, minimal)
 	}
 	if inTables {
-		full := fmt.Sprintf("[yellow]→/←[-] Expand/collapse  │  [yellow]Type + ↑/↓[-] Find objects  │  [yellow]Drag edge[-] Resize  │  [yellow]Space[-] Pin  │  [yellow]Enter[-] Open  │  [yellow]Shift+C/Right-click[-] Copy  │  %s Schema  │  [yellow]%s[-] Palette", schemaKey, paletteKey)
+		full := fmt.Sprintf("[yellow]Type + ↑/↓[-] Find objects  │  [yellow]Drag edge[-] Resize  │  [yellow]Space[-] Pin  │  [yellow]Enter[-] Open  │  [yellow]Shift+C/Right-click[-] Copy  │  %s Schema  │  [yellow]%s[-] Palette", schemaKey, paletteKey)
 		medium := fmt.Sprintf("[yellow]→/←[-] Schema  │  [yellow]Type + ↑/↓[-] Find objects  │  [yellow]Space[-] Pin  │  [yellow]Enter[-] Open  │  [yellow]Shift+C[-] Copy  │  [yellow]%s[-] Palette", paletteKey)
 		short := "[yellow]→/←[-] Schema  │  [yellow]Space[-] Pin  │  [yellow]Enter[-] Open  │  [yellow]Shift+C[-] Copy  │  [yellow]Esc[-] Back"
 		compact := "[yellow]Enter[-] Open  │  [yellow]Shift+C[-] Copy  │  [yellow]Esc[-] Back"
