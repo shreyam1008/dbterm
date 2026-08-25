@@ -1,6 +1,6 @@
 # dbterm — complete product and operating documentation
 
-> Canonical full-text context for dbterm v0.10.0 “Beas”, generated from the repository's human manuals. dbterm is a keyboard-first local database workbench and native backup agent created by Shreyam Adhikari (shreyam1008).
+> Canonical full-text context for dbterm v0.10.1 “Parvati”, generated from the repository's human manuals. dbterm is a keyboard-first local database workbench and native backup agent created by Shreyam Adhikari (shreyam1008).
 
 Canonical website: https://dbterm.shreyam1008.com.np/
 Source: https://github.com/shreyam1008/dbterm
@@ -145,7 +145,8 @@ Updating replaces only the dbterm executable. Saved connections, settings, query
 | `Tab / Shift + Tab` | Cycle workspace panels forward / backward without losing each table, row, column, or active type-ahead position |
 | `Space` (Tables) | Pin or unpin the highlighted table at the top; saved separately for each database connection |
 | `Right / Left` or click `▸ / ▾` (Tables) | Expand or enter columns / return to the parent or collapse it; another expansion replaces the previous one |
-| Type while Tables is focused | Search every table and collapsed column; the best match is highlighted and a matching column expands automatically |
+| Type while Tables is focused | Search tables, views, and other database objects; use Up/Down to move through matches and Enter to open the highlighted item |
+| Drag the Tables right border | Resize the sidebar on wide terminal layouts |
 | `Enter` | Execute query (in Query panel) |
 | `Shift + Enter` | New line in Query panel |
 | `Ctrl + Space` | Open smart SQL suggestions and selected-table templates; use Up/Down and `Tab` or `Enter` to insert |
@@ -185,7 +186,7 @@ Updating replaces only the dbterm executable. Saved connections, settings, query
 
 Autocomplete runs entirely inside dbterm. Typing a prefix such as `sel` opens ranked SQL keywords; relation contexts such as `FROM` and `JOIN` prioritize live tables and views and tolerate small spelling mistakes; `alias.` and column contexts prioritize columns from referenced or selected tables. On an empty query, `Ctrl+Space` offers ready, read-only queries for the selected table—including preview, row count, named-column, newest-row, and useful grouped summaries when matching columns exist. After a complete table name it offers safe next clauses such as a row limit, recent-first ordering, and a non-NULL filter. The metadata catalog is refreshed off the typing path, so opening or accepting a suggestion never performs a network or database query. Use Up/Down to choose, `Tab` or `Enter` to insert, and `Esc` to dismiss. Enter executes the query when suggestions are closed.
 
-The Tables sidebar reuses that local catalog as a searchable schema tree. Right expands a table and then enters its first column; Left returns to the parent and then collapses it. Only one table is expanded at a time. Column names appear immediately; key/nullability badges and types are loaded asynchronously for the expanded table. Sidebar type-ahead and the command palette both search columns even when their tables are collapsed. Choosing a palette column expands it in the sidebar, opens its table, and selects the corresponding Results header.
+The Tables sidebar reuses that local catalog as a searchable schema tree. Right expands a table and then enters its first column; Left returns to the parent and then collapses it. Only one table is expanded at a time. Column names appear immediately; key/nullability badges and types are loaded asynchronously for the expanded table. Sidebar type-ahead searches tables, views, and other database objects without mixing in columns; Up/Down cycles through matching objects and Enter opens the highlighted match. The command palette still searches collapsed columns, and choosing a palette column expands it in the sidebar, opens its table, and selects the corresponding Results header. On wide layouts, drag the Tables panel's right border to resize the sidebar.
 
 ## Change Profiler
 
@@ -479,7 +480,7 @@ Update to the newest release or a specific version:
 
 ```bash
 dbterm --update
-dbterm --update 0.10.0
+dbterm --update 0.10.1
 ```
 
 The Dashboard `U` action opens the same Version & Update workflow. Updates verify the release checksum and replace only the executable. Saved connections, settings, query history, backup plans and history, completed artifacts, and Change Profiler anchors remain in the invoking user's profile. If a system-owned binary needs elevation, `sudo dbterm --update` preserves the invoking user's data rather than switching to a root profile.
@@ -586,7 +587,8 @@ The workspace contains Tables, Query, and Results. Direct focus shortcuts and fo
 
 The Tables panel is a searchable schema tree rather than a flat table list.
 
-- Type to search every table and collapsed column. A strong column match expands its table and highlights the column.
+- Type to search tables, views, and other database objects without mixing in columns. Up/Down cycles through matches; Enter opens the highlighted item.
+- On wide terminal layouts, drag the Tables panel's right border to resize the sidebar.
 - Right expands a table and then enters its children. Left returns to the parent and then collapses it.
 - Clicking `▸` or `▾` expands or collapses without opening rows.
 - `Enter` opens a table; on a child column it opens the table and selects that Results header.
@@ -1033,7 +1035,7 @@ Report vulnerabilities privately through the repository's [security advisory flo
 
 ## Current release and change history
 
-This manual targets dbterm **v0.10.0 “Beas”**. That release adds searchable table-and-column schema trees, direct column navigation from the command palette, selectable result headers, smarter local SQL templates and typo recovery, remembered table context, and indexed performance for large schemas.
+This manual targets dbterm **v0.10.1 “Parvati”**. It adds a mouse-resizable Tables sidebar and object-only sidebar type-ahead with direct Up/Down match navigation, while keeping collapsed-column discovery in the command palette.
 
 Run `dbterm --version` for the installed build and open Dashboard `U` for its release notes and checksum-verified updater. The repository's [release manifest](https://github.com/shreyam1008/dbterm/blob/main/cmd/dbterm/releases.txt) is the version source used by builds, while [GitHub Releases](https://github.com/shreyam1008/dbterm/releases) provides immutable artifacts, checksums, and historical notes. When an installed version differs from this page, prefer that binary's `--help`, `backup --help`, and offline Guide for exact accepted flags.
 
@@ -1634,6 +1636,7 @@ dbterm handles database credentials and backup artifacts locally. Before sharing
 # 5) If that tag already exists, the workflow skips release creation safely.
 #
 # Newest entry first:
+0.10.1|Parvati|Resizable Tables sidebar and object-only type-ahead with direct keyboard navigation across matching tables, views, and database objects.
 0.10.0|Beas|Searchable table-and-column schema trees, direct column palette navigation, selectable result headers, smart SQL templates and typo recovery, remembered table context, and indexed large-schema performance.
 0.9.2|Jhelum|Remembered per-table result positions, direct table-name copy, and consistent effective shortcuts across Help, Settings, the command palette, and responsive TUI hints.
 0.9.1|Ravi|Stable non-moving user profiles, self-healing private connection snapshots, sudo-update data guards, and verified in-app updates.

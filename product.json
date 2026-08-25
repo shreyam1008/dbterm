@@ -32,17 +32,17 @@
   "distributions": [
     {
       "channel": "Product website",
-      "status": "live",
+      "status": "publishing",
       "url": "https://dbterm.shreyam1008.com.np/",
-      "version": "0.10.0",
-      "verifiedAt": "2026-08-19"
+      "version": "0.10.1",
+      "verifiedAt": "2026-08-25"
     },
     {
       "channel": "GitHub Releases",
-      "status": "live",
-      "url": "https://github.com/shreyam1008/dbterm/releases/tag/v0.10.0",
-      "version": "0.10.0",
-      "verifiedAt": "2026-08-19"
+      "status": "publishing",
+      "url": "https://github.com/shreyam1008/dbterm/releases/tag/v0.10.1",
+      "version": "0.10.1",
+      "verifiedAt": "2026-08-25"
     },
     {
       "channel": "APT repository",
