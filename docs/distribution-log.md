@@ -3,7 +3,7 @@
 Owner: Shreyam Adhikari (`@shreyam1008`)
 Canonical product URL: <https://dbterm.shreyam1008.com.np/>
 Repository: <https://github.com/shreyam1008/dbterm>
-Last verified: 20 August 2026
+Last verified: 25 August 2026
 
 This is the execution record for dbterm's public distribution, directory submissions, community posts, authorship links, package listings, and agent-discovery surfaces. Update this file after every submission or status change. Do not mark a platform **live** until a public URL can be opened without the submitting account.
 
@@ -23,7 +23,7 @@ This is the execution record for dbterm's public distribution, directory submiss
 | Product website | **Live** | <https://dbterm.shreyam1008.com.np/> | Made the custom domain canonical, deployed the site, enabled HTTPS, and updated product/creator branding. |
 | Legacy GitHub Pages URL | **Live redirect** | <https://shreyam1008.github.io/dbterm/> | Redirects to the canonical custom domain. Keep this redirect indefinitely. |
 | GitHub repository | **Live** | <https://github.com/shreyam1008/dbterm> | Updated repository homepage, description, topics, README identity, install paths, and release metadata. |
-| Current release | **Live** | <https://github.com/shreyam1008/dbterm/releases/tag/v0.10.0> | Published v0.10.0 “Beas” with cross-platform artifacts and checksums. |
+| Current release | **Live** | <https://github.com/shreyam1008/dbterm/releases/tag/v0.10.1> | Published v0.10.1 “Parvati” with cross-platform artifacts and checksums. |
 | Personal case study | **Live** | <https://shreyam1008.com.np/log/building-dbterm/> | Published a personal, screenshot-led case study connecting dbterm to Shreyam Adhikari. The old `/projects/dbterm` route redirects here. |
 | Personal identity | **Live** | <https://shreyam1008.com.np/> | Consistent identity used across the product: Shreyam Adhikari, `@shreyam1008`, `shreyam1008.com.np`, and `dbterm.shreyam1008.com.np`. |
 
@@ -31,9 +31,9 @@ This is the execution record for dbterm's public distribution, directory submiss
 
 | Ecosystem | Status | Public link | Current evidence / next action |
 | --- | --- | --- | --- |
-| GitHub Releases | **Live** | <https://github.com/shreyam1008/dbterm/releases/latest> | v0.10.0 is published. |
-| Debian packages | **Live** | <https://github.com/shreyam1008/dbterm/releases/tag/v0.10.0> | `.deb` artifacts for amd64 and arm64 are attached to the release. |
-| APT repository | **Live; signing remediation required** | <https://dbterm.shreyam1008.com.np/apt/dists/stable/Release> | v0.10.0 metadata and amd64/arm64 indexes return `200`, but the repository is not yet signed. Do not describe it as authenticated until `InRelease` or `Release.gpg` is published and verified. |
+| GitHub Releases | **Live** | <https://github.com/shreyam1008/dbterm/releases/latest> | v0.10.1 is published. |
+| Debian packages | **Live** | <https://github.com/shreyam1008/dbterm/releases/tag/v0.10.1> | `.deb` artifacts for amd64 and arm64 are attached to the release. |
+| APT repository | **Live; signing remediation required** | <https://dbterm.shreyam1008.com.np/apt/dists/stable/Release> | v0.10.1 metadata and amd64/arm64 indexes return `200`, but the repository is not yet signed. Do not describe it as authenticated until `InRelease` or `Release.gpg` is published and verified. |
 | Go module / pkg.go.dev | **Live** | <https://pkg.go.dev/github.com/shreyam1008/dbterm> | Public Go package page and README badge are live. |
 | Homebrew | **Live** | <https://github.com/shreyam1008/homebrew-tap/blob/main/Formula/dbterm.rb> | Personal tap formula is public and currently points to v0.8.0. Install with `brew tap shreyam1008/tap` then `brew install shreyam1008/tap/dbterm`. |
 | Scoop | **Live** | <https://github.com/shreyam1008/scoop-bucket/blob/main/bucket/dbterm.json> | Personal bucket manifest is public and currently points to v0.8.0. |

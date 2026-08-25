@@ -32,14 +32,14 @@
   "distributions": [
     {
       "channel": "Product website",
-      "status": "publishing",
+      "status": "live",
       "url": "https://dbterm.shreyam1008.com.np/",
       "version": "0.10.1",
       "verifiedAt": "2026-08-25"
     },
     {
       "channel": "GitHub Releases",
-      "status": "publishing",
+      "status": "live",
       "url": "https://github.com/shreyam1008/dbterm/releases/tag/v0.10.1",
       "version": "0.10.1",
       "verifiedAt": "2026-08-25"
@@ -48,8 +48,8 @@
       "channel": "APT repository",
       "status": "live",
       "url": "https://dbterm.shreyam1008.com.np/apt/dists/stable/Release",
-      "version": "0.10.0",
-      "verifiedAt": "2026-08-19"
+      "version": "0.10.1",
+      "verifiedAt": "2026-08-25"
     },
     {
       "channel": "Homebrew tap",
