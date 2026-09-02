@@ -2,6 +2,7 @@ package backup
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -21,6 +22,7 @@ type Schedule struct {
 	Kind            ScheduleKind `json:"kind"`
 	EveryMinutes    int          `json:"every_minutes,omitempty"`
 	TimeOfDay       string       `json:"time_of_day,omitempty"`
+	TimesOfDay      []string     `json:"times_of_day,omitempty"`
 	Weekdays        []int        `json:"weekdays,omitempty"`
 	Timezone        string       `json:"timezone,omitempty"`
 	RunMissedOnWake bool         `json:"run_missed_on_wake"`
@@ -35,11 +37,11 @@ func (s Schedule) Validate() error {
 			return fmt.Errorf("interval must be between 5 minutes and 365 days")
 		}
 	case ScheduleDaily:
-		if _, _, err := parseClock(s.TimeOfDay); err != nil {
+		if _, err := s.wallClockTimes(); err != nil {
 			return err
 		}
 	case ScheduleWeekly:
-		if _, _, err := parseClock(s.TimeOfDay); err != nil {
+		if _, err := s.wallClockTimes(); err != nil {
 			return err
 		}
 		if len(s.Weekdays) == 0 {
@@ -73,7 +75,7 @@ func (s Schedule) Next(after time.Time) (time.Time, bool, error) {
 
 	loc, _ := s.location()
 	localAfter := after.In(loc)
-	hour, minute, _ := parseClock(s.TimeOfDay)
+	times, _ := s.wallClockTimes()
 	allowed := func(day time.Weekday) bool {
 		if s.Kind == ScheduleDaily {
 			return true
@@ -88,12 +90,61 @@ func (s Schedule) Next(after time.Time) (time.Time, bool, error) {
 
 	for offset := 0; offset <= 8; offset++ {
 		date := localAfter.AddDate(0, 0, offset)
-		candidate := time.Date(date.Year(), date.Month(), date.Day(), hour, minute, 0, 0, loc)
-		if allowed(candidate.Weekday()) && candidate.After(localAfter) {
-			return candidate.UTC(), true, nil
+		if !allowed(date.Weekday()) {
+			continue
+		}
+		for _, clock := range times {
+			hour, minute, _ := parseClock(clock)
+			candidate := time.Date(date.Year(), date.Month(), date.Day(), hour, minute, 0, 0, loc)
+			// time.Date normalizes a nonexistent local time during a DST gap.
+			// Skipping that occurrence is safer than silently moving a backup to a
+			// different wall-clock time. Ambiguous fall-back times execute once.
+			candidateLocal := candidate.In(loc)
+			if candidateLocal.Year() != date.Year() || candidateLocal.Month() != date.Month() ||
+				candidateLocal.Day() != date.Day() || candidateLocal.Hour() != hour || candidateLocal.Minute() != minute {
+				continue
+			}
+			if candidate.After(localAfter) {
+				return candidate.UTC(), true, nil
+			}
 		}
 	}
 	return time.Time{}, false, fmt.Errorf("could not calculate the next scheduled run")
+}
+
+// WallClockTimes returns the effective daily/weekly wall-clock times in
+// canonical HH:MM order. The plural field is authoritative when present;
+// TimeOfDay remains a backward-compatible fallback for existing catalogs.
+func (s Schedule) WallClockTimes() ([]string, error) {
+	return s.wallClockTimes()
+}
+
+func (s Schedule) wallClockTimes() ([]string, error) {
+	values := s.TimesOfDay
+	field := "times_of_day"
+	if len(values) == 0 {
+		values = []string{s.TimeOfDay}
+		field = "time_of_day"
+	}
+
+	unique := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		hour, minute, err := parseClock(value)
+		if err != nil {
+			return nil, fmt.Errorf("%s value %q: %w", field, value, err)
+		}
+		unique[fmt.Sprintf("%02d:%02d", hour, minute)] = struct{}{}
+	}
+	if len(unique) == 0 {
+		return nil, fmt.Errorf("schedule requires at least one wall-clock time")
+	}
+
+	times := make([]string, 0, len(unique))
+	for value := range unique {
+		times = append(times, value)
+	}
+	sort.Strings(times)
+	return times, nil
 }
 
 // AdvancePast returns the first scheduled occurrence strictly after now while

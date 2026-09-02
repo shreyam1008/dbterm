@@ -251,6 +251,75 @@ func TestPublishNoReplaceCleansOnlyStalePublicationPartials(t *testing.T) {
 	}
 }
 
+func TestPublishNoReplaceGuardRunsAtFinalSyscallBoundaries(t *testing.T) {
+	directory := t.TempDir()
+	staged := filepath.Join(directory, "guarded.partial")
+	final := filepath.Join(directory, "guarded.dump")
+	if err := os.WriteFile(staged, []byte("complete"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	guardCalls := 0
+	linkCalls := 0
+	atomicCalls := 0
+	err := publishNoReplaceWithOps(context.Background(), staged, final, nil, publicationOps{
+		beforePublish: func() error {
+			guardCalls++
+			return nil
+		},
+		link: func(string, string) error {
+			linkCalls++
+			if guardCalls != 1 {
+				t.Fatalf("link attempt observed %d guard calls, want one immediately before it", guardCalls)
+			}
+			return errors.New("hard links unavailable")
+		},
+		atomic: func(source, destination string) error {
+			atomicCalls++
+			if guardCalls != 2 {
+				t.Fatalf("atomic attempt observed %d guard calls, want a repeated guard immediately before it", guardCalls)
+			}
+			return os.Rename(source, destination)
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if guardCalls != 2 || linkCalls != 1 || atomicCalls != 1 {
+		t.Fatalf("guard/link/atomic calls = %d/%d/%d", guardCalls, linkCalls, atomicCalls)
+	}
+}
+
+func TestPublishNoReplaceGuardFailurePublishesNothing(t *testing.T) {
+	directory := t.TempDir()
+	staged := filepath.Join(directory, "guarded.partial")
+	final := filepath.Join(directory, "guarded.dump")
+	if err := os.WriteFile(staged, []byte("complete"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	wantErr := errors.New("destination identity changed")
+	publicationCalled := false
+	err := publishNoReplaceWithOps(context.Background(), staged, final, nil, publicationOps{
+		beforePublish: func() error { return wantErr },
+		link: func(string, string) error {
+			publicationCalled = true
+			return nil
+		},
+		atomic: func(string, string) error {
+			publicationCalled = true
+			return nil
+		},
+	})
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("guard failure = %v, want %v", err, wantErr)
+	}
+	if publicationCalled {
+		t.Fatal("guard failure still invoked a publication syscall")
+	}
+	if _, err := os.Lstat(final); !os.IsNotExist(err) {
+		t.Fatalf("guard failure published a final name: %v", err)
+	}
+}
+
 func assertNoPublicationPartials(t *testing.T, directory string) {
 	t.Helper()
 	matches, err := filepath.Glob(filepath.Join(directory, ".dbterm-publish-*.partial"))

@@ -90,6 +90,30 @@ func (a *App) showBackupCenter() {
 		return
 	}
 	latestVerified := latestVerifiedBackupRuns(verifiedRuns)
+	copyJobs, err := a.backupStore.ListCopyJobs(context.Background())
+	if err != nil {
+		a.ShowAlert(fmt.Sprintf("%s Could not load copy jobs:\n\n%v", iconWarn, err), a.backupCenterReturnPage)
+		return
+	}
+	copyRuns, err := a.backupStore.ListCopyRuns(context.Background(), "", 1000)
+	if err != nil {
+		a.ShowAlert(fmt.Sprintf("%s Could not load copy activity:\n\n%v", iconWarn, err), a.backupCenterReturnPage)
+		return
+	}
+	latestCopies := latestCopyRuns(copyRuns)
+	for _, copyJob := range copyJobs {
+		if _, exists := latestCopies[copyJob.ID]; exists {
+			continue
+		}
+		copyRun, found, latestErr := a.backupStore.LatestCopyRun(context.Background(), copyJob.ID)
+		if latestErr != nil {
+			a.ShowAlert(fmt.Sprintf("%s Could not load latest copy activity:\n\n%v", iconWarn, latestErr), a.backupCenterReturnPage)
+			return
+		}
+		if found {
+			latestCopies[copyJob.ID] = copyRun
+		}
+	}
 
 	header := tview.NewTextView().SetDynamicColors(true).SetTextAlign(tview.AlignCenter)
 	header.SetBackgroundColor(bg)
@@ -114,8 +138,8 @@ func (a *App) showBackupCenter() {
 		lastRun = backupRunSummary(runs[0])
 	}
 	header.SetText(fmt.Sprintf(
-		"\n[::b][#cba6f7]%s Backups[-][-]  %s\n[#a6adc8]%d plans  │  %d scheduled  │  last %s  │  %s[-]",
-		iconBackup, automation, len(jobs), enabled, tview.Escape(lastRun), agentLabel,
+		"\n[::b][#cba6f7]%s Backups[-][-]  %s\n[#a6adc8]%d plans  │  %s  │  %d scheduled  │  last %s  │  %s[-]",
+		iconBackup, automation, len(jobs), copyJobCountLabel(len(copyJobs)), enabled, tview.Escape(lastRun), agentLabel,
 	))
 
 	list := tview.NewList().ShowSecondaryText(true)
@@ -162,7 +186,11 @@ func (a *App) showBackupCenter() {
 		job := jobs[index]
 		detail.SetTitle(" Selected Backup ")
 		next := "manual only"
-		if !job.NextRunAt.IsZero() {
+		if job.Schedule.Kind != backupcore.ScheduleManual && !job.Enabled {
+			next = "schedule paused"
+		} else if job.Schedule.Kind != backupcore.ScheduleManual && job.NextRunAt.IsZero() {
+			next = "awaiting agent calculation"
+		} else if !job.NextRunAt.IsZero() {
 			next = job.NextRunAt.Local().Format("Mon 02 Jan, 15:04 MST")
 		}
 		encryption := backupEncryptionLabel(job.Encryption)
@@ -171,11 +199,13 @@ func (a *App) showBackupCenter() {
 			last = backupRunSummary(run)
 		}
 		verifiedRun, hasVerifiedCopy := latestVerified[job.ID]
-		protection, copies := backupProtectionSummary(job, verifiedRun, hasVerifiedCopy)
+		protection, localEvidence := backupProtectionSummary(job, verifiedRun, hasVerifiedCopy)
+		copyTopology := backupCopyTopologySummary(copyJobs, job.ID)
+		copyHealth := backupCopyHealthSummary(copyJobs, latestCopies, job.ID, time.Now())
 		detail.SetText(fmt.Sprintf(
-			" [#89b4fa]DATABASE[-]   %s\n [#89b4fa]WHEN[-]       %s  │  next %s\n [#89b4fa]SAVE TO[-]    %s\n [#89b4fa]PROTECTION[-] %s\n [#89b4fa]COPIES[-]     %s\n [#89b4fa]LAST[-]       %s\n [#89b4fa]POLICY[-]     keep %s  │  %s  │  %s",
+			" [#89b4fa]DATABASE[-]   %s\n [#89b4fa]CONTENT[-]    %s\n [#89b4fa]WHEN[-]       %s  │  next %s\n [#89b4fa]SAVE TO[-]    %s\n [#89b4fa]LOCAL BACKUP[-] %s\n [#89b4fa]LOCAL CHECK[-]  %s\n [#89b4fa]COPY JOBS[-]    %s\n [#89b4fa]COPY HEALTH[-]  %s\n [#89b4fa]LAST[-]       %s\n [#89b4fa]POLICY[-]     keep %s  │  %s  │  %s",
 			tview.Escape(backupJobConnectionDetail(a.store.Connections, job.ConnectionID)),
-			tview.Escape(backupScheduleLabel(job.Schedule)), tview.Escape(next), tview.Escape(job.Destination), protection, copies, tview.Escape(last),
+			tview.Escape(backupPayloadLabel(job)), tview.Escape(backupScheduleLabel(job.Schedule)), tview.Escape(next), tview.Escape(job.Destination), protection, localEvidence, tview.Escape(copyTopology), tview.Escape(copyHealth), tview.Escape(last),
 			tview.Escape(backupRetentionSummary(job.Retention)), tview.Escape(string(job.Compression)), encryption,
 		))
 	}
@@ -240,6 +270,13 @@ func (a *App) showBackupCenter() {
 			case 'n', 'N':
 				a.showBackupConnectionPicker()
 				return nil
+			case 'c', 'C':
+				preferBackupJobID := ""
+				if index := list.GetCurrentItem(); index >= 0 && index < len(jobs) {
+					preferBackupJobID = jobs[index].ID
+				}
+				a.showBackupCopies(preferBackupJobID)
+				return nil
 			case 'e', 'E':
 				if job, ok := selectedJob(); ok {
 					a.showBackupJobForm(job)
@@ -301,10 +338,17 @@ func (a *App) showBackupCenter() {
 	layout := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(header, 4, 0, false).
 		AddItem(list, 0, 1, true).
-		AddItem(detail, 9, 0, false).
+		AddItem(detail, 12, 0, false).
 		AddItem(footer, 1, 0, false)
 	a.pages.AddAndSwitchToPage(pageBackupCenter, layout, true)
 	a.app.SetFocus(list)
+}
+
+func backupPayloadLabel(job backupcore.Job) string {
+	if len(job.FileSets) == 0 {
+		return "full database snapshot"
+	}
+	return fmt.Sprintf("full DB + %d folder set(s)", len(job.FileSets))
 }
 
 func (a *App) showBackupPlanActions(job backupcore.Job) {
@@ -359,6 +403,14 @@ func (a *App) showBackupPlanActions(job backupcore.Job) {
 	list.AddItem("  [#89b4fa]↻[-] [::b]View activity[-]", "  Review successful and failed runs, artifacts, and notifications.", 'h', func() {
 		closeActions()
 		a.showBackupHistory()
+	})
+	list.AddItem("  [#cba6f7]⇄[-] [::b]Manage copies[-]", "  Inspect or add independent local, SFTP, and rclone-pull recovery copies.", 'c', func() {
+		closeActions()
+		a.showBackupCopies(job.ID)
+	})
+	list.AddItem("  [#94e2d5]▣[-] [::b]Included folders[-]", "  Bundle named photos, documents, or other application files with the database.", 'f', func() {
+		closeActions()
+		a.showBackupFileSets(job.ID)
 	})
 	list.AddItem("  [#a6adc8]⌫[-] [::b]Clean old backups[-]", "  Apply this plan's retention limits now.", 'p', func() {
 		closeActions()
@@ -614,6 +666,7 @@ func backupDefaultJobName(connection config.ConnectionConfig) string {
 type backupJobFormDraft struct {
 	job               backupcore.Job
 	everyMinutes      string
+	wallClockTimes    string
 	weekdays          string
 	compressionLevel  string
 	keepLatest        string
@@ -636,7 +689,7 @@ func (a *App) showBackupJobFormForConnection(existing *backupcore.Job, preferred
 		Enabled: true, FilenameTemplate: backupcore.DefaultFilenameTemplate,
 		Compression: backupcore.CompressionZstd, CompressionLevel: 3,
 		Encryption: backupcore.EncryptionNone,
-		Schedule:   backupcore.Schedule{Kind: backupcore.ScheduleDaily, TimeOfDay: "02:00", Timezone: "Local", RunMissedOnWake: true},
+		Schedule:   backupcore.Schedule{Kind: backupcore.ScheduleDaily, TimeOfDay: "02:00", TimesOfDay: []string{"02:00"}, Timezone: "Local", RunMissedOnWake: true},
 		Retention:  backupcore.Retention{KeepLast: 14, MaxAgeDays: 30}, TimeoutMinutes: backupcore.DefaultTimeoutMinutes,
 		Notification: backupcore.EmailNotification{
 			Policy:   backupcore.NotificationNever,
@@ -703,6 +756,7 @@ func (a *App) showBackupJobFormForConnection(existing *backupcore.Job, preferred
 	draft := backupJobFormDraft{
 		job:              job,
 		everyMinutes:     strconv.Itoa(max(5, job.Schedule.EveryMinutes)),
+		wallClockTimes:   backupScheduleTimesInput(job.Schedule),
 		weekdays:         weekdayText(job.Schedule.Weekdays),
 		compressionLevel: strconv.Itoa(job.CompressionLevel),
 		keepLatest:       strconv.Itoa(job.Retention.KeepLast),
@@ -832,6 +886,15 @@ func (a *App) showBackupJobFormForConnection(existing *backupcore.Job, preferred
 			return
 		}
 		candidate.Schedule.Weekdays = weekdays
+		if candidate.Schedule.Kind == backupcore.ScheduleDaily || candidate.Schedule.Kind == backupcore.ScheduleWeekly {
+			times, timesErr := parseBackupScheduleTimes(draft.wallClockTimes)
+			if timesErr != nil {
+				a.ShowAlert(fmt.Sprintf("%s %v", iconWarn, timesErr), pageBackupForm)
+				return
+			}
+			candidate.Schedule.TimesOfDay = times
+			candidate.Schedule.TimeOfDay = times[0]
+		}
 		if candidate.Schedule.Kind == backupcore.ScheduleManual {
 			candidate.Enabled = false
 		}
@@ -924,10 +987,10 @@ func (a *App) showBackupJobFormForConnection(existing *backupcore.Job, preferred
 		case backupcore.ScheduleInterval:
 			form.AddInputField("Every Minutes", draft.everyMinutes, 8, func(value string, _ rune) bool { return digitsOnly(value) }, func(value string) { draft.everyMinutes = value })
 		case backupcore.ScheduleDaily:
-			form.AddInputField("Run At (HH:MM)", nonEmptyOr(draft.job.Schedule.TimeOfDay, "02:00"), 8, nil, func(value string) { draft.job.Schedule.TimeOfDay = value })
+			form.AddInputField("Run At (comma-separated HH:MM)", draft.wallClockTimes, 28, nil, func(value string) { draft.wallClockTimes = value })
 		case backupcore.ScheduleWeekly:
 			form.AddInputField("Weekdays", draft.weekdays, 34, nil, func(value string) { draft.weekdays = value })
-			form.AddInputField("Run At (HH:MM)", nonEmptyOr(draft.job.Schedule.TimeOfDay, "02:00"), 8, nil, func(value string) { draft.job.Schedule.TimeOfDay = value })
+			form.AddInputField("Run At (comma-separated HH:MM)", draft.wallClockTimes, 28, nil, func(value string) { draft.wallClockTimes = value })
 		}
 		if draft.job.Schedule.Kind != backupcore.ScheduleManual {
 			form.AddCheckbox("Enable Schedule", draft.job.Enabled, func(value bool) { draft.job.Enabled = value })
@@ -1674,7 +1737,17 @@ func (a *App) inspectBackupAsync(path, identity string, maxDecodedBytes int64) {
 }
 
 func (a *App) showBackupInspectionResult(inspection *backupcore.Inspection, identity string, maxDecodedBytes int64) {
+	a.showBackupInspectionResultWithCleanup(inspection, identity, maxDecodedBytes, nil, pageBackupCenter)
+}
+
+func (a *App) showBackupInspectionResultWithCleanup(inspection *backupcore.Inspection, identity string, maxDecodedBytes int64, cleanup func() error, returnPage string) {
+	if strings.TrimSpace(returnPage) == "" {
+		returnPage = pageBackupCenter
+	}
 	if inspection == nil {
+		if cleanup != nil {
+			_ = cleanup()
+		}
 		return
 	}
 	wrappers := "none"
@@ -1700,9 +1773,21 @@ func (a *App) showBackupInspectionResult(inspection *backupcore.Inspection, iden
 	} else if len(inspection.RequiredTools) > 0 {
 		restoreTools = strings.Join(inspection.RequiredTools, ", ")
 	}
+	bundleDetails := ""
+	if inspection.Format == backupcore.FormatDBTermBundle {
+		fileSets := "none"
+		if len(inspection.FileSets) > 0 {
+			parts := make([]string, 0, len(inspection.FileSets))
+			for _, set := range inspection.FileSets {
+				parts = append(parts, fmt.Sprintf("%s (%d files, %s)", set.Label, set.FileCount, backupcore.FormatByteSize(uint64(set.SizeBytes))))
+			}
+			fileSets = strings.Join(parts, ", ")
+		}
+		bundleDetails = fmt.Sprintf("\nDatabase payload: [green]%s[-]\nIncluded file sets: %s", inspection.DatabaseFormat, tview.Escape(fileSets))
+	}
 	textValue := fmt.Sprintf(
-		"[::b]%s[-]\n\nType: [green]%s[-]  │  Engine: [green]%s[-]  │  Confidence: %s\nWrappers: %s\nRestore tool: %s\nSize: %d bytes  │  Decode cap: %s per layer\nSHA-256: %s\n\nWarnings:\n%s",
-		tview.Escape(inspection.Path), inspection.Format, engine, inspection.Confidence, wrappers, restoreTools, inspection.Size, formatBackupDecodedLimit(maxDecodedBytes), inspection.SHA256, tview.Escape(warnings),
+		"[::b]%s[-]\n\nType: [green]%s[-]  │  Engine: [green]%s[-]  │  Confidence: %s%s\nWrappers: %s\nRestore tool: %s\nSize: %d bytes  │  Decode cap: %s per layer\nSHA-256: %s\n\nWarnings:\n%s",
+		tview.Escape(inspection.Path), inspection.Format, engine, inspection.Confidence, bundleDetails, wrappers, restoreTools, inspection.Size, formatBackupDecodedLimit(maxDecodedBytes), inspection.SHA256, tview.Escape(warnings),
 	)
 	buttons := []string{" Close "}
 	if !inspection.Locked && inspection.Engine != "" && inspection.Format != backupcore.FormatUnknown && inspection.Format != backupcore.FormatGenericSQL {
@@ -1711,16 +1796,25 @@ func (a *App) showBackupInspectionResult(inspection *backupcore.Inspection, iden
 	modal := tview.NewModal().SetText(textValue).AddButtons(buttons).SetDoneFunc(func(index int, _ string) {
 		a.pages.RemovePage("backupInspectionResult")
 		if len(buttons) == 2 && index == 0 {
-			a.showRestoreTargetForm(inspection, identity, maxDecodedBytes)
+			a.showRestoreTargetForm(inspection, identity, maxDecodedBytes, cleanup, returnPage)
 			return
 		}
-		a.pages.ShowPage(pageBackupCenter)
+		if cleanup != nil {
+			if err := cleanup(); err != nil {
+				a.ShowAlert(fmt.Sprintf("%s Inspection finished, but private staging cleanup failed:\n\n%v", iconWarn, err), returnPage)
+				return
+			}
+		}
+		a.pages.ShowPage(returnPage)
 	})
 	modal.SetBackgroundColor(bg).SetButtonBackgroundColor(surface1).SetButtonTextColor(green).SetTextColor(text)
 	a.pages.AddPage("backupInspectionResult", modal, true, true)
 }
 
-func (a *App) showRestoreTargetForm(inspection *backupcore.Inspection, identity string, maxDecodedBytes int64) {
+func (a *App) showRestoreTargetForm(inspection *backupcore.Inspection, identity string, maxDecodedBytes int64, cleanup func() error, returnPage string) {
+	if strings.TrimSpace(returnPage) == "" {
+		returnPage = pageBackupCenter
+	}
 	var matching []config.ConnectionConfig
 	for _, connection := range a.store.Connections {
 		if connection.Type == inspection.Engine {
@@ -1728,7 +1822,10 @@ func (a *App) showRestoreTargetForm(inspection *backupcore.Inspection, identity 
 		}
 	}
 	if len(matching) == 0 {
-		a.ShowAlert(fmt.Sprintf("%s No saved %s connection can receive this backup.\n\nAdd the restore target on Dashboard, then inspect the file again.", iconInfo, inspection.Engine), pageBackupCenter)
+		if cleanup != nil {
+			_ = cleanup()
+		}
+		a.ShowAlert(fmt.Sprintf("%s No saved %s connection can receive this backup.\n\nAdd the restore target on Dashboard, then inspect the file again.", iconInfo, inspection.Engine), returnPage)
 		return
 	}
 	labels := make([]string, len(matching))
@@ -1736,7 +1833,7 @@ func (a *App) showRestoreTargetForm(inspection *backupcore.Inspection, identity 
 		labels[index] = fmt.Sprintf("%s  —  %s", connection.Name, restoreTargetLabel(connection))
 	}
 	selectedTarget := 0
-	selectedMode := defaultBackupRestoreMode(inspection.Format)
+	selectedMode := defaultBackupRestoreMode(inspection)
 	modeOptions := []string{"Merge (keep existing objects)", "Clean / replace (destructive)"}
 	if selectedMode == 1 {
 		modeOptions[1] = "Replace SQLite file (pre-restore snapshot kept)"
@@ -1744,13 +1841,34 @@ func (a *App) showRestoreTargetForm(inspection *backupcore.Inspection, identity 
 	form := tview.NewForm()
 	form.SetBorder(true).SetTitle(" Restore Destination ").SetTitleColor(mauve).SetBorderColor(surface1)
 	form.SetBackgroundColor(bg)
+	form.SetItemPadding(0)
 	form.SetFieldBackgroundColor(mantle).SetFieldTextColor(text).SetLabelColor(text).
 		SetButtonBackgroundColor(surface1).SetButtonTextColor(green)
-	form.AddDropDown("Target", labels, selectedTarget, func(_ string, index int) { selectedTarget = index })
+	form.AddDropDown("Target", labels, selectedTarget, func(_ string, index int) {
+		selectedTarget = index
+		if index < 0 || index >= len(matching) {
+			return
+		}
+		if hint, ok := form.GetFormItemByLabel("Clean target (type exactly)").(*tview.TextView); ok {
+			hint.SetText(tview.Escape(restoreConfirmationValue(matching[index])))
+		}
+	})
 	form.AddDropDown("Mode", modeOptions, selectedMode, func(_ string, index int) { selectedMode = index })
 	form.AddCheckbox("Stop on first error", true, nil)
-	form.AddCheckbox("Single transaction", inspection.Engine == config.PostgreSQL, nil)
-	form.AddInputField("Confirm Clean Target", "", 48, nil, nil)
+	if inspection.Engine == config.PostgreSQL {
+		form.AddCheckbox("Single transaction", true, nil)
+	}
+	if len(inspection.FileSets) > 0 {
+		fileSetParts := make([]string, 0, len(inspection.FileSets))
+		for _, set := range inspection.FileSets {
+			fileSetParts = append(fileSetParts, fmt.Sprintf("%s (%d files, %s)", set.Label, set.FileCount, backupcore.FormatByteSize(uint64(set.SizeBytes))))
+		}
+		form.AddTextView("Bundle files", tview.Escape(strings.Join(fileSetParts, " · ")), 0, 1, true, false)
+		form.AddInputField("File targets", "", 64, nil, nil)
+		form.AddCheckbox("Overwrite selected files", false, nil)
+	}
+	form.AddTextView("Clean target (type exactly)", tview.Escape(restoreConfirmationValue(matching[selectedTarget])), 0, 2, true, true)
+	form.AddInputField("Confirm Clean Target", "", 64, nil, nil)
 	form.AddButton("Review Restore", func() {
 		if selectedTarget < 0 || selectedTarget >= len(matching) {
 			a.ShowAlert(fmt.Sprintf("%s Select a restore target.", iconInfo), "restoreTarget")
@@ -1770,10 +1888,16 @@ func (a *App) showRestoreTargetForm(inspection *backupcore.Inspection, identity 
 				return
 			}
 		}
+		fileSetTargets, err := parseBackupRestoreFileTargets(formInputValueByLabel(form, "File targets"))
+		if err != nil {
+			a.ShowAlert(fmt.Sprintf("%s File targets are invalid:\n\n%v", iconWarn, err), "restoreTarget")
+			return
+		}
 		options := backupcore.RestoreOptions{
 			Mode: mode, StopOnError: checkboxValue(form, "Stop on first error"),
 			SingleTransaction: checkboxValue(form, "Single transaction"), AgeIdentityPath: identity,
-			MaxDecodedBytes: maxDecodedBytes,
+			MaxDecodedBytes: maxDecodedBytes, FileSetTargets: fileSetTargets,
+			OverwriteFileSetFiles: checkboxValue(form, "Overwrite selected files"),
 		}
 		plan, err := backupcore.BuildRestorePlan(inspection, &target, options)
 		if err != nil {
@@ -1781,38 +1905,87 @@ func (a *App) showRestoreTargetForm(inspection *backupcore.Inspection, identity 
 			return
 		}
 		a.pages.RemovePage("restoreTarget")
-		a.showRestoreConfirmation(plan)
+		a.showRestoreConfirmation(plan, cleanup, returnPage)
 	})
 	form.AddButton("Cancel", func() {
 		a.pages.RemovePage("restoreTarget")
-		a.pages.ShowPage(pageBackupCenter)
+		if cleanup != nil {
+			if err := cleanup(); err != nil {
+				a.ShowAlert(fmt.Sprintf("%s Restore was canceled, but private staging cleanup failed:\n\n%v", iconWarn, err), returnPage)
+				return
+			}
+		}
+		a.pages.ShowPage(returnPage)
 	})
 	form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEscape {
 			a.pages.RemovePage("restoreTarget")
-			a.pages.ShowPage(pageBackupCenter)
+			if cleanup != nil {
+				if err := cleanup(); err != nil {
+					a.ShowAlert(fmt.Sprintf("%s Restore was canceled, but private staging cleanup failed:\n\n%v", iconWarn, err), returnPage)
+					return nil
+				}
+			}
+			a.pages.ShowPage(returnPage)
 			return nil
 		}
 		return event
 	})
 	footer := tview.NewTextView().SetDynamicColors(true).SetTextAlign(tview.AlignCenter)
 	footer.SetBackgroundColor(crust)
-	footer.SetText(fmt.Sprintf(" Detected [green]%s[-] with %s confidence  │  Clean mode requires typing the target  │  [yellow]Esc[-] Cancel ", inspection.Format, inspection.Confidence))
+	width, _ := a.getScreenSize()
+	if len(inspection.FileSets) > 0 {
+		footer.SetText(footerTextThatFits(width,
+			fmt.Sprintf(" Detected [green]%s[-] · %s confidence  │  Files: label=folder; blank = database-only  │  [yellow]Esc[-] Cancel ", inspection.Format, inspection.Confidence),
+			" Files: label=folder; blank = DB only  │  [yellow]Esc[-] Cancel ",
+			" [yellow]Esc[-] Cancel restore ",
+		))
+	} else {
+		footer.SetText(footerTextThatFits(width,
+			fmt.Sprintf(" Detected [green]%s[-] with %s confidence  │  Clean mode requires typing the target  │  [yellow]Esc[-] Cancel ", inspection.Format, inspection.Confidence),
+			fmt.Sprintf(" [green]%s[-] · %s confidence  │  [yellow]Esc[-] Cancel ", inspection.Format, inspection.Confidence),
+			" [yellow]Esc[-] Cancel restore ",
+		))
+	}
 	container := tview.NewFlex().SetDirection(tview.FlexRow).AddItem(form, 0, 1, true).AddItem(footer, 1, 0, false)
-	w, h := a.modalSize(78, 116, 15, 20)
+	preferredHeight := 20
+	if len(inspection.FileSets) > 0 {
+		preferredHeight = 28
+	}
+	w, h := a.modalSize(78, 116, 15, preferredHeight)
 	grid := tview.NewGrid().SetColumns(0, w, 0).SetRows(0, h, 0).AddItem(container, 1, 1, 1, 1, 0, 0, true)
 	a.pages.AddPage("restoreTarget", grid, true, true)
 	a.app.SetFocus(form)
 }
 
-func defaultBackupRestoreMode(format backupcore.Format) int {
-	if format == backupcore.FormatSQLiteDatabase {
+func defaultBackupRestoreMode(inspection *backupcore.Inspection) int {
+	if inspection != nil && (inspection.Format == backupcore.FormatSQLiteDatabase ||
+		(inspection.Format == backupcore.FormatDBTermBundle && inspection.DatabaseFormat == backupcore.FormatSQLiteDatabase)) {
 		return 1
 	}
 	return 0
 }
 
-func (a *App) showRestoreConfirmation(plan *backupcore.RestorePlan) {
+func parseBackupRestoreFileTargets(value string) ([]backupcore.RestoreFileSetTarget, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, nil
+	}
+	parts := strings.Split(value, ";")
+	targets := make([]backupcore.RestoreFileSetTarget, 0, len(parts))
+	for _, part := range parts {
+		label, root, found := strings.Cut(part, "=")
+		label = strings.TrimSpace(label)
+		root = strings.TrimSpace(root)
+		if !found || label == "" || root == "" {
+			return nil, fmt.Errorf("use label=folder; label=folder (invalid entry %q)", strings.TrimSpace(part))
+		}
+		targets = append(targets, backupcore.RestoreFileSetTarget{Label: label, Root: root})
+	}
+	return targets, nil
+}
+
+func (a *App) showRestoreConfirmation(plan *backupcore.RestorePlan, cleanup func() error, returnPage string) {
 	warnings := append([]string{}, plan.Inspection.Warnings...)
 	warnings = append(warnings, plan.Warnings...)
 	warningText := "No additional warnings."
@@ -1823,25 +1996,47 @@ func (a *App) showRestoreConfirmation(plan *backupcore.RestorePlan) {
 	if plan.Options.SingleTransaction {
 		transaction = "on"
 	}
+	fileRestore := ""
+	if plan.Inspection.Format == backupcore.FormatDBTermBundle {
+		fileRestore = "\nFile restore: database only"
+		if len(plan.FileSetTargets) > 0 {
+			parts := make([]string, 0, len(plan.FileSetTargets))
+			for _, target := range plan.FileSetTargets {
+				parts = append(parts, fmt.Sprintf("%s → %s (%d files, %s)", target.Label, target.Root, target.FileCount, backupcore.FormatByteSize(uint64(target.SizeBytes))))
+			}
+			fileRestore = "\nFile restore: " + tview.Escape(strings.Join(parts, "; "))
+			if plan.Options.OverwriteFileSetFiles {
+				fileRestore += "\nExisting regular files: [#f9e2af]atomic overwrite enabled[-]"
+			} else {
+				fileRestore += "\nExisting paths: refuse before database restore"
+			}
+		}
+	}
 	message := fmt.Sprintf(
-		"%s Final restore review\n\nSource: %s\nDetected: %s (%s)\nTarget: %s\nMode: %s  │  Stop on error: %t  │  Transaction: %s\nDecode cap: %s per wrapper layer\n\n%s\n\nSQL/archive restores can execute code contained in the backup. Continue only if you trust its source.",
+		"%s Final restore review\n\nSource: %s\nDetected: %s (%s)\nTarget: %s\nMode: %s  │  Stop on error: %t  │  Transaction: %s%s\nDecode cap: %s per wrapper layer\n\n%s\n\nSQL/archive restores can execute code contained in the backup. Continue only if you trust its source.",
 		iconWarn, tview.Escape(plan.Inspection.Path), plan.Inspection.Format, plan.Inspection.Confidence,
 		tview.Escape(restoreTargetLabel(plan.Target)), plan.Options.Mode, plan.Options.StopOnError, transaction,
-		formatBackupDecodedLimit(plan.Options.MaxDecodedBytes), tview.Escape(warningText),
+		fileRestore, formatBackupDecodedLimit(plan.Options.MaxDecodedBytes), tview.Escape(warningText),
 	)
 	modal := tview.NewModal().SetText(message).AddButtons([]string{" Restore now ", " Cancel "}).SetDoneFunc(func(index int, _ string) {
 		a.pages.RemovePage("restoreConfirm")
 		if index == 0 {
-			a.runRestoreAsync(plan)
+			a.runRestoreAsync(plan, cleanup, returnPage)
 			return
 		}
-		a.pages.ShowPage(pageBackupCenter)
+		if cleanup != nil {
+			if err := cleanup(); err != nil {
+				a.ShowAlert(fmt.Sprintf("%s Restore was canceled, but private staging cleanup failed:\n\n%v", iconWarn, err), returnPage)
+				return
+			}
+		}
+		a.pages.ShowPage(returnPage)
 	})
 	modal.SetBackgroundColor(bg).SetButtonBackgroundColor(surface1).SetButtonTextColor(green).SetTextColor(text)
 	a.pages.AddPage("restoreConfirm", modal, true, true)
 }
 
-func (a *App) runRestoreAsync(plan *backupcore.RestorePlan) {
+func (a *App) runRestoreAsync(plan *backupcore.RestorePlan, cleanup func() error, returnPage string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Minute)
 	var canceled atomic.Bool
 	loadingTitle := fmt.Sprintf("Restoring %s into %s...", plan.Inspection.Format, plan.Target.Name)
@@ -1869,6 +2064,10 @@ func (a *App) runRestoreAsync(plan *backupcore.RestorePlan) {
 		if reconnect != nil {
 			reconnectedDB, reconnectDBErr = database.Connect(reconnect)
 		}
+		var cleanupErr error
+		if cleanup != nil {
+			cleanupErr = cleanup()
+		}
 		a.app.QueueUpdateDraw(func() {
 			if !a.finishLoadingModal(token) {
 				if reconnectedDB != nil {
@@ -1887,7 +2086,10 @@ func (a *App) runRestoreAsync(plan *backupcore.RestorePlan) {
 				if plan.Target.Type == config.MySQL {
 					note += " MySQL may have applied earlier statements; inspect the target before retrying."
 				}
-				a.ShowAlert(fmt.Sprintf("%s %s", iconWarn, note), pageBackupCenter)
+				if cleanupErr != nil {
+					note += fmt.Sprintf(" Private staging cleanup also failed: %v", cleanupErr)
+				}
+				a.ShowAlert(fmt.Sprintf("%s %s", iconWarn, note), returnPage)
 				return
 			}
 			if err != nil {
@@ -1895,7 +2097,10 @@ func (a *App) runRestoreAsync(plan *backupcore.RestorePlan) {
 				if len(progress) > 0 {
 					detail = "\n\nLast phase: " + progress[len(progress)-1]
 				}
-				a.ShowAlert(fmt.Sprintf("%s Restore failed:\n\n%v%s", iconFail, err, detail), pageBackupCenter)
+				if cleanupErr != nil {
+					detail += fmt.Sprintf("\nPrivate staging cleanup also failed: %v", cleanupErr)
+				}
+				a.ShowAlert(fmt.Sprintf("%s Restore failed:\n\n%v%s", iconFail, err, detail), returnPage)
 				return
 			}
 			reconnectNote := ""
@@ -1906,7 +2111,10 @@ func (a *App) runRestoreAsync(plan *backupcore.RestorePlan) {
 					reconnectNote = "\nSQLite workspace: reconnected"
 				}
 			}
-			a.ShowAlert(fmt.Sprintf("%s Restore complete\n\nTarget: %s\nMode: %s%s\n\nPress Ctrl+F5 in the workspace to refresh metadata.", iconSuccess, restoreTargetLabel(plan.Target), plan.Options.Mode, reconnectNote), pageBackupCenter)
+			if cleanupErr != nil {
+				reconnectNote += fmt.Sprintf("\nWarning: private staging cleanup failed: %v", cleanupErr)
+			}
+			a.ShowAlert(fmt.Sprintf("%s Restore complete\n\nTarget: %s\nMode: %s%s\n\nPress Ctrl+F5 in the workspace to refresh metadata.", iconSuccess, restoreTargetLabel(plan.Target), plan.Options.Mode, reconnectNote), returnPage)
 		})
 	}()
 }
@@ -1929,16 +2137,20 @@ func (a *App) detachActiveSQLiteRestoreTarget(target config.ConnectionConfig) *c
 
 func restoreTargetLabel(target config.ConnectionConfig) string {
 	if target.Type == config.SQLite {
-		return target.FilePath
+		return restoreConfirmationValue(target)
 	}
 	return fmt.Sprintf("%s@%s:%s/%s", nonEmptyOr(target.User, "user"), nonEmptyOr(target.Host, "localhost"), defaultPortFor(&target), target.Database)
 }
 
 func restoreConfirmationValue(target config.ConnectionConfig) string {
 	if target.Type == config.SQLite {
-		return filepath.Base(target.FilePath)
+		value := filepath.Clean(strings.TrimSpace(target.FilePath))
+		if absolute, err := filepath.Abs(value); err == nil {
+			return absolute
+		}
+		return value
 	}
-	return target.Database
+	return strings.TrimSpace(target.Database)
 }
 
 func (a *App) showBackupAgentManager() {
@@ -2778,23 +2990,62 @@ func (a *App) offerBackupAgentStart() {
 }
 
 func backupScheduleLabel(schedule backupcore.Schedule) string {
+	times := backupScheduleTimesInput(schedule)
 	switch schedule.Kind {
 	case backupcore.ScheduleInterval:
 		return fmt.Sprintf("every %s", (time.Duration(schedule.EveryMinutes) * time.Minute).String())
 	case backupcore.ScheduleDaily:
-		return fmt.Sprintf("daily %s %s", schedule.TimeOfDay, nonEmptyOr(schedule.Timezone, "Local"))
+		return fmt.Sprintf("daily %s %s", times, nonEmptyOr(schedule.Timezone, "Local"))
 	case backupcore.ScheduleWeekly:
-		return fmt.Sprintf("weekly %s · %s %s", weekdayText(schedule.Weekdays), schedule.TimeOfDay, nonEmptyOr(schedule.Timezone, "Local"))
+		return fmt.Sprintf("weekly %s · %s %s", weekdayText(schedule.Weekdays), times, nonEmptyOr(schedule.Timezone, "Local"))
 	default:
 		return "manual"
 	}
 }
 
+func backupScheduleTimesInput(schedule backupcore.Schedule) string {
+	times, err := schedule.WallClockTimes()
+	if err == nil && len(times) > 0 {
+		return strings.Join(times, ", ")
+	}
+	if len(schedule.TimesOfDay) > 0 {
+		values := make([]string, 0, len(schedule.TimesOfDay))
+		for _, value := range schedule.TimesOfDay {
+			if value = strings.TrimSpace(value); value != "" {
+				values = append(values, value)
+			}
+		}
+		if len(values) > 0 {
+			return strings.Join(values, ", ")
+		}
+	}
+	return nonEmptyOr(strings.TrimSpace(schedule.TimeOfDay), "02:00")
+}
+
+func parseBackupScheduleTimes(raw string) ([]string, error) {
+	parts := strings.Split(raw, ",")
+	values := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if value := strings.TrimSpace(part); value != "" {
+			values = append(values, value)
+		}
+	}
+	if len(values) == 0 {
+		return nil, fmt.Errorf("run times require at least one HH:MM value")
+	}
+	schedule := backupcore.Schedule{Kind: backupcore.ScheduleDaily, TimesOfDay: values, Timezone: "Local"}
+	times, err := schedule.WallClockTimes()
+	if err != nil {
+		return nil, fmt.Errorf("run times: %w", err)
+	}
+	return times, nil
+}
+
 func backupCenterFooterText(width int) string {
-	full := " [yellow]N[-] New backup  │  [yellow]Enter[-] Actions  │  [yellow]R[-] Run now  │  [yellow]I[-] Restore  │  [yellow]H[-] Activity  │  [yellow]A[-] Agent  │  [yellow]Esc[-] Back "
-	medium := " [yellow]N[-] New  │  [yellow]Enter[-] Actions  │  [yellow]R[-] Run  │  [yellow]I[-] Restore  │  [yellow]H[-] Activity  │  [yellow]Esc[-] Back "
-	short := " [yellow]N[-] New  │  [yellow]Enter[-] Actions  │  [yellow]R[-] Run  │  [yellow]I[-] Restore  │  [yellow]Esc[-] Back "
-	minimal := " [yellow]N[-] New  │  [yellow]Enter[-] Actions  │  [yellow]Esc[-] Back "
+	full := " [yellow]N[-] New backup  │  [yellow]C[-] Copies  │  [yellow]Enter[-] Actions  │  [yellow]R[-] Run now  │  [yellow]I[-] Restore  │  [yellow]H[-] Activity  │  [yellow]A[-] Agent  │  [yellow]Esc[-] Back "
+	medium := " [yellow]N[-] New  │  [yellow]C[-] Copies  │  [yellow]Enter[-] Actions  │  [yellow]R[-] Run  │  [yellow]I[-] Restore  │  [yellow]Esc[-] Back "
+	short := " [yellow]N[-] New  │  [yellow]C[-] Copies  │  [yellow]R[-] Run  │  [yellow]I[-] Restore  │  [yellow]Esc[-] Back "
+	minimal := " [yellow]N[-] New  │  [yellow]C[-] Copies  │  [yellow]Esc[-] Back "
 	return footerTextThatFits(width, full, medium, short, minimal)
 }
 
@@ -2878,7 +3129,7 @@ func backupProtectionSummary(job backupcore.Job, verifiedRun backupcore.Run, has
 	if isRemote {
 		if !hasVerifiedCopy {
 			return "[#f9e2af]NO LEGACY REMOTE COPY RECORDED[-]  │  rclone",
-				"0 recorded  │  no extra copy  │  new rclone publication disabled"
+				"0 recorded  │  new rclone publication disabled"
 		}
 		verifiedAt := backupRunRecordedAt(verifiedRun)
 		when := "time not recorded"
@@ -2886,11 +3137,11 @@ func backupProtectionSummary(job backupcore.Job, verifiedRun backupcore.Run, has
 			when = verifiedAt.Local().Format("Jan 02 15:04")
 		}
 		return fmt.Sprintf("[#89b4fa]LEGACY REMOTE COPY RECORDED[-]  │  rclone  │  size checked %s", when),
-			"1 legacy record  │  availability not rechecked  │  no extra copy  │  new publication disabled"
+			"1 legacy record  │  availability not rechecked  │  new publication disabled"
 	}
 	if !hasVerifiedCopy {
 		return "[#f9e2af]NO SUCCESSFUL COPY RECORDED[-]  │  local",
-			"0 recorded  │  extra copy not configured"
+			"0 recorded"
 	}
 	verifiedAt := backupRunRecordedAt(verifiedRun)
 	when := "time not recorded"
@@ -2901,7 +3152,7 @@ func backupProtectionSummary(job backupcore.Job, verifiedRun backupcore.Run, has
 	switch state {
 	case "present":
 		return fmt.Sprintf("[#f9e2af]LOCAL COPY PRESENT[-]  │  last verified %s", when),
-			"1 found  │  checksum not re-read  │  no extra copy"
+			"1 found  │  checksum not re-read"
 	case "missing":
 		return fmt.Sprintf("[red]RECORDED COPY MISSING[-]  │  last verified %s", when),
 			"0 found  │  " + detail

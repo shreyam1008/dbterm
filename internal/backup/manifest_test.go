@@ -142,6 +142,23 @@ func TestArtifactManifestRejectsUnknownEngineAndImpossibleFormatPair(t *testing.
 	}
 }
 
+func TestArtifactManifestUsesBestEffortContractForLiveFileSets(t *testing.T) {
+	manifest := validTestArtifactManifest()
+	manifest.Format = string(FormatDBTermBundle)
+	manifest.FileSets = []ManifestFileSet{{
+		Label: "photos", FileCount: 1, SizeBytes: 10,
+		Consistency: FileSetConsistencyBestEffort, ChangedFiles: []string{}, Warnings: []string{},
+	}}
+	if err := manifest.Validate(); err != nil {
+		t.Fatalf("best-effort live file-set manifest was rejected: %v", err)
+	}
+
+	manifest.FileSets[0].Consistency = "stable-snapshot"
+	if err := manifest.Validate(); err == nil || !strings.Contains(err.Error(), "is unsupported") {
+		t.Fatalf("stable-snapshot live file-set manifest error = %v, want unsupported consistency", err)
+	}
+}
+
 func TestBuildArtifactManifestDoesNotExposeAgeRecipientOrSecrets(t *testing.T) {
 	identity, err := age.GenerateX25519Identity()
 	if err != nil {

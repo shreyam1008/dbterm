@@ -68,6 +68,106 @@ func TestStoreJobRunLifecycleAndLease(t *testing.T) {
 	}
 }
 
+func TestRecordRunTerminalKeepsAndRenewsJobLease(t *testing.T) {
+	store, err := OpenStore(filepath.Join(t.TempDir(), "backups.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+	job := Job{
+		Name: "terminal backup lease", ConnectionID: "conn", Destination: t.TempDir(),
+		Compression: CompressionNone, Schedule: Schedule{Kind: ScheduleManual}, Retention: Retention{KeepLast: 2}, TimeoutMinutes: 5,
+	}
+	if err := store.UpsertJob(ctx, &job); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ClaimJob(ctx, job.ID, "owner", now); err != nil {
+		t.Fatal(err)
+	}
+	run, err := store.StartRun(ctx, job.ID, TriggerManual, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run.Status = RunSucceeded
+	run.FinishedAt = now.Add(time.Minute)
+	if err := store.recordRunTerminal(ctx, &run, "owner"); err != nil {
+		t.Fatal(err)
+	}
+	history, err := store.ListRuns(ctx, job.ID, 1)
+	if err != nil || len(history) != 1 || history[0].Status != RunSucceeded {
+		t.Fatalf("terminal history while lease remains held = %#v, %v", history, err)
+	}
+	if _, err := store.ClaimJob(ctx, job.ID, "competitor", now.Add(2*time.Minute)); !errors.Is(err, ErrJobBusy) {
+		t.Fatalf("competing post-processing claim = %v, want ErrJobBusy", err)
+	}
+	if err := store.RenewJobLease(ctx, job.ID, "other", now.Add(2*time.Minute), now.Add(3*time.Hour)); !errors.Is(err, ErrJobLeaseLost) {
+		t.Fatalf("wrong-owner renewal = %v, want ErrJobLeaseLost", err)
+	}
+	renewedUntil := now.Add(3 * time.Hour)
+	if err := store.RenewJobLease(ctx, job.ID, "owner", now.Add(2*time.Minute), renewedUntil); err != nil {
+		t.Fatalf("renew terminal post-processing lease: %v", err)
+	}
+	if _, err := store.ClaimJob(ctx, job.ID, "competitor", now.Add(2*time.Hour)); !errors.Is(err, ErrJobBusy) {
+		t.Fatalf("renewed backup lease allowed early claim: %v", err)
+	}
+	if err := store.ReleaseJob(ctx, job.ID, "owner"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ClaimJob(ctx, job.ID, "competitor", now.Add(2*time.Hour)); err != nil {
+		t.Fatalf("released terminal lease blocked a new run: %v", err)
+	}
+	if _, err := store.db.ExecContext(ctx, `UPDATE backup_jobs SET lease_until = ? WHERE id = ?`, formatTime(now.Add(-time.Second)), job.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RenewJobLease(ctx, job.ID, "competitor", now, now.Add(time.Hour)); !errors.Is(err, ErrJobLeaseLost) {
+		t.Fatalf("expired backup lease renewal = %v, want ErrJobLeaseLost", err)
+	}
+}
+
+func TestUpsertJobRefusesActiveLease(t *testing.T) {
+	store, err := OpenStore(filepath.Join(t.TempDir(), "backups.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	job := Job{
+		Name: "leased policy", ConnectionID: "conn", Destination: t.TempDir(),
+		Compression: CompressionNone, Schedule: Schedule{Kind: ScheduleManual}, Retention: Retention{KeepLast: 2},
+	}
+	if err := store.UpsertJob(ctx, &job); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if _, err := store.ClaimJob(ctx, job.ID, "active-owner", now); err != nil {
+		t.Fatal(err)
+	}
+	changed := job
+	changed.Name = "unsafe concurrent edit"
+	if err := store.UpsertJob(ctx, &changed); !errors.Is(err, ErrJobBusy) {
+		t.Fatalf("leased UpsertJob() error = %v, want ErrJobBusy", err)
+	}
+	stored, err := store.GetJob(ctx, job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.Name != job.Name {
+		t.Fatalf("leased UpsertJob() changed stored name to %q, want %q", stored.Name, job.Name)
+	}
+	if _, err := store.db.ExecContext(ctx, `UPDATE backup_jobs SET lease_until = ? WHERE id = ?`, formatTime(now.Add(-time.Second)), job.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.UpsertJob(ctx, &changed); err != nil {
+		t.Fatalf("UpsertJob() with expired lease: %v", err)
+	}
+	stored, err = store.GetJob(ctx, job.ID)
+	if err != nil || stored.Name != changed.Name {
+		t.Fatalf("stored job after expired-lease update = %#v, %v", stored, err)
+	}
+}
+
 func TestStoreListLatestVerifiedUnprunedRunsPerJob(t *testing.T) {
 	store, err := OpenStore(filepath.Join(t.TempDir(), "backups.db"))
 	if err != nil {

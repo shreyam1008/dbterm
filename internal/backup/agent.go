@@ -208,6 +208,9 @@ func RunAgent(ctx context.Context, store *Store, pollInterval time.Duration, emi
 		if err := RunDue(ctx, store, owner, now, emit); err != nil && !errors.Is(err, context.Canceled) {
 			emit("scheduled backup check failed: " + err.Error())
 		}
+		if err := RunDueCopies(ctx, store, owner, now, emit); err != nil && !errors.Is(err, context.Canceled) {
+			emit("scheduled copy check failed: " + err.Error())
+		}
 		select {
 		case <-ctx.Done():
 			emit("backup agent stopped: " + ctx.Err().Error())
@@ -294,11 +297,55 @@ func executeClaimedJob(parent context.Context, store *Store, connections *config
 
 type runNotifier func(context.Context, Job, Run) error
 
+type backupAfterSuccessLister func(context.Context, *Store, string) ([]CopyJob, error)
+type backupAfterSuccessRunner func(context.Context, *Store, []CopyJob, ProgressFunc) error
+type backupRetentionApplier func(context.Context, *Store, Job, time.Time) ([]string, error)
+
+type backupPostProcessingOperations struct {
+	listAfterSuccess backupAfterSuccessLister
+	runAfterSuccess  backupAfterSuccessRunner
+	applyRetention   backupRetentionApplier
+	timeout          func(Job, []CopyJob) time.Duration
+}
+
+func defaultBackupPostProcessingOperations() backupPostProcessingOperations {
+	return backupPostProcessingOperations{
+		listAfterSuccess: func(ctx context.Context, store *Store, jobID string) ([]CopyJob, error) {
+			return store.ListEnabledAfterSuccessCopyJobs(ctx, jobID)
+		},
+		runAfterSuccess: runAfterSuccessCopyJobs,
+		applyRetention:  ApplyRetention,
+		timeout:         backupPostProcessingTimeout,
+	}
+}
+
+func completeBackupPostProcessingOperations(operations backupPostProcessingOperations) backupPostProcessingOperations {
+	defaults := defaultBackupPostProcessingOperations()
+	if operations.listAfterSuccess == nil {
+		operations.listAfterSuccess = defaults.listAfterSuccess
+	}
+	if operations.runAfterSuccess == nil {
+		operations.runAfterSuccess = defaults.runAfterSuccess
+	}
+	if operations.applyRetention == nil {
+		operations.applyRetention = defaults.applyRetention
+	}
+	if operations.timeout == nil {
+		operations.timeout = defaults.timeout
+	}
+	return operations
+}
+
 func executeClaimedJobWithNotifier(parent context.Context, store *Store, connections *config.Store, job Job, owner string, trigger Trigger, emit func(string), notify runNotifier) (Run, error) {
 	return executeClaimedJobWithProgressAndNotifier(parent, store, connections, job, owner, trigger, progressFromEmitter(emit), notify)
 }
 
 func executeClaimedJobWithProgressAndNotifier(parent context.Context, store *Store, connections *config.Store, job Job, owner string, trigger Trigger, progress ProgressFunc, notify runNotifier) (Run, error) {
+	return executeClaimedJobWithPostProcessing(parent, store, connections, job, owner, trigger, progress, notify, defaultBackupPostProcessingOperations())
+}
+
+func executeClaimedJobWithPostProcessing(parent context.Context, store *Store, connections *config.Store, job Job, owner string, trigger Trigger, progress ProgressFunc, notify runNotifier, postProcessing backupPostProcessingOperations) (Run, error) {
+	postProcessing = completeBackupPostProcessingOperations(postProcessing)
 	now := time.Now().UTC()
 	run, err := store.StartRun(parent, job.ID, trigger, now)
 	if err != nil {
@@ -349,23 +396,58 @@ func executeClaimedJobWithProgressAndNotifier(parent context.Context, store *Sto
 	} else {
 		run.Status = RunSucceeded
 	}
-	if finishErr := store.FinishRun(context.Background(), &run, owner); finishErr != nil {
-		_ = store.ReleaseJob(context.Background(), job.ID, owner)
+	leaseHeld := true
+	defer func() {
+		if leaseHeld {
+			_ = store.ReleaseJob(context.Background(), job.ID, owner)
+		}
+	}()
+	if finishErr := store.recordRunTerminal(context.Background(), &run, owner); finishErr != nil {
+		if releaseErr := store.ReleaseJob(context.Background(), job.ID, owner); releaseErr == nil || errors.Is(releaseErr, ErrJobLeaseLost) {
+			leaseHeld = false
+		}
 		if runErr != nil {
 			return run, fmt.Errorf("%v; recording run failed: %w", runErr, finishErr)
 		}
 		return run, finishErr
 	}
+	var postProcessingErr error
 	if runErr == nil {
 		reportEvent(ProgressEvent{Phase: "publish", Message: fmt.Sprintf("backup complete: %s (%d bytes, sha256 %s)", artifact.Path, artifact.Size, artifact.SHA256), CurrentBytes: artifact.Size, TotalBytes: artifact.Size})
-		reportEvent(ProgressEvent{Phase: "retention", Message: "applying retention policy"})
-		if removed, retentionErr := ApplyRetention(context.Background(), store, job, run.FinishedAt); retentionErr != nil {
-			run.RetentionError = retentionErr.Error()
-			reportEvent(ProgressEvent{Phase: "retention", Message: "backup succeeded, but retention cleanup failed: " + retentionErr.Error()})
-		} else if len(removed) > 0 {
-			reportEvent(ProgressEvent{Phase: "retention", Message: fmt.Sprintf("retention removed %d expired backup(s)", len(removed))})
+		copies, listErr := postProcessing.listAfterSuccess(parent, store, job.ID)
+		postProcessingTimeout := postProcessing.timeout(job, copies)
+		if postProcessingTimeout <= 0 {
+			postProcessingTimeout = backupPostProcessingTimeout(job, copies)
+		}
+		renewedAt := time.Now().UTC()
+		renewContext, renewCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		renewErr := store.RenewJobLease(renewContext, job.ID, owner, renewedAt, renewedAt.Add(postProcessingTimeout+10*time.Minute))
+		renewCancel()
+		if renewErr != nil {
+			postProcessingErr = fmt.Errorf("renew backup-job lease for post-processing: %w", renewErr)
+			run.RetentionError = "backup-job lease was lost after backup validity was recorded; after-success copies and destructive retention were skipped: " + renewErr.Error()
+			reportEvent(ProgressEvent{Phase: "retention", Message: run.RetentionError})
 		} else {
-			reportEvent(ProgressEvent{Phase: "retention", Message: "retention policy complete; no backups removed"})
+			postContext, cancelPostProcessing := context.WithTimeout(parent, postProcessingTimeout)
+			// Backup validity is already durable at this boundary. Producer-owned
+			// after-success copies get their own runs and failures, so an unavailable
+			// vault can reduce protection without rewriting a valid database backup
+			// as corrupt or failed.
+			if listErr != nil {
+				reportEvent(ProgressEvent{Phase: "copy", Message: "backup succeeded, but after-success copies could not be listed: " + listErr.Error()})
+			} else if copyErr := postProcessing.runAfterSuccess(postContext, store, copies, report); copyErr != nil {
+				reportEvent(ProgressEvent{Phase: "copy", Message: "backup succeeded, but an after-success copy failed: " + copyErr.Error()})
+			}
+			reportEvent(ProgressEvent{Phase: "retention", Message: "applying retention policy"})
+			if removed, retentionErr := postProcessing.applyRetention(postContext, store, job, run.FinishedAt); retentionErr != nil {
+				run.RetentionError = retentionErr.Error()
+				reportEvent(ProgressEvent{Phase: "retention", Message: "backup succeeded, but retention cleanup failed: " + retentionErr.Error()})
+			} else if len(removed) > 0 {
+				reportEvent(ProgressEvent{Phase: "retention", Message: fmt.Sprintf("retention removed %d expired backup(s)", len(removed))})
+			} else {
+				reportEvent(ProgressEvent{Phase: "retention", Message: "retention policy complete; no backups removed"})
+			}
+			cancelPostProcessing()
 		}
 		retentionContext, cancelRetentionRecord := context.WithTimeout(context.Background(), 5*time.Second)
 		retentionRecordErr := store.recordRunRetentionOutcome(retentionContext, run.ID, run.RetentionError)
@@ -377,10 +459,17 @@ func executeClaimedJobWithProgressAndNotifier(parent context.Context, store *Sto
 			reportEvent(ProgressEvent{Phase: "retention", Message: "retention finished, but its outcome could not be added to backup history: " + retentionRecordErr.Error()})
 		}
 	}
-	// FinishRun commits the terminal run and releases/advances the durable job
-	// lease before any external email is attempted. Notification availability
-	// can therefore never decide whether a backup itself succeeded.
-	if notify != nil && job.Notification.ShouldNotifyRun(run) {
+	// Release post-processing ownership before any external SMTP operation.
+	// Notification availability and latency can therefore never decide backup
+	// validity or keep the generation/retention lease occupied.
+	releaseContext, releaseCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	releaseErr := store.ReleaseJob(releaseContext, job.ID, owner)
+	releaseCancel()
+	releaseConfirmed := releaseErr == nil || errors.Is(releaseErr, ErrJobLeaseLost)
+	if releaseConfirmed {
+		leaseHeld = false
+	}
+	if notify != nil && releaseConfirmed && job.Notification.ShouldNotifyRun(run) {
 		reportEvent(ProgressEvent{Phase: "notification", Message: "sending email notification"})
 		run.NotificationAttempted = true
 		attemptContext, cancelAttempt := context.WithTimeout(context.Background(), 5*time.Second)
@@ -408,9 +497,49 @@ func executeClaimedJobWithProgressAndNotifier(parent context.Context, store *Sto
 		}
 	}
 	if runErr != nil {
+		if postProcessingErr != nil || releaseErr != nil {
+			return run, errors.Join(runErr, postProcessingErr, releaseErr)
+		}
 		return run, runErr
 	}
+	if postProcessingErr != nil {
+		if releaseErr != nil {
+			return run, errors.Join(fmt.Errorf("backup was durably recorded, but post-processing ownership was lost: %w", postProcessingErr), releaseErr)
+		}
+		return run, fmt.Errorf("backup was durably recorded, but post-processing ownership was lost: %w", postProcessingErr)
+	}
+	if releaseErr != nil {
+		return run, fmt.Errorf("backup completed, but release backup-job lease after post-processing: %w", releaseErr)
+	}
 	return run, nil
+}
+
+const maximumBackupPostProcessingTimeout = 24 * time.Hour
+
+// backupPostProcessingTimeout gives each configured after-success copy its own
+// transfer timeout plus one producer timeout for retention. The hard ceiling
+// prevents a crashed agent from leaving an unexpectedly multi-day lease.
+func backupPostProcessingTimeout(job Job, copies []CopyJob) time.Duration {
+	minutes := job.TimeoutMinutes
+	if minutes < 1 {
+		minutes = DefaultTimeoutMinutes
+	}
+	budget := time.Duration(minutes) * time.Minute
+	for _, copyJob := range copies {
+		copyMinutes := copyJob.TimeoutMinutes
+		if copyMinutes < 1 {
+			copyMinutes = DefaultTimeoutMinutes
+		}
+		copyBudget := time.Duration(copyMinutes) * time.Minute
+		if budget >= maximumBackupPostProcessingTimeout-copyBudget {
+			return maximumBackupPostProcessingTimeout
+		}
+		budget += copyBudget
+	}
+	if budget > maximumBackupPostProcessingTimeout {
+		return maximumBackupPostProcessingTimeout
+	}
+	return budget
 }
 
 func progressFromEmitter(emit func(string)) ProgressFunc {

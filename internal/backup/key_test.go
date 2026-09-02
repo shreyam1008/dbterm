@@ -52,3 +52,47 @@ func TestGenerateAgeIdentityRejectsEmptyPath(t *testing.T) {
 		t.Fatalf("GenerateAgeIdentity() error = %v, want required-path error", err)
 	}
 }
+
+func TestVerifyAgeIdentityRecipient(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "identity.txt")
+	recipient, err := GenerateAgeIdentity(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := VerifyAgeIdentityRecipient(path, recipient); err != nil {
+		t.Fatalf("VerifyAgeIdentityRecipient() error = %v", err)
+	}
+}
+
+func TestVerifyAgeIdentityRecipientRejectsDifferentIdentityWithoutLeakingSecret(t *testing.T) {
+	firstPath := filepath.Join(t.TempDir(), "first.txt")
+	firstRecipient, err := GenerateAgeIdentity(firstPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondPath := filepath.Join(t.TempDir(), "second.txt")
+	if _, err := GenerateAgeIdentity(secondPath); err != nil {
+		t.Fatal(err)
+	}
+	secret, err := os.ReadFile(secondPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = VerifyAgeIdentityRecipient(secondPath, firstRecipient)
+	if err == nil || !strings.Contains(err.Error(), "does not match") {
+		t.Fatalf("VerifyAgeIdentityRecipient() error = %v, want mismatch", err)
+	}
+	for _, line := range strings.Split(string(secret), "\n") {
+		if strings.HasPrefix(line, "AGE-SECRET-KEY-") && strings.Contains(err.Error(), line) {
+			t.Fatalf("VerifyAgeIdentityRecipient() exposed private identity: %v", err)
+		}
+	}
+}
+
+func TestVerifyAgeIdentityRecipientRejectsInvalidRecipientWithoutEchoingIt(t *testing.T) {
+	const invalid = "not-an-age-recipient-secret-marker"
+	err := VerifyAgeIdentityRecipient("unused", invalid)
+	if err == nil || strings.Contains(err.Error(), invalid) {
+		t.Fatalf("VerifyAgeIdentityRecipient() error = %v, want redacted invalid-recipient error", err)
+	}
+}

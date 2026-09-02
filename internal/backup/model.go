@@ -113,6 +113,7 @@ type Job struct {
 	CompressionLevel int               `json:"compression_level"`
 	Encryption       Encryption        `json:"encryption"`
 	AgeRecipient     string            `json:"age_recipient,omitempty"`
+	FileSets         []FileSet         `json:"file_sets,omitempty"`
 	Schedule         Schedule          `json:"schedule"`
 	Retention        Retention         `json:"retention"`
 	Notification     EmailNotification `json:"notification,omitempty"`
@@ -201,6 +202,9 @@ func (j *Job) ApplyDefaults(now time.Time) error {
 	if j.Encryption == "" {
 		j.Encryption = EncryptionNone
 	}
+	if err := normalizeJobFileSets(j.FileSets); err != nil {
+		return err
+	}
 	if j.TimeoutMinutes <= 0 {
 		j.TimeoutMinutes = DefaultTimeoutMinutes
 	}
@@ -260,6 +264,9 @@ func (j Job) Validate() error {
 		}
 	default:
 		return fmt.Errorf("unsupported encryption %q", j.Encryption)
+	}
+	if err := validateJobFileSets(j.FileSets); err != nil {
+		return err
 	}
 	if j.Retention.KeepLast < 0 || j.Retention.MaxAgeDays < 0 || j.Retention.MaxTotalBytes < 0 {
 		return fmt.Errorf("retention values cannot be negative")

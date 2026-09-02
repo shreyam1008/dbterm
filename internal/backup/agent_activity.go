@@ -24,13 +24,21 @@ type agentActivityRecorder struct {
 }
 
 func newAgentActivityRecorder(store *Store, job Job, run Run) *agentActivityRecorder {
+	return newAgentActivityRecorderValues(store, job.ID, job.Name, run.ID, run.StartedAt)
+}
+
+func newCopyAgentActivityRecorder(store *Store, job CopyJob, run CopyRun) *agentActivityRecorder {
+	return newAgentActivityRecorderValues(store, job.ID, "Copy: "+job.Name, run.ID, run.StartedAt)
+}
+
+func newAgentActivityRecorderValues(store *Store, jobID, jobName, runID string, startedAt time.Time) *agentActivityRecorder {
 	return &agentActivityRecorder{
 		store: store,
 		base: AgentActivity{
-			JobID:     job.ID,
-			JobName:   job.Name,
-			RunID:     run.ID,
-			StartedAt: run.StartedAt.UTC(),
+			JobID:     jobID,
+			JobName:   jobName,
+			RunID:     runID,
+			StartedAt: startedAt.UTC(),
 		},
 	}
 }

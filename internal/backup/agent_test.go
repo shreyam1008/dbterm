@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,6 +14,117 @@ import (
 
 	"github.com/shreyam1008/dbterm/internal/config"
 )
+
+func TestExecuteClaimedJobKeepsLeaseWhileTerminalPostProcessingRuns(t *testing.T) {
+	for _, stage := range []string{"after-success copies", "retention"} {
+		t.Run(stage, func(t *testing.T) {
+			isolateBackupState(t)
+			source := createRunnerSQLiteFixture(t, t.TempDir(), "lease-source.sqlite3")
+			store, err := OpenStore(filepath.Join(t.TempDir(), "backups.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer store.Close()
+			job := runnerSQLiteJob(t.TempDir(), "lease_{run}", "job_post_processing_"+strings.ReplaceAll(stage, " ", "_"))
+			job.TimeoutMinutes = 5
+			if err := store.UpsertJob(context.Background(), &job); err != nil {
+				t.Fatal(err)
+			}
+			const owner = "post-processing-owner"
+			if _, err := store.ClaimJob(context.Background(), job.ID, owner, time.Now().UTC()); err != nil {
+				t.Fatal(err)
+			}
+			connections := &config.Store{Connections: []config.ConnectionConfig{{
+				ID: job.ConnectionID, Name: "lease source", Type: config.SQLite, FilePath: source,
+			}}}
+			entered := make(chan struct{})
+			release := make(chan struct{})
+			released := false
+			defer func() {
+				if !released {
+					close(release)
+				}
+			}()
+			block := func(ctx context.Context) error {
+				close(entered)
+				select {
+				case <-release:
+					return nil
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+			}
+			operations := backupPostProcessingOperations{
+				listAfterSuccess: func(context.Context, *Store, string) ([]CopyJob, error) { return nil, nil },
+				runAfterSuccess: func(ctx context.Context, _ *Store, _ []CopyJob, _ ProgressFunc) error {
+					if stage == "after-success copies" {
+						return block(ctx)
+					}
+					return nil
+				},
+				applyRetention: func(ctx context.Context, _ *Store, _ Job, _ time.Time) ([]string, error) {
+					if stage == "retention" {
+						return nil, block(ctx)
+					}
+					return nil, nil
+				},
+				timeout: func(Job, []CopyJob) time.Duration { return 5 * time.Minute },
+			}
+			type executionResult struct {
+				run Run
+				err error
+			}
+			result := make(chan executionResult, 1)
+			go func() {
+				run, runErr := executeClaimedJobWithPostProcessing(context.Background(), store, connections, job, owner, TriggerManual, nil, nil, operations)
+				result <- executionResult{run: run, err: runErr}
+			}()
+			select {
+			case <-entered:
+			case <-time.After(5 * time.Second):
+				t.Fatal("backup did not reach blocking post-processing stage")
+			}
+
+			history, err := store.ListRuns(context.Background(), job.ID, 1)
+			if err != nil || len(history) != 1 || history[0].Status != RunSucceeded || history[0].FinishedAt.IsZero() {
+				t.Fatalf("terminal backup was not visible during %s: %#v, %v", stage, history, err)
+			}
+			if _, err := store.ClaimJob(context.Background(), job.ID, "competitor", time.Now().UTC()); !errors.Is(err, ErrJobBusy) {
+				t.Fatalf("competing claim during %s = %v, want ErrJobBusy", stage, err)
+			}
+			changed := job
+			changed.Retention.KeepLast++
+			if err := store.UpsertJob(context.Background(), &changed); !errors.Is(err, ErrJobBusy) {
+				t.Fatalf("policy edit during %s = %v, want ErrJobBusy", stage, err)
+			}
+			close(release)
+			released = true
+			select {
+			case completed := <-result:
+				if completed.err != nil || completed.run.Status != RunSucceeded {
+					t.Fatalf("backup completion after %s = %#v, %v", stage, completed.run, completed.err)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("backup did not leave post-processing")
+			}
+			if _, err := store.ClaimJob(context.Background(), job.ID, "competitor", time.Now().UTC()); err != nil {
+				t.Fatalf("backup lease remained held after %s: %v", stage, err)
+			}
+		})
+	}
+}
+
+func TestBackupPostProcessingTimeoutIncludesCopiesAndCaps(t *testing.T) {
+	job := Job{TimeoutMinutes: 5}
+	copies := []CopyJob{{TimeoutMinutes: 10}, {TimeoutMinutes: 20}}
+	if got, want := backupPostProcessingTimeout(job, copies), 35*time.Minute; got != want {
+		t.Fatalf("backupPostProcessingTimeout() = %s, want %s", got, want)
+	}
+	copies = []CopyJob{{TimeoutMinutes: 24 * 60}, {TimeoutMinutes: 24 * 60}}
+	if got := backupPostProcessingTimeout(job, copies); got != maximumBackupPostProcessingTimeout {
+		t.Fatalf("capped backupPostProcessingTimeout() = %s, want %s", got, maximumBackupPostProcessingTimeout)
+	}
+}
 
 func TestExecuteClaimedJobDurablyRecordsArtifactWhenManifestPublicationFails(t *testing.T) {
 	isolateBackupState(t)
@@ -388,6 +500,7 @@ func TestExecuteClaimedJobPersistsNotificationOutcomeAfterTerminalRun(t *testing
 			}}}
 			called := false
 			durableBeforeSMTP := false
+			leaseReleasedBeforeSMTP := false
 			activityVisible := false
 			notifier := func(ctx context.Context, notifiedJob Job, notifiedRun Run) error {
 				called = true
@@ -397,6 +510,13 @@ func TestExecuteClaimedJobPersistsNotificationOutcomeAfterTerminalRun(t *testing
 				}
 				status, healthErr := AgentHealth(ctx, store, time.Now())
 				activityVisible = healthErr == nil && status.Activity != nil && status.Activity.RunID == notifiedRun.ID && status.Activity.Phase == "notification"
+				const smtpObserver = "smtp-observer"
+				if _, claimErr := store.ClaimJob(ctx, job.ID, smtpObserver, time.Now().UTC()); claimErr == nil {
+					leaseReleasedBeforeSMTP = true
+					if releaseErr := store.ReleaseJob(ctx, job.ID, smtpObserver); releaseErr != nil {
+						t.Errorf("release SMTP observer lease: %v", releaseErr)
+					}
+				}
 				return test.notificationErr
 			}
 			var messages []string
@@ -412,8 +532,8 @@ func TestExecuteClaimedJobPersistsNotificationOutcomeAfterTerminalRun(t *testing
 			if called != test.wantCalled {
 				t.Fatalf("notifier called=%t, want %t", called, test.wantCalled)
 			}
-			if test.wantCalled && (!durableBeforeSMTP || !activityVisible) {
-				t.Fatalf("before-SMTP state: durable=%t activity=%t", durableBeforeSMTP, activityVisible)
+			if test.wantCalled && (!durableBeforeSMTP || !leaseReleasedBeforeSMTP || !activityVisible) {
+				t.Fatalf("before-SMTP state: durable=%t lease-released=%t activity=%t", durableBeforeSMTP, leaseReleasedBeforeSMTP, activityVisible)
 			}
 			history, err := store.ListRuns(context.Background(), job.ID, 10)
 			if err != nil || len(history) != 1 {

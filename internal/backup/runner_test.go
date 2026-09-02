@@ -716,3 +716,21 @@ func TestCredentialFilesRejectRecordBreakingValues(t *testing.T) {
 		t.Fatal("MySQL option file accepted a password containing NUL")
 	}
 }
+
+func TestArtifactFilenameIsPortableAcrossSupportedOperatingSystems(t *testing.T) {
+	valid := []string{"orders_20260903.sql.zst", "prod.dbterm.zst.age", "报告.sqlite3"}
+	for _, name := range valid {
+		if err := validateExactArtifactFilename(name); err != nil {
+			t.Errorf("portable filename %q rejected: %v", name, err)
+		}
+	}
+	invalid := []string{
+		"CON.sql", "prn.sqlite3", "AUX.dbterm.zst", "nul", "COM1.zip", "lpt9.age",
+		"orders:latest.sql", "orders?.sql", "orders.sql.", "orders.sql ", "orders\x1f.sql",
+	}
+	for _, name := range invalid {
+		if err := validateExactArtifactFilename(name); err == nil {
+			t.Errorf("non-portable filename %q was accepted", name)
+		}
+	}
+}

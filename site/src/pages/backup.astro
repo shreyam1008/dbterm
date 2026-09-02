@@ -1,9 +1,9 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 
-const title = "Database Backup Scheduler for PostgreSQL, MySQL, SQLite & D1 | dbterm";
+const title = "Verified Database Backups, Push, Pull & Restore | dbterm";
 const description =
-  "Schedule verified PostgreSQL, MySQL, SQLite, Turso and Cloudflare D1 backups from a fast terminal UI, with native services, encryption, retention, alerts and guarded restore.";
+  "Create verified full database backups, add safe application-file bundles, and keep independent local, SFTP, or rclone-pulled recovery copies with age encryption and guarded restore.";
 const baseUrl = import.meta.env.BASE_URL;
 const withBase = (path: string) => {
   const trimmedBase = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
@@ -14,55 +14,55 @@ const withBase = (path: string) => {
 const safeguards = [
   {
     marker: "01",
-    title: "Native dump, live signal",
-    body: "Use official PostgreSQL/MySQL clients, a consistent SQLite snapshot, a transaction-backed Turso dump, or Cloudflare's native D1 export. Watch phase and byte progress without loading the dump into RAM."
+    title: "Full native recovery point",
+    body: "Use official PostgreSQL/MySQL clients, a consistent SQLite snapshot, a transaction-backed Turso dump, or Cloudflare's native D1 export. Database snapshots are full by default."
   },
   {
     marker: "02",
-    title: "Local or mounted storage",
-    body: "Use an absolute local folder or an OS-mounted volume. dbterm checks local capacity and keeps publication on a filesystem where create-only finalization can be enforced."
+    title: "Files travel together",
+    body: "Add required or optional application folders. A dbterm bundle keeps only relative paths, refuses links and escapes, and records omissions or changed files visibly."
   },
   {
     marker: "03",
-    title: "Bounded retention",
-    body: "Combine latest-count, maximum-age and total-byte ceilings. Oldest eligible artifacts are pruned; the newest success and changed files stay protected."
+    title: "Copy health is separate",
+    body: "A failed push or pull does not rewrite a valid local backup as failed. See each copy's lag, verification, throughput, history and retention independently."
   },
   {
     marker: "04",
-    title: "Failure reaches you",
-    body: "Send email on failure, success, or both. Gmail defaults are ready for an app password; custom SMTP, STARTTLS and implicit TLS remain configurable."
+    title: "Recovery key proven",
+    body: "Compress first, optionally encrypt final bytes with age X25519, and keep only the public recipient in a job. Keycheck proves the separate identity before disaster day."
   },
   {
     marker: "05",
-    title: "OS-supervised",
-    body: "Choose a no-admin desktop registration or an elevated boot-time server registration. Inspect startup, runtime, PID, uptime, memory, heartbeat and bounded logs separately."
+    title: "Disk identity, not hope",
+    body: "Opt into a sentinel check for mounted storage. The managed-linux-block-device mode adds UUID and filesystem verification, with deployment-specific narrow privileges—never automatic format or repair."
   },
   {
     marker: "06",
     title: "Restore is a separate gate",
-    body: "Inspect wrappers and database format from content, match the destination engine, preview warnings and require explicit consent before a restore begins."
+    body: "Inspect wrappers, manifests, database format and file sets from content, match the destination engine, then require explicit database and file-target consent."
   }
 ];
 
 const pipeline = [
   ["01", "Stage", "Create the engine-native dump inside dbterm's private state, never directly in the destination."],
   ["02", "Verify", "Check that the dump is non-empty and structurally consistent with the expected engine format."],
-  ["03", "Wrap", "Apply gzip, ZIP, or single-worker zstd compression and optional age X25519 encryption."],
+  ["03", "Bundle + wrap", "Optionally add guarded file sets, then apply gzip, ZIP, or zstd compression and optional age X25519 encryption."],
   ["04", "Publish", "Calculate SHA-256, sync, and publish the artifact plus portable manifest without replacing an existing file."],
-  ["05", "Retain", "Record history, apply count/age/size ceilings conservatively, and deliver the configured notification."]
+  ["05", "Copy + retain", "Trigger independent copies, keep their health separate, then record the outcome and apply destination-owned retention."]
 ];
 
 const routes = [
-  ["Local database", "Local folder", "Local → local"],
-  ["Local database", "OS-mounted volume", "Local → mounted"],
-  ["Remote / cloud database", "Local folder", "Remote → local"],
-  ["Remote / cloud database", "OS-mounted volume", "Remote → mounted"]
+  ["Backup job", "Local / mounted recovery point", "Full snapshot"],
+  ["Producer agent", "Local or pinned SFTP vault", "Push"],
+  ["Vault agent", "Local or pinned SFTP producer", "Pull"],
+  ["Vault agent", "rclone source → local vault", "rclone pull"]
 ];
 
 const faq = [
   {
     q: "Can I back up an AWS or other remote database to my machine?",
-    a: "Yes. Save a reachable PostgreSQL, MySQL, Turso, or Cloudflare D1 connection, then choose an absolute local folder or OS-mounted volume. New rclone generation is disabled until the independent copy layer can meet dbterm's no-overwrite contract."
+    a: "Yes. Save a reachable PostgreSQL, MySQL, Turso, or Cloudflare D1 connection, then create its full recovery point in an absolute local folder or OS-mounted volume. An independent copy job can move completed artifacts afterward."
   },
   {
     q: "Does the TUI have to stay open?",
@@ -71,6 +71,14 @@ const faq = [
   {
     q: "Will retention delete files I placed in the folder myself?",
     a: "No. Retention only considers successful artifacts recorded for that job, contained by its destination and unchanged from their recorded identity, size and checksum."
+  },
+  {
+    q: "Are pull copies incremental database backups?",
+    a: "No. dbterm creates full database recovery points by default. Pull and push transfer only completed artifacts missing at the destination; that is incremental network work, not WAL/binlog capture or point-in-time recovery."
+  },
+  {
+    q: "Can it use SCP or push through rclone?",
+    a: "No. ssh:// is only an alias for pinned SFTP; dbterm never opens an SCP shell. rclone is supported as a pull source, but rclone push stays disabled because create-only finalization cannot be guaranteed uniformly."
   }
 ];
 
@@ -101,19 +109,19 @@ const jsonLd = [
 <BaseLayout title={title} description={description} jsonLd={jsonLd} markdownUrl={withBase("/backup.md")}>
   <section class="border-b border-[var(--line)] py-16 sm:py-20 lg:py-24">
     <div class="site-container grid items-center gap-12 lg:grid-cols-[minmax(0,.92fr)_minmax(430px,1.08fr)] lg:gap-16">
-      <div>
-        <p class="mb-4 font-mono text-[.68rem] font-semibold tracking-[.14em] text-[var(--brand-strong)] uppercase">Backup Center · Ctrl B from a saved connection</p>
-        <h1 class="max-w-[11ch] text-[clamp(3.2rem,7vw,6.5rem)] leading-[.9] tracking-[-.07em]">Backups that keep running.</h1>
-        <p class="mt-6 max-w-xl text-lg leading-relaxed text-[var(--ink-soft)]">Choose an existing saved connection or add one, then set the destination and time. dbterm handles verification, wrapping, retention, history and alerts.</p>
+      <div class="min-w-0">
+        <p class="mb-4 max-w-full break-words font-mono text-[.68rem] font-semibold tracking-[.11em] text-[var(--brand-strong)] uppercase sm:tracking-[.14em]">Backup Center · Ctrl B from a saved connection</p>
+        <h1 class="max-w-[11ch] text-[clamp(3.2rem,7vw,6.5rem)] leading-[.9] tracking-[-.055em] sm:tracking-[-.07em]">Backups that keep running.</h1>
+        <p class="mt-6 max-w-xl text-lg leading-relaxed text-[var(--ink-soft)]">Create a verified full database recovery point, optionally bundle application files, then keep local, pushed, or vault-pulled copies on independent schedules.</p>
         <div class="mt-7 flex flex-wrap gap-3">
           <a class="button primary" href={withBase('/#install')}>Install dbterm</a>
           <a class="button outline" href={withBase('/guide/#back-up-and-restore-databases')}>Read setup guide</a>
         </div>
-        <p class="mt-5 font-mono text-[.68rem] text-[var(--ink-faint)]">Alt+B instant · Alt+K then N scheduled · Dashboard Ctrl+B preselected</p>
-        <p class="mt-2 font-mono text-[.68rem] text-[var(--ink-faint)]">PostgreSQL · MySQL / MariaDB · SQLite · Turso · Cloudflare D1</p>
+        <p class="mt-5 max-w-full break-words font-mono text-[.68rem] text-[var(--ink-faint)]">Alt+B instant · Alt+K plans · C copies · daily 01:00 + 13:00</p>
+        <p class="mt-2 max-w-full break-words font-mono text-[.68rem] text-[var(--ink-faint)]">PostgreSQL · MySQL / MariaDB · SQLite · Turso · Cloudflare D1</p>
       </div>
 
-      <div class="overflow-hidden rounded-2xl border border-[#45475a] bg-[#181825] text-[#cdd6f4] shadow-[var(--shadow-lg)]" aria-label="Backup Center live progress example">
+      <div class="min-w-0 overflow-hidden rounded-2xl border border-[#45475a] bg-[#181825] text-[#cdd6f4] shadow-[var(--shadow-lg)]" aria-label="Backup Center live progress example">
         <div class="flex items-center justify-between gap-4 border-b border-[#313244] px-5 py-3 font-mono text-[.65rem]">
           <span class="text-[#a6e3a1]">● prod-postgres · running</span>
           <span class="text-[#6c7086]">run_8f4a21</span>
@@ -129,10 +137,10 @@ const jsonLd = [
           </div>
         </div>
         <div class="grid border-t border-[#313244] text-sm sm:grid-cols-2">
-          <div class="border-b border-[#313244] p-5 sm:border-r sm:border-b-0"><span class="font-mono text-[.61rem] text-[#6c7086]">DESTINATION</span><p class="mt-2 mb-1 text-white">/mnt/db-backups</p><small class="text-[#a6adc8]">NVMe volume · 284 GiB free</small></div>
-          <div class="p-5"><span class="font-mono text-[.61rem] text-[#6c7086]">AGENT</span><p class="mt-2 mb-1 text-white">systemd system · PID 2418</p><small class="text-[#a6adc8]">up 3d 8h · ≈13 MiB RSS</small></div>
+          <div class="border-b border-[#313244] p-5 sm:border-r sm:border-b-0"><span class="font-mono text-[.61rem] text-[#6c7086]">RECOVERY COPIES</span><p class="mt-2 mb-1 text-white">Local verified · vault pull healthy</p><small class="text-[#a6adc8]">2 copies · SHA-256 + format</small></div>
+          <div class="p-5"><span class="font-mono text-[.61rem] text-[#6c7086]">AGENT</span><p class="mt-2 mb-1 text-white">systemd system · PID 2418</p><small class="text-[#a6adc8]">next backup 13:00 · pull 14:30</small></div>
         </div>
-        <div class="border-t border-[#313244] bg-[#11111b] px-5 py-3 font-mono text-[.64rem] text-[#a6adc8]">zstd 3 + age X25519 · next: publish → prune → notify</div>
+        <div class="border-t border-[#313244] bg-[#11111b] px-5 py-3 font-mono text-[.64rem] text-[#a6adc8]">zstd 3 + age X25519 · next: manifest → push/pull → retain</div>
       </div>
     </div>
   </section>
@@ -140,10 +148,11 @@ const jsonLd = [
   <section class="border-b border-[var(--line)] bg-[var(--brand-pale)] py-16 sm:py-20" aria-labelledby="routing-title">
     <div class="site-container grid gap-12 lg:grid-cols-[.8fr_1.2fr] lg:gap-16">
       <div>
-        <p class="mb-3 font-mono text-[.68rem] font-semibold tracking-[.14em] text-[var(--brand-strong)] uppercase">Source and destination are independent</p>
-        <h2 id="routing-title" class="text-[clamp(2.3rem,5vw,4.2rem)] leading-none tracking-[-.055em]">Local and remote sources, safely published.</h2>
-        <p class="mt-5 leading-relaxed text-[var(--ink-soft)]">The database may be on this machine or across the network. The completed artifact and portable manifest publish to an absolute local folder or OS-mounted volume.</p>
-        <p class="mt-5 text-sm leading-relaxed text-[var(--ink-soft)]">New <code>rclone://</code> generation jobs fail closed: generic rclone finalization cannot enforce atomic create-only publication across every backend. Existing remote history remains visible for migration.</p>
+        <p class="mb-3 font-mono text-[.68rem] font-semibold tracking-[.14em] text-[var(--brand-strong)] uppercase">Generation and transfer are independent</p>
+        <h2 id="routing-title" class="text-[clamp(2.3rem,5vw,4.2rem)] leading-none tracking-[-.055em]">One backup. The right copy owner.</h2>
+        <p class="mt-5 leading-relaxed text-[var(--ink-soft)]">The producer first publishes a verified artifact and portable manifest locally. It can push immediately, or a vault can pull later when credentials and storage must stay on the receiving side.</p>
+        <p class="mt-5 text-sm leading-relaxed text-[var(--ink-soft)]">Local and pinned SFTP push/pull are supported; a vault can also pull from <code>rclone://</code>. <code>ssh://</code> means SFTP, not SCP. rclone push is disabled because safe create-only finalization is not uniform across providers.</p>
+        <code class="mt-6 block overflow-x-auto rounded-lg bg-[var(--surface)] p-4 text-xs leading-6 text-[var(--ink)]">dbterm backup copy create --name vault-pull --mode pull --source sftp://backup@producer/archives --destination /mnt/vault --identity /etc/dbterm/vault-ed25519 --host-key SHA256:... --trigger timed --at 02:30 --at 14:30 --timezone Asia/Kolkata</code>
       </div>
       <div class="grid overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)] sm:grid-cols-2">
         {routes.map(([source, destination, label]) => (
@@ -173,6 +182,7 @@ const jsonLd = [
           </li>
         ))}
       </ol>
+      <p class="mt-6 max-w-4xl text-sm leading-relaxed text-[var(--ink-soft)]">The sidecar manifest—not filename age—is the publication signal. Copy jobs find every missing completed artifact and move them oldest-first. That reduces repeated transfer work; it is not an incremental database format or point-in-time recovery.</p>
     </div>
   </section>
 
@@ -206,7 +216,7 @@ const jsonLd = [
       <article class="rounded-xl border border-[var(--line)] bg-[var(--surface-raised)] p-6 sm:p-8">
         <p class="font-mono text-[.65rem] font-semibold text-[var(--brand-strong)] uppercase">Server / system</p>
         <h2 class="mt-3 text-3xl tracking-[-.05em]">Starts at boot.</h2>
-        <p class="mt-4 text-[var(--ink-soft)]">Choose system scope explicitly for an unattended machine. dbterm explains the required elevation and keeps using the selected config, state and log paths.</p>
+        <p class="mt-4 text-[var(--ink-soft)]">Choose system scope explicitly for an unattended machine. <code>managed-linux-block-device</code> is separately opt-in: exact UUID, filesystem and sentinel checks, with deployment-specific narrow host privileges and hardware setup.</p>
         <code class="mt-6 block overflow-x-auto rounded-lg bg-[var(--bg-deep)] p-4 text-sm text-[var(--ink)]">dbterm backup service status --all</code>
       </article>
     </div>
@@ -217,18 +227,23 @@ const jsonLd = [
       <div>
         <p class="mb-3 font-mono text-[.68rem] font-semibold tracking-[.14em] text-[var(--brand-strong)] uppercase">Recovery, not hope</p>
         <h2 class="text-[clamp(2.5rem,5vw,4.6rem)] leading-none tracking-[-.06em]">Know what the file is first.</h2>
-        <p class="mt-5 leading-relaxed text-[var(--ink-soft)]">Extensions are hints. dbterm unwraps supported compression and age layers, detects the database format from bytes, verifies engine compatibility and previews the restore plan.</p>
+        <p class="mt-5 leading-relaxed text-[var(--ink-soft)]">Extensions are hints. dbterm unwraps supported compression, age, and bundle layers, validates portable manifests, lists file sets, detects the database format from bytes, and previews the restore plan.</p>
       </div>
       <div class="rounded-xl border border-[var(--line)] bg-[var(--bg-deep)] p-5 text-[var(--ink)] shadow-sm sm:p-6">
-        <pre class="m-0 overflow-x-auto font-mono text-[.72rem] leading-7"><code>dbterm backup inspect \
+        <pre class="m-0 overflow-x-auto font-mono text-[.72rem] leading-7"><code>dbterm backup keycheck \
   --identity ./recovery-key.txt \
-  prod.dump.zst.age
+  --recipient age1...
+
+dbterm backup copy inspect vault-copy \
+  --identity ./recovery-key.txt \
+  --artifact artifact_abc
 
 dbterm backup restore \
   --connection staging \
   --identity ./recovery-key.txt \
-  --yes prod.dump.zst.age</code></pre>
-        <p class="mt-5 mb-0 border-t border-[var(--line)] pt-4 text-sm text-[var(--ink-soft)]">Clean mode needs a second exact-name confirmation. Restore support currently targets PostgreSQL, MySQL/MariaDB and local SQLite.</p>
+  --restore-files photos=/srv/restored/photos \
+  --yes prod.dbterm.zst.age</code></pre>
+        <p class="mt-5 mb-0 border-t border-[var(--line)] pt-4 text-sm text-[var(--ink-soft)]">Database-only restore is the default. Every bundle file set needs an explicit absolute target; existing files stay untouched unless overwrite is selected. Clean database mode needs a second exact-name confirmation.</p>
       </div>
     </div>
   </section>

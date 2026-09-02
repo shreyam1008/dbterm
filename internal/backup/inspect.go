@@ -47,6 +47,7 @@ const (
 	FormatSQLiteDatabase Format = "sqlite_database"
 	FormatSQLiteSQL      Format = "sqlite_sql"
 	FormatGenericSQL     Format = "generic_sql"
+	FormatDBTermBundle   Format = "dbterm_bundle"
 	FormatUnknown        Format = "unknown"
 )
 
@@ -68,18 +69,20 @@ const (
 )
 
 type Inspection struct {
-	Path          string
-	Size          int64
-	SHA256        string
-	Manifest      *ArtifactManifest
-	Wrappers      []Wrapper
-	Format        Format
-	Engine        config.DBType
-	Confidence    string
-	Evidence      []string
-	Warnings      []string
-	Locked        bool
-	RequiredTools []string
+	Path           string
+	Size           int64
+	SHA256         string
+	Manifest       *ArtifactManifest
+	Wrappers       []Wrapper
+	Format         Format
+	DatabaseFormat Format
+	Engine         config.DBType
+	Confidence     string
+	Evidence       []string
+	Warnings       []string
+	Locked         bool
+	RequiredTools  []string
+	FileSets       []ManifestFileSet
 }
 
 type InspectOptions struct {
@@ -88,10 +91,12 @@ type InspectOptions struct {
 }
 
 type payloadSource struct {
-	file      *os.File
-	path      string
-	size      int64
-	temporary bool
+	file             *os.File
+	path             string
+	size             int64
+	temporary        bool
+	restoreStageRoot string
+	restoreFiles     []stagedRestoreFile
 }
 
 func (s *payloadSource) cleanup() {
@@ -103,6 +108,9 @@ func (s *payloadSource) cleanup() {
 	}
 	if s.temporary && s.path != "" {
 		_ = os.Remove(s.path)
+	}
+	if s.restoreStageRoot != "" {
+		_ = os.RemoveAll(s.restoreStageRoot)
 	}
 }
 
@@ -179,6 +187,12 @@ func Inspect(ctx context.Context, path string, opts InspectOptions) (*Inspection
 			return nil, fmt.Errorf("artifact completion manifest does not match %s: %w", resolved, err)
 		}
 		result.Manifest = manifest
+		result.Warnings = append(result.Warnings, manifest.Warnings...)
+		for _, fileSet := range manifest.FileSets {
+			if fileSet.Consistency == FileSetConsistencyBestEffort {
+				result.FileSets = append(result.FileSets, fileSet)
+			}
+		}
 		result.Evidence = append(result.Evidence, "dbterm completion manifest v1 matches the artifact size and SHA-256")
 	}
 
@@ -230,9 +244,28 @@ func Inspect(ctx context.Context, path string, opts InspectOptions) (*Inspection
 		current = next
 	}
 
-	format, engine, confidence, evidence, warnings, err := detectPayload(ctx, current)
+	bundle, isBundle, err := inspectDBTermBundle(ctx, current, maxDecoded)
 	if err != nil {
 		return nil, err
+	}
+	var format, databaseFormat Format
+	var engine config.DBType
+	var confidence string
+	var evidence, warnings []string
+	if isBundle {
+		format = FormatDBTermBundle
+		databaseFormat = bundle.databaseFormat
+		engine = bundle.engine
+		confidence = bundle.confidence
+		evidence = bundle.evidence
+		warnings = bundle.warnings
+		result.FileSets = bundle.fileSets
+	} else {
+		format, engine, confidence, evidence, warnings, err = detectPayload(ctx, current)
+		if err != nil {
+			return nil, err
+		}
+		databaseFormat = format
 	}
 	if !current.temporary {
 		if err := verifyOpenedFileUnchanged(current.file, openedInfo, resolved); err != nil {
@@ -240,11 +273,12 @@ func Inspect(ctx context.Context, path string, opts InspectOptions) (*Inspection
 		}
 	}
 	result.Format = format
+	result.DatabaseFormat = databaseFormat
 	result.Engine = engine
 	result.Confidence = confidence
 	result.Evidence = append(result.Evidence, evidence...)
 	result.Warnings = append(result.Warnings, warnings...)
-	result.RequiredTools = requiredToolsFor(format)
+	result.RequiredTools = requiredToolsFor(databaseFormat)
 	if err := verifyInspectionManifestDescription(result); err != nil {
 		return nil, err
 	}
@@ -830,6 +864,8 @@ func extensionMatchesFormat(ext string, format Format) bool {
 		return ext == ".sql"
 	case FormatSQLiteDatabase:
 		return ext == ".sqlite" || ext == ".sqlite3" || ext == ".db" || ext == ".db3"
+	case FormatDBTermBundle:
+		return ext == ".dbterm"
 	default:
 		return true
 	}

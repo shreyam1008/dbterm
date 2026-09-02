@@ -357,6 +357,38 @@ func TestParseRestoreMode(t *testing.T) {
 	}
 }
 
+func TestParseRestoreFileSetTargets(t *testing.T) {
+	targets, err := parseRestoreFileSetTargets([]string{" photos = /restore/photos ", `documents=D:\Restore\Documents`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(targets) != 2 || targets[0].Label != "photos" || targets[0].Root != "/restore/photos" ||
+		targets[1].Label != "documents" || targets[1].Root != `D:\Restore\Documents` {
+		t.Fatalf("targets = %#v", targets)
+	}
+	for _, invalid := range [][]string{{"photos"}, {"=folder"}, {"photos="}} {
+		if _, err := parseRestoreFileSetTargets(invalid); err == nil {
+			t.Errorf("parseRestoreFileSetTargets(%q) succeeded", invalid)
+		}
+	}
+}
+
+func TestRestoreFileSetBytesFromGiB(t *testing.T) {
+	got, err := restoreFileSetBytesFromGiB(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != 10<<30 {
+		t.Fatalf("restoreFileSetBytesFromGiB(10) = %d", got)
+	}
+	if _, err := restoreFileSetBytesFromGiB(0); err == nil {
+		t.Fatal("restoreFileSetBytesFromGiB(0) succeeded")
+	}
+	if _, err := restoreFileSetBytesFromGiB(uint64(math.MaxInt64)/(1<<30) + 1); err == nil {
+		t.Fatal("restoreFileSetBytesFromGiB accepted overflow")
+	}
+}
+
 func TestValidateRestoreConsent(t *testing.T) {
 	merge := &backupcore.RestorePlan{
 		Target:  config.ConnectionConfig{Type: config.PostgreSQL, Database: "appdb"},

@@ -59,19 +59,20 @@ type App struct {
 
 	// Backup Center keeps its original caller across internal refreshes and
 	// nested forms so Esc returns to the exact panel that opened it.
-	backupCenterReturnPage  string
-	backupCenterReturnFocus tview.Primitive
-	backupCenterSelectedJob string
-	profilerReturnPage      string
-	profilerReturnFocus     tview.Primitive
-	profilerSelectedAnchor  string
-	profilerAnchorID        string
-	profilerTableChanges    map[string]profiler.TableSummary
-	helpReturnPage          string
-	helpReturnFocus         tview.Primitive
-	dbType                  config.DBType
-	dbName                  string // name of current connection (from config)
-	activeConn              *config.ConnectionConfig
+	backupCenterReturnPage   string
+	backupCenterReturnFocus  tview.Primitive
+	backupCenterSelectedJob  string
+	backupCenterSelectedCopy string
+	profilerReturnPage       string
+	profilerReturnFocus      tview.Primitive
+	profilerSelectedAnchor   string
+	profilerAnchorID         string
+	profilerTableChanges     map[string]profiler.TableSummary
+	helpReturnPage           string
+	helpReturnFocus          tview.Primitive
+	dbType                   config.DBType
+	dbName                   string // name of current connection (from config)
+	activeConn               *config.ConnectionConfig
 
 	// Main UI components
 	tables                *tview.List
@@ -1076,7 +1077,7 @@ func (a *App) setupKeyBindings() {
 		// Loading overlays own the keyboard until they finish or Esc cancels.
 		// This prevents a background completion from stealing focus from a
 		// page opened on top of the operation.
-		if page == "loading" || page == instantBackupPage || page == pageBackupForm || page == pageBackupConnectionPicker || page == pageImportProgressModal || page == pageResultExport || page == pageResultExportProgress {
+		if page == "loading" || page == instantBackupPage || page == pageBackupForm || page == pageBackupConnectionPicker || page == pageBackupCopies || page == pageBackupCopyForm || page == pageBackupCopyHistory || page == pageBackupCopyRetention || page == pageBackupCopyInspect || page == pageBackupFileSets || page == pageBackupFileSetForm || page == pageBackupFileSetDelete || page == pageImportProgressModal || page == pageResultExport || page == pageResultExportProgress {
 			return event
 		}
 

@@ -113,13 +113,18 @@ dbterm keeps one connection profile for the signed-in OS user. Run the TUI norma
 | `dbterm --uninstall` | Remove binary with confirmation |
 | `dbterm --uninstall --yes` | Remove binary without prompt |
 | `dbterm --uninstall --purge` | Remove binary + dbterm-owned config, state, and logs; chosen backup artifacts stay |
-| `dbterm backup --help` | Backup jobs, agent, inspection, encryption keys, and paths |
+| `dbterm backup --help` | Backup jobs, independent copies, file sets, agent, inspection, encryption keys, and paths |
 | `dbterm backup create …` | Run an instant headless backup from a saved connection |
 | `dbterm backup run <job>` | Run a configured job now |
+| `dbterm backup files add … <job>` | Add a guarded application-folder file set to future backup bundles |
+| `dbterm backup copy create …` | Define a local, producer-push, or vault-pull copy policy |
+| `dbterm backup copy test / run / status <copy>` | Test, transfer, and inspect copy health independently of backup health |
+| `dbterm backup copy inspect <copy>` | Privately stage and inspect a verified copied recovery point |
 | `dbterm backup prune --yes <job>` | Enforce count/age/size retention immediately |
 | `dbterm backup notify-test <job>` | Send a test message with a job's SMTP settings |
 | `dbterm backup inspect <file>` | Detect wrappers and database format from file contents |
 | `dbterm backup restore --connection <target> --yes <file>` | Inspect, review, and restore into a saved target |
+| `dbterm backup keycheck --identity <file> --recipient <age1…>` | Prove that a separately stored age identity matches a job recipient |
 | `dbterm backup service install` | Install and start the desktop/user backup agent |
 | `dbterm backup service status --all` | Inspect user and system registrations |
 | `dbterm backup service enable / disable` | Change startup policy without changing the current runtime |
@@ -188,18 +193,49 @@ The portable engine works across every supported database without installing tri
 
 ## Backup Center
 
-For a one-off copy, press `Alt+B` from Tables, Query, or Results; use `F2` for the native folder chooser or type an absolute local/OS-mounted path. `F3` refreshes destination and private-staging capacity. For durable jobs, press `B` on Dashboard or `Alt+K` anywhere. `N` then chooses an existing saved database or lets you add one; `Ctrl+N` adds another database from the plan form. `Ctrl+B` on a highlighted Dashboard connection starts with it preselected. A job binds one saved local or remote connection to:
+For a one-off backup, press `Alt+B` from Tables, Query, or Results; use `F2` for the native folder chooser or type an absolute local/OS-mounted path. `F3` refreshes destination and private-staging capacity. For durable jobs, press `B` on Dashboard or `Alt+K` anywhere. `N` then chooses an existing saved database or lets you add one; `Ctrl+N` adds another database from the plan form. `Ctrl+B` on a highlighted Dashboard connection starts with it preselected.
+
+A backup job creates a full engine-native database recovery point by default. dbterm does not silently configure database-native incremental backup, WAL/binlog archiving, or point-in-time recovery. Copy jobs can transfer only the completed artifacts that a destination is missing, which saves network work but does not turn those full snapshots into incremental database backups.
+
+A backup plan binds one saved local or remote connection to:
 
 - an absolute local or OS-mounted folder, with an optional native GUI folder chooser and local volume/free-space details;
-- manual, interval, daily, or weekly timing with an IANA timezone;
+- manual, interval, daily, or weekly timing with an IANA timezone, including multiple wall-clock times on one daily or weekly plan;
 - a safe filename template using `{job}`, `{connection}`, `{database}`, `{engine}`, `{date}`, `{time}`, `{timestamp}`, and `{run}`;
 - no compression, gzip, ZIP, or single-worker Zstandard with a chosen level;
 - optional interoperable age X25519 encryption (the job stores only the public `age1…` recipient);
 - latest-count, maximum-age, and maximum-total-size retention;
-- optional Gmail-ready or custom SMTP notifications on failure, success, or both; and
+- optional Gmail-ready or custom SMTP notifications on failure, success, or both;
+- zero or more required/optional application-folder file sets with include/exclude patterns; and
 - a timeout, enabled state, next run, live byte/phase progress, last result, SHA-256, notification outcome, and artifact history.
 
-Artifacts are staged privately, validated, synced, and published without replacing an existing file. Retention only removes successful artifacts recorded for that job and still contained by its destination; it keeps the newest success and rechecks identity, size, and checksum before deletion. Use `P` in Backup Center or `backup prune --yes` to enforce a changed policy immediately. Removing dbterm, the agent, or a job never removes unrelated or surviving backup files.
+Database-only plans keep the existing native artifact. Adding file sets creates a self-contained dbterm bundle with the native database artifact and relative file trees. Roots stay private in the producer catalog; symlinks, reparse points, path escapes, and non-regular files are refused. Live folders are captured with best-effort consistency and change detection, not as an atomic application or filesystem snapshot. A required set fails the run if a safe capture cannot be completed, while an optional set is atomically omitted with a portable warning.
+
+Artifacts are staged privately, validated, synced, and published without replacing an existing file. Each successful artifact gets an immutable `.dbterm.json` sidecar containing its stable identity, size, SHA-256, format, producer, creation time, and verification result without connection secrets. Retention only removes successful artifacts recorded for that exact job and still contained by its destination; it keeps the newest success and rechecks identity, size, and checksum before deletion. Use `P` in Backup Center or `backup prune --yes` to enforce a changed policy immediately. Removing dbterm, the agent, or a job never removes unrelated or surviving backup files.
+
+### Independent recovery copies
+
+Backup Center's **Copies** view and `dbterm backup copy` keep generation health separate from transfer health. A valid local backup remains valid when an off-machine copy fails. Every transfer is driven by a completed portable manifest, compares artifact identity and checksum rather than filenames, processes missing recovery points oldest-first, stages privately, verifies SHA-256 and format, and publishes without replacing a completed destination.
+
+- **Local copy:** copy between two absolute local or OS-mounted locations.
+- **Push:** the producer sends a local published artifact to a local destination or pinned SFTP endpoint; a job-bound push may run immediately after backup success.
+- **Pull:** the vault scans a local folder, pinned SFTP source, or `rclone://remote/path`, then stores verified copies locally. This is useful when the producer must not hold vault credentials.
+
+SFTP uses a dedicated unencrypted private identity plus an explicitly pinned `SHA256:...` host-key fingerprint. `ssh://` is accepted only as an alias for the SFTP subsystem; dbterm does not execute SCP or a remote shell. rclone is supported as a pull source, but rclone push is intentionally disabled because generic rclone finalization cannot prove create-only publication across every backend.
+
+```bash
+dbterm backup copy create --name vault-pull --mode pull \
+  --source sftp://backup@producer/archives --destination /mnt/vault \
+  --identity /etc/dbterm/vault-ed25519 --host-key SHA256:... \
+  --trigger timed --at 02:30 --at 14:30 --timezone Asia/Kolkata
+dbterm backup copy test vault-pull
+dbterm backup copy run vault-pull
+dbterm backup copy enable vault-pull
+```
+
+Copy jobs have their own retries, run history, throughput, freshness, retention, email policy, and leases. Backup Center progressively exposes Gmail-ready or custom SMTP/TLS fields and a mail-only delivery test; saved app passwords stay masked and no CLI password flag is provided. Copy jobs are disabled by default so `dbterm backup copy test <copy>` can check the endpoint first; the read-only test does not modify backup files. Automatic triggers remain blocked until a manual `copy run` has transferred and verified a real artifact under the current transport settings. Use `copy prune` without `--yes` for a dry-run, and `copy inspect` to download a remote recovery point into private temporary storage, verify it against its manifest/catalog record, inspect it, and remove the temporary stage.
+
+Local copy destinations can optionally require a volume sentinel with `--volume-mode already-mounted|os-managed`. Linux deployments may opt into `managed-linux-block-device` with an exact filesystem UUID/type and sentinel. Managed mode never formats or repairs a disk, and its mount, unmount, sync, and optional power-off operations require deployment-specific, narrowly scoped host privileges and hardware setup. `copy test` proves only the currently mounted identity; exercise the lifecycle with a supervised manual run before enabling it.
 
 “Catch up missed run” executes one overdue occurrence after sleep/restart; it does not replay every missed interval. When catch-up is off, an occurrence more than two minutes late is skipped and the cadence advances to the next future time.
 
@@ -264,15 +300,16 @@ Generate an age identity once:
 
 ```bash
 dbterm backup keygen
+dbterm backup keycheck --identity ./age-identity.txt --recipient age1...
 ```
 
-Copy the printed public recipient into a job. Keep the private identity separately from off-site backups; it is needed only to inspect or restore encrypted artifacts. dbterm does not store backup passphrases in unattended job configuration.
+Copy the printed public recipient into a job. Keep the private identity separately from off-site backups; it is needed only to inspect or restore encrypted artifacts. `keycheck` encrypts and decrypts a disposable in-memory challenge so you can test that recovery key before depending on it. dbterm does not store backup passphrases in unattended job configuration.
 
 By default, `keygen` writes the private identity under dbterm's config directory. As a recovery safeguard, `--uninstall --purge` refuses to delete a discovered private age identity or backup-like file. Move the identity somewhere safe—or explicitly remove it yourself—before retrying a purge.
 
 ### Inspect and restore
 
-Backup Center → `I` identifies gzip, Zstandard, single-entry ZIP, and age wrappers recursively, then detects PostgreSQL custom/tar/plain SQL, MySQL SQL, SQLite databases, or SQLite SQL from bytes—not the filename. Misleading extensions produce a warning. Locked age files stay “encrypted” until an identity is selected; ambiguous generic SQL is reported but deliberately blocked from restore rather than guessed.
+Backup Center → `I` identifies gzip, Zstandard, single-entry ZIP, age, and dbterm bundle layers recursively, then detects PostgreSQL custom/tar/plain SQL, MySQL SQL, SQLite databases, or SQLite SQL from bytes—not the filename. Bundle inspection also reports each included application file set. Misleading extensions produce a warning. Locked age files stay “encrypted” until an identity is selected; ambiguous generic SQL is reported but deliberately blocked from restore rather than guessed.
 
 Inspection supports at most three nested wrappers. Each decoded layer defaults to a 1 GiB safety cap and is materialized in the OS temporary directory rather than held in memory. Set **Max Decoded GiB** in the TUI or pass `--max-decoded-gib N` to `inspect` and `restore` for a larger trusted backup; ensure the temporary directory has enough free space for the decoded layers.
 
@@ -281,11 +318,14 @@ The same guarded flow is scriptable. Consent is never implied:
 ```bash
 dbterm backup inspect --identity ./age-identity.txt ./prod.dump.zst.age
 dbterm backup restore --connection production --identity ./age-identity.txt --yes ./prod.dump.zst.age
+dbterm backup copy inspect vault-copy --identity ./age-identity.txt
 ```
 
 Clean mode additionally requires `--confirm-clean` with the exact database name (or normalized SQLite path).
 
-Restore is preview-first. The detected engine must match the chosen saved connection. Merge is the default; PostgreSQL clean restore is opt-in and shown as destructive. PostgreSQL restores use transactional official clients where supported. MySQL warns that earlier statements may remain after a failure. SQLite snapshots and SQL dumps restore through a verified staging database while keeping a pre-restore copy; SQL is streamed through the `sqlite3` client after filesystem-escape checks.
+Restore is preview-first. The detected database engine must match the chosen saved connection. Merge is the default; PostgreSQL clean restore is opt-in and shown as destructive. PostgreSQL restores use transactional official clients where supported. MySQL warns that earlier statements may remain after a failure. SQLite snapshots and SQL dumps restore through a verified staging database while keeping a pre-restore copy; SQL is streamed through the `sqlite3` client after filesystem-escape checks.
+
+Bundle file trees are opt-in during restore: repeat `--restore-files LABEL=ABSOLUTE_FOLDER` for the sets you want. Database-only restore remains the default. Existing files are not replaced unless `--overwrite-files` is supplied; file count/byte limits and containment checks apply independently of the database restore.
 
 Restore only files from a source you trust. Content detection, checksum revalidation, engine matching, and client-command guards reduce accidental and client-side escape risk; the SQL itself is still allowed to change the selected database and can invoke server-side behavior permitted to that database account.
 

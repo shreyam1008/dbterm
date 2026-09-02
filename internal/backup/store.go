@@ -15,7 +15,10 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-var ErrJobBusy = errors.New("backup job is already running")
+var (
+	ErrJobBusy      = errors.New("backup job is already running")
+	ErrJobLeaseLost = errors.New("backup job lease was lost")
+)
 
 // missedRunGrace keeps normal scheduler jitter from being mistaken for an
 // agent wake. The default agent polls every 30 seconds, so two minutes allows
@@ -101,7 +104,7 @@ func (s *Store) migrate(ctx context.Context) error {
 			return fmt.Errorf("initialize backup store: %w", err)
 		}
 	}
-	return nil
+	return s.migrateCopyCatalog(ctx)
 }
 
 func (s *Store) UpsertJob(ctx context.Context, job *Job) error {
@@ -133,6 +136,9 @@ func (s *Store) UpsertJob(ctx context.Context, job *Job) error {
 		return fmt.Errorf("begin backup job save: %w", err)
 	}
 	defer tx.Rollback()
+	if err := refuseEnabledDependentCopyDestinationChange(ctx, tx, job); err != nil {
+		return err
+	}
 
 	rows, err := tx.QueryContext(ctx, `SELECT id, name FROM backup_jobs WHERE id <> ? ORDER BY id`, job.ID)
 	if err != nil {
@@ -157,21 +163,61 @@ func (s *Store) UpsertJob(ctx context.Context, job *Job) error {
 		return fmt.Errorf("scan backup job names: %w", err)
 	}
 
-	_, err = tx.ExecContext(ctx, `INSERT INTO backup_jobs
+	result, err := tx.ExecContext(ctx, `INSERT INTO backup_jobs
 		(id, name, connection_id, enabled, next_run_at, lease_owner, lease_until, job_json, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 		name=excluded.name, connection_id=excluded.connection_id, enabled=excluded.enabled,
-		next_run_at=excluded.next_run_at, job_json=excluded.job_json, updated_at=excluded.updated_at`,
+		next_run_at=excluded.next_run_at, job_json=excluded.job_json, updated_at=excluded.updated_at
+		WHERE backup_jobs.lease_until IS NULL OR backup_jobs.lease_until <= ?`,
 		job.ID, job.Name, job.ConnectionID, boolInt(job.Enabled), formatNullableTime(job.NextRunAt), payload,
-		formatTime(job.CreatedAt), formatTime(job.UpdatedAt))
+		formatTime(job.CreatedAt), formatTime(job.UpdatedAt), formatTime(now))
 	if err != nil {
 		return fmt.Errorf("save backup job: %w", err)
+	}
+	updated, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("confirm backup job save: %w", err)
+	}
+	if updated != 1 {
+		return ErrJobBusy
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit backup job save: %w", err)
 	}
 	return nil
+}
+
+// refuseEnabledDependentCopyDestinationChange prevents an after-success (or
+// otherwise linked) copy from silently continuing to read its old,
+// materialized source after its producer is moved. Operators must stop the
+// dependent policy, update and re-prove that route, then enable it again.
+func refuseEnabledDependentCopyDestinationChange(ctx context.Context, tx *sql.Tx, job *Job) error {
+	var payload []byte
+	err := tx.QueryRowContext(ctx, `SELECT job_json FROM backup_jobs WHERE id = ?`, job.ID).Scan(&payload)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("load stored backup destination: %w", err)
+	}
+	var stored Job
+	if err := json.Unmarshal(payload, &stored); err != nil {
+		return fmt.Errorf("decode stored backup destination: %w", err)
+	}
+	if stored.Destination == job.Destination {
+		return nil
+	}
+	var copyID, copyName string
+	err = tx.QueryRowContext(ctx, `SELECT id, name FROM copy_jobs
+		WHERE source_backup_job_id = ? AND enabled = 1 ORDER BY name COLLATE NOCASE, id LIMIT 1`, job.ID).Scan(&copyID, &copyName)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("check dependent copy jobs: %w", err)
+	}
+	return fmt.Errorf("backup destination cannot change while dependent copy job %q (%s) is enabled; disable it, update its source to the new destination, run a real transfer to re-prove the route, then enable it again", copyName, copyID)
 }
 
 func (s *Store) ListJobs(ctx context.Context) ([]Job, error) {
@@ -415,11 +461,32 @@ func (s *Store) StartRun(ctx context.Context, jobID string, trigger Trigger, now
 }
 
 func (s *Store) FinishRun(ctx context.Context, run *Run, leaseOwner string) error {
+	return s.finishRun(ctx, run, leaseOwner, true)
+}
+
+// recordRunTerminal durably records backup validity while retaining the
+// backup-job lease. The agent uses this boundary so after-success copy dispatch
+// and producer retention cannot overlap a second run or a policy edit. SMTP is
+// deliberately attempted only after the lease is released.
+func (s *Store) recordRunTerminal(ctx context.Context, run *Run, leaseOwner string) error {
+	return s.finishRun(ctx, run, leaseOwner, false)
+}
+
+func (s *Store) finishRun(ctx context.Context, run *Run, leaseOwner string, releaseLease bool) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("backup store is not open")
+	}
 	if run == nil {
 		return fmt.Errorf("backup run is required")
 	}
+	leaseOwner = strings.TrimSpace(leaseOwner)
+	if leaseOwner == "" {
+		return fmt.Errorf("backup job lease owner is required")
+	}
 	if run.FinishedAt.IsZero() {
 		run.FinishedAt = time.Now().UTC()
+	} else {
+		run.FinishedAt = run.FinishedAt.UTC()
 	}
 	if run.Status == RunRunning || run.Status == "" {
 		if run.Error == "" {
@@ -460,19 +527,36 @@ func (s *Store) FinishRun(ctx context.Context, run *Run, leaseOwner string) erro
 	}
 	jobPayload, _ := json.Marshal(job)
 	runPayload, _ := json.Marshal(run)
-	if _, err := tx.ExecContext(ctx, `UPDATE backup_runs SET status = ?, finished_at = ?, run_json = ? WHERE id = ?`,
-		run.Status, formatTime(run.FinishedAt), runPayload, run.ID); err != nil {
+	result, err := tx.ExecContext(ctx, `UPDATE backup_runs SET status = ?, finished_at = ?, run_json = ?
+		WHERE id = ? AND job_id = ? AND status = ?`, run.Status, formatTime(run.FinishedAt), runPayload,
+		run.ID, run.JobID, RunRunning)
+	if err != nil {
 		return fmt.Errorf("update backup run: %w", err)
 	}
-	result, err := tx.ExecContext(ctx, `UPDATE backup_jobs SET lease_owner = NULL, lease_until = NULL,
-		job_json = ?, next_run_at = ?, updated_at = ? WHERE id = ? AND lease_owner = ?`,
+	updated, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("confirm backup run update: %w", err)
+	}
+	if updated != 1 {
+		return fmt.Errorf("backup run %q is not running", run.ID)
+	}
+	jobUpdate := `UPDATE backup_jobs SET job_json = ?, next_run_at = ?, updated_at = ?
+		WHERE id = ? AND lease_owner = ?`
+	if releaseLease {
+		jobUpdate = `UPDATE backup_jobs SET lease_owner = NULL, lease_until = NULL,
+			job_json = ?, next_run_at = ?, updated_at = ? WHERE id = ? AND lease_owner = ?`
+	}
+	result, err = tx.ExecContext(ctx, jobUpdate,
 		jobPayload, formatNullableTime(job.NextRunAt), formatTime(job.UpdatedAt), job.ID, leaseOwner)
 	if err != nil {
-		return fmt.Errorf("release backup job: %w", err)
+		return fmt.Errorf("update completed backup job: %w", err)
 	}
-	count, _ := result.RowsAffected()
-	if count == 0 {
-		return fmt.Errorf("backup job lease was lost before run completion")
+	count, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("confirm completed backup job update: %w", err)
+	}
+	if count != 1 {
+		return ErrJobLeaseLost
 	}
 	return tx.Commit()
 }
@@ -572,10 +656,61 @@ func (s *Store) ReconcileStaleRuns(ctx context.Context, now time.Time) (int, err
 }
 
 func (s *Store) ReleaseJob(ctx context.Context, jobID, leaseOwner string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE backup_jobs SET lease_owner = NULL, lease_until = NULL
+	if s == nil || s.db == nil {
+		return fmt.Errorf("backup store is not open")
+	}
+	jobID = strings.TrimSpace(jobID)
+	leaseOwner = strings.TrimSpace(leaseOwner)
+	if jobID == "" || leaseOwner == "" {
+		return fmt.Errorf("backup job ID and lease owner are required")
+	}
+	result, err := s.db.ExecContext(ctx, `UPDATE backup_jobs SET lease_owner = NULL, lease_until = NULL
 		WHERE id = ? AND lease_owner = ?`, jobID, leaseOwner)
 	if err != nil {
 		return fmt.Errorf("release backup job: %w", err)
+	}
+	released, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("confirm backup job release: %w", err)
+	}
+	if released != 1 {
+		return ErrJobLeaseLost
+	}
+	return nil
+}
+
+// RenewJobLease extends only the current owner's still-live lease. It never
+// revives an expired lease because another process may already be entitled to
+// claim the job and begin a new backup.
+func (s *Store) RenewJobLease(ctx context.Context, jobID, leaseOwner string, now, leaseUntil time.Time) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("backup store is not open")
+	}
+	jobID = strings.TrimSpace(jobID)
+	leaseOwner = strings.TrimSpace(leaseOwner)
+	if jobID == "" || leaseOwner == "" {
+		return fmt.Errorf("backup job ID and lease owner are required")
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	now = now.UTC()
+	leaseUntil = leaseUntil.UTC()
+	if leaseUntil.IsZero() || !leaseUntil.After(now) {
+		return fmt.Errorf("renewed backup job lease must expire after the renewal time")
+	}
+	result, err := s.db.ExecContext(ctx, `UPDATE backup_jobs SET lease_until = ?
+		WHERE id = ? AND lease_owner = ? AND lease_until IS NOT NULL AND lease_until > ?`,
+		formatTime(leaseUntil), jobID, leaseOwner, formatTime(now))
+	if err != nil {
+		return fmt.Errorf("renew backup job lease: %w", err)
+	}
+	renewed, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("confirm backup job lease renewal: %w", err)
+	}
+	if renewed != 1 {
+		return ErrJobLeaseLost
 	}
 	return nil
 }
@@ -721,10 +856,9 @@ func (s *Store) recordRunNotification(ctx context.Context, runID string, attempt
 }
 
 // updateTerminalRunJSON applies a narrow read-modify-write patch with an
-// optimistic comparison against the exact JSON bytes that were read. Retention
-// and notification processing can overlap after FinishRun releases a job lease;
-// retrying a lost comparison merges their independent fields instead of letting
-// the last whole-document writer silently erase the earlier outcome.
+// optimistic comparison against the exact JSON bytes that were read. This
+// preserves independent retention and notification fields even when multiple
+// readers update terminal history concurrently.
 func (s *Store) updateTerminalRunJSON(ctx context.Context, runID, action string, mutate func(*Run) error) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("backup store is not open")

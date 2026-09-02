@@ -108,7 +108,8 @@ func keyboardHelpTextFor(a *App) string {
 
 [#a6e3a1]BACKUP CENTER ({{backup_center}}) ` + iconBackup + `[-]
   [yellow]N[-]               Choose saved/new database for a new plan
-  [yellow]Enter[-]           Edit the highlighted plan
+  [yellow]Enter[-]           Open actions for the highlighted plan
+  [yellow]C[-]               Open independent local, pinned-SFTP, and rclone-pull copy jobs
   [yellow]R / Space[-]       Run now / toggle a timed schedule (manual stays on demand)
   [yellow]P[-]               Apply retention now; newest verified artifact is always kept
   [yellow]H / I[-]           Run history / inspect and restore a backup by content

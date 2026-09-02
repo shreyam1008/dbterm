@@ -34,6 +34,10 @@ func runBackupCommand(args []string) error {
 		return backupCreateCommand(args[1:])
 	case "run":
 		return backupRunCommand(args[1:])
+	case "copy", "copies":
+		return backupCopyCommand(args[1:])
+	case "files", "fileset", "filesets":
+		return backupFileSetCommand(args[1:])
 	case "prune":
 		return backupPruneCommand(args[1:])
 	case "run-due":
@@ -48,6 +52,8 @@ func runBackupCommand(args []string) error {
 		return backupRestoreCommand(args[1:])
 	case "keygen":
 		return backupKeygenCommand(args[1:])
+	case "keycheck":
+		return backupKeycheckCommand(args[1:])
 	case "notify-test":
 		return backupNotifyTestCommand(args[1:])
 	case "service":
@@ -406,6 +412,17 @@ func backupInspectCommand(args []string) error {
 		return printJSON(inspection)
 	}
 	fmt.Printf("Path: %s\nSize: %d bytes\nSHA-256: %s\nFormat: %s\nEngine: %s\nConfidence: %s\n", inspection.Path, inspection.Size, inspection.SHA256, inspection.Format, inspection.Engine, inspection.Confidence)
+	if inspection.Format == backupcore.FormatDBTermBundle {
+		fmt.Printf("Database format: %s\n", inspection.DatabaseFormat)
+		if len(inspection.FileSets) == 0 {
+			fmt.Println("Included file sets: none")
+		} else {
+			fmt.Printf("Included file sets: %d\n", len(inspection.FileSets))
+			for _, set := range inspection.FileSets {
+				fmt.Printf("  %s: %d files, %d bytes\n", set.Label, set.FileCount, set.SizeBytes)
+			}
+		}
+	}
 	if inspection.Manifest != nil {
 		fmt.Printf("Completion manifest: schema %d, artifact %s, producer %s, verification %s\n", inspection.Manifest.SchemaVersion, inspection.Manifest.ArtifactID, inspection.Manifest.ProducerID, inspection.Manifest.VerificationLevel)
 	}
@@ -436,6 +453,11 @@ func backupRestoreCommand(args []string) error {
 	timeout := fs.Duration("timeout", 0, "optional restore timeout, for example 45m (0 disables it)")
 	yes := fs.Bool("yes", false, "confirm that the restore may modify the target")
 	confirmClean := fs.String("confirm-clean", "", "exact database name or SQLite path required with --mode clean")
+	overwriteFiles := fs.Bool("overwrite-files", false, "atomically replace existing regular files selected from a dbterm bundle")
+	maxFileSetFiles := fs.Int64("max-file-set-files", backupcore.DefaultMaxRestoreFileSetFiles, "maximum number of selected bundle files to restore")
+	maxFileSetGiB := fs.Uint64("max-file-set-gib", uint64(backupcore.DefaultMaxRestoreFileSetBytes>>30), "maximum total selected bundle file size in GiB")
+	var fileSetValues repeatStringFlag
+	fs.Var(&fileSetValues, "restore-files", "restore LABEL to an explicit folder as LABEL=PATH; repeat for multiple file sets")
 	if err := fs.Parse(args); err != nil {
 		return ignoreFlagHelp(err)
 	}
@@ -445,7 +467,18 @@ func backupRestoreCommand(args []string) error {
 	if *timeout < 0 {
 		return fmt.Errorf("--timeout cannot be negative")
 	}
+	if *maxFileSetFiles <= 0 {
+		return fmt.Errorf("--max-file-set-files must be at least 1")
+	}
 	maxDecodedBytes, err := maxDecodedBytesFromGiB(*maxDecodedGiB)
+	if err != nil {
+		return err
+	}
+	maxFileSetBytes, err := restoreFileSetBytesFromGiB(*maxFileSetGiB)
+	if err != nil {
+		return err
+	}
+	fileSetTargets, err := parseRestoreFileSetTargets(fileSetValues)
 	if err != nil {
 		return err
 	}
@@ -473,11 +506,15 @@ func backupRestoreCommand(args []string) error {
 		return fmt.Errorf("inspect backup before restore: %w", err)
 	}
 	plan, err := backupcore.BuildRestorePlan(inspection, target, backupcore.RestoreOptions{
-		Mode:              mode,
-		StopOnError:       *stopOnError,
-		SingleTransaction: *singleTransaction,
-		AgeIdentityPath:   strings.TrimSpace(*identity),
-		MaxDecodedBytes:   maxDecodedBytes,
+		Mode:                  mode,
+		StopOnError:           *stopOnError,
+		SingleTransaction:     *singleTransaction,
+		AgeIdentityPath:       strings.TrimSpace(*identity),
+		MaxDecodedBytes:       maxDecodedBytes,
+		FileSetTargets:        fileSetTargets,
+		OverwriteFileSetFiles: *overwriteFiles,
+		MaxFileSetFiles:       *maxFileSetFiles,
+		MaxFileSetBytes:       maxFileSetBytes,
 	})
 	if err != nil {
 		return fmt.Errorf("build restore plan: %w", err)
@@ -504,6 +541,31 @@ func backupRestoreCommand(args []string) error {
 	}
 	fmt.Printf("Restore complete\nTarget: %s\nSource SHA-256: %s\n", restoreTargetSummary(&plan.Target), plan.Inspection.SHA256)
 	return nil
+}
+
+func parseRestoreFileSetTargets(values []string) ([]backupcore.RestoreFileSetTarget, error) {
+	targets := make([]backupcore.RestoreFileSetTarget, 0, len(values))
+	for _, value := range values {
+		label, root, found := strings.Cut(value, "=")
+		label = strings.TrimSpace(label)
+		root = strings.TrimSpace(root)
+		if !found || label == "" || root == "" {
+			return nil, fmt.Errorf("invalid --restore-files %q (use LABEL=PATH)", value)
+		}
+		targets = append(targets, backupcore.RestoreFileSetTarget{Label: label, Root: root})
+	}
+	return targets, nil
+}
+
+func restoreFileSetBytesFromGiB(value uint64) (int64, error) {
+	const bytesPerGiB = uint64(1 << 30)
+	if value == 0 {
+		return 0, fmt.Errorf("--max-file-set-gib must be at least 1")
+	}
+	if value > uint64(math.MaxInt64)/bytesPerGiB {
+		return 0, fmt.Errorf("--max-file-set-gib is too large")
+	}
+	return int64(value * bytesPerGiB), nil
 }
 
 func maxDecodedBytesFromGiB(value uint64) (int64, error) {
@@ -568,6 +630,17 @@ func printRestorePlan(plan *backupcore.RestorePlan) {
 		plan.Options.StopOnError,
 		plan.Options.SingleTransaction,
 	)
+	if plan.Inspection.Format == backupcore.FormatDBTermBundle {
+		fmt.Printf("Database format: %s\nIncluded file sets: %d\n", plan.Inspection.DatabaseFormat, len(plan.IncludedFileSets))
+		if len(plan.FileSetTargets) == 0 {
+			fmt.Println("File restore: database only (no file-set targets selected)")
+		} else {
+			for _, target := range plan.FileSetTargets {
+				fmt.Printf("File restore: %s -> %q (%d files, %d bytes)\n", target.Label, target.Root, target.FileCount, target.SizeBytes)
+			}
+			fmt.Printf("Overwrite existing regular files: %t\n", plan.Options.OverwriteFileSetFiles)
+		}
+	}
 	for _, warning := range plan.Warnings {
 		fmt.Printf("Warning: %s\n", warning)
 	}
@@ -615,6 +688,27 @@ func backupKeygenCommand(args []string) error {
 		return err
 	}
 	fmt.Printf("Private identity: %s\nPublic recipient: %s\n\nStore the private identity separately from off-site backups. Scheduled jobs save only the public recipient.\n", abs, recipient)
+	return nil
+}
+
+func backupKeycheckCommand(args []string) error {
+	fs := flag.NewFlagSet("backup keycheck", flag.ContinueOnError)
+	identity := fs.String("identity", "", "private age identity path")
+	recipient := fs.String("recipient", "", "public age X25519 recipient used by the backup job")
+	if err := fs.Parse(args); err != nil {
+		return ignoreFlagHelp(err)
+	}
+	if fs.NArg() != 0 || strings.TrimSpace(*identity) == "" || strings.TrimSpace(*recipient) == "" {
+		return fmt.Errorf("usage: dbterm backup keycheck --identity identity.txt --recipient age1...")
+	}
+	abs, err := filepath.Abs(filepath.Clean(*identity))
+	if err != nil {
+		return fmt.Errorf("resolve age identity path: %w", err)
+	}
+	if err := backupcore.VerifyAgeIdentityRecipient(abs, *recipient); err != nil {
+		return err
+	}
+	fmt.Printf("Recovery identity verified\nPrivate identity: %s\nPublic recipient: matches\n\nThis check encrypted and decrypted only a disposable in-memory challenge. No backup was created or changed.\n", abs)
 	return nil
 }
 
@@ -1073,14 +1167,17 @@ func printBackupHelp() {
     dbterm backup list [--json]
     dbterm backup create --connection <id|name> --destination <folder> [options]
     dbterm backup run <job-id|name>
+    dbterm backup copy <list|create|run|test|inspect|status|enable|disable|prune|delete>
+    dbterm backup files <list|add|remove>
     dbterm backup prune --yes <job-id|name>
     dbterm backup inspect [--identity key.txt] [--max-decoded-gib N] <backup-file>
-    dbterm backup restore --connection <id|name> [--identity key.txt] [--max-decoded-gib N] [--mode merge|clean] --yes <backup-file>
+    dbterm backup restore --connection <id|name> [--identity key.txt] [--mode merge|clean] [--restore-files LABEL=PATH] --yes <backup-file>
     dbterm backup status [--json]
     dbterm backup service <install|uninstall|start|stop|restart|enable|disable|status> [--user|--system]
     dbterm backup service install --system [--run-as USER] --config-dir PATH --state-dir PATH --log-dir PATH
     dbterm backup service status --all
     dbterm backup keygen [--output identity.txt]
+    dbterm backup keycheck --identity identity.txt --recipient age1...
     dbterm backup notify-test <job-id|name>
     dbterm backup paths [--json]
     dbterm backup logs [--lines 200] [--previous]
@@ -1098,6 +1195,9 @@ func printBackupHelp() {
   Encryption uses age X25519.
   Restore always inspects content first and requires --yes. Clean mode also requires
   --confirm-clean with the exact target database name (or absolute SQLite path).
+  A dbterm bundle restores its database only unless each desired file set is mapped
+  to a new explicit root with repeatable --restore-files LABEL=PATH. Existing files
+  are refused unless --overwrite-files is deliberately selected.
   Inspection and restore unwrap at most three compression/encryption layers into
   private OS temporary files. Each layer defaults to a 1 GiB decoded limit; raise
   it explicitly for larger trusted backups with --max-decoded-gib N.

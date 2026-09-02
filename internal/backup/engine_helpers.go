@@ -76,9 +76,20 @@ func publishNoReplace(ctx context.Context, stagedPath, finalPath string, progres
 	})
 }
 
+// publishNoReplaceGuarded repeats a caller-supplied identity check at the last
+// portable point before each no-replace publication syscall. Guarded volume
+// publication skips opportunistic stale-partial cleanup here so a changed
+// mount cannot redirect that unrelated deletion pass.
+func publishNoReplaceGuarded(ctx context.Context, stagedPath, finalPath string, progress ProgressFunc, beforePublish func() error) error {
+	return publishNoReplaceWithOps(ctx, stagedPath, finalPath, progress, publicationOps{
+		link: os.Link, atomic: atomicPublishNoReplace, beforePublish: beforePublish,
+	})
+}
+
 type publicationOps struct {
-	link   func(string, string) error
-	atomic func(string, string) error
+	link          func(string, string) error
+	atomic        func(string, string) error
+	beforePublish func() error
 }
 
 // publicationBoundaryError reports that an immutable final name was created,
@@ -110,15 +121,22 @@ func publishNoReplaceWithOps(ctx context.Context, stagedPath, finalPath string, 
 	if ops.link == nil || ops.atomic == nil {
 		return fmt.Errorf("atomic backup publication is unavailable")
 	}
-	if removed, err := cleanupStalePublicationPartials(filepath.Dir(finalPath), time.Now().Add(-48*time.Hour)); err != nil {
-		if progress != nil {
-			progress(ProgressEvent{Phase: "publish", Message: "stale destination publication cleanup warning: " + err.Error()})
+	if ops.beforePublish == nil {
+		if removed, err := cleanupStalePublicationPartials(filepath.Dir(finalPath), time.Now().Add(-48*time.Hour)); err != nil {
+			if progress != nil {
+				progress(ProgressEvent{Phase: "publish", Message: "stale destination publication cleanup warning: " + err.Error()})
+			}
+		} else if removed > 0 && progress != nil {
+			progress(ProgressEvent{Phase: "publish", Message: fmt.Sprintf("removed %d stale destination publication partial(s)", removed)})
 		}
-	} else if removed > 0 && progress != nil {
-		progress(ProgressEvent{Phase: "publish", Message: fmt.Sprintf("removed %d stale destination publication partial(s)", removed)})
 	}
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("backup stopped before publication: %w", err)
+	}
+	if ops.beforePublish != nil {
+		if err := ops.beforePublish(); err != nil {
+			return err
+		}
 	}
 
 	// A hard link is the cheapest atomic no-replace publication when staging
@@ -138,6 +156,11 @@ func publishNoReplaceWithOps(ctx context.Context, stagedPath, finalPath string, 
 	// filesystem without hard links, publish that private local stage directly
 	// with the platform's atomic no-replace primitive and avoid a second copy.
 	if sameCleanDirectory(stagedPath, finalPath) {
+		if ops.beforePublish != nil {
+			if err := ops.beforePublish(); err != nil {
+				return err
+			}
+		}
 		if err := ops.atomic(stagedPath, finalPath); err != nil {
 			return publicationError(finalPath, err)
 		}

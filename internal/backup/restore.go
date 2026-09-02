@@ -37,13 +37,44 @@ type RestoreOptions struct {
 	// MaxDecodedBytes limits each decoded wrapper layer. Zero uses
 	// DefaultMaxDecodedBytes.
 	MaxDecodedBytes int64
+	// FileSetTargets opts individual bundle file sets into restore. An empty
+	// slice deliberately means database-only restore. Source roots are never
+	// stored in a bundle, so every selected set requires an explicit new root.
+	FileSetTargets []RestoreFileSetTarget
+	// OverwriteFileSetFiles permits atomic replacement of existing regular
+	// files. Symbolic links, reparse points, and non-regular files are always
+	// refused. The zero value is no-clobber.
+	OverwriteFileSetFiles bool
+	// MaxFileSetFiles and MaxFileSetBytes limit the selected file-set payload.
+	// Zero uses the conservative package defaults.
+	MaxFileSetFiles int64
+	MaxFileSetBytes int64
+}
+
+// RestoreFileSetTarget maps one named bundle file set to a new, explicitly
+// selected root. Bundles intentionally do not carry their original absolute
+// roots, so restore can never silently write back to a production path.
+type RestoreFileSetTarget struct {
+	Label string
+	Root  string
+}
+
+// RestoreFileSetPlan is the immutable, normalized file publication contract
+// shown during restore review.
+type RestoreFileSetPlan struct {
+	Label     string
+	Root      string
+	FileCount int64
+	SizeBytes int64
 }
 
 type RestorePlan struct {
-	Inspection *Inspection
-	Target     config.ConnectionConfig
-	Options    RestoreOptions
-	Warnings   []string
+	Inspection       *Inspection
+	Target           config.ConnectionConfig
+	Options          RestoreOptions
+	IncludedFileSets []ManifestFileSet
+	FileSetTargets   []RestoreFileSetPlan
+	Warnings         []string
 }
 
 // BuildRestorePlan performs every check that does not require opening the
@@ -72,7 +103,11 @@ func BuildRestorePlan(inspection *Inspection, target *config.ConnectionConfig, o
 		return nil, fmt.Errorf("backup inspection confidence %q is not sufficient for restore", inspection.Confidence)
 	}
 
-	expectedEngine, err := engineForRestoreFormat(inspection.Format)
+	databaseFormat, err := databaseRestoreFormat(inspection)
+	if err != nil {
+		return nil, err
+	}
+	expectedEngine, err := engineForRestoreFormat(databaseFormat)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +157,7 @@ func BuildRestorePlan(inspection *Inspection, target *config.ConnectionConfig, o
 	if err := normalizeAndValidateRestoreTarget(&targetCopy); err != nil {
 		return nil, err
 	}
-	if inspection.Format == FormatSQLiteDatabase {
+	if databaseFormat == FormatSQLiteDatabase {
 		if options.Mode != RestoreModeClean {
 			return nil, fmt.Errorf("SQLite database-file restore requires explicit clean mode because it replaces the target database atomically")
 		}
@@ -132,13 +167,21 @@ func BuildRestorePlan(inspection *Inspection, target *config.ConnectionConfig, o
 		}
 	}
 
+	fileSetTargets, normalizedTargetOptions, err := buildRestoreFileSetPlan(inspection, options)
+	if err != nil {
+		return nil, err
+	}
+	options = normalizedTargetOptions
 	inspectionCopy := cloneInspection(inspection)
 	plan := &RestorePlan{
-		Inspection: inspectionCopy,
-		Target:     targetCopy,
-		Options:    options,
+		Inspection:       inspectionCopy,
+		Target:           targetCopy,
+		Options:          options,
+		IncludedFileSets: cloneManifestFileSets(inspection.FileSets),
+		FileSetTargets:   fileSetTargets,
 	}
-	plan.Warnings = restorePlanWarnings(inspection.Format, options)
+	plan.Warnings = restorePlanWarnings(databaseFormat, options)
+	plan.Warnings = append(plan.Warnings, restoreFileSetWarnings(plan)...)
 	return plan, nil
 }
 
@@ -159,9 +202,16 @@ func ExecuteRestore(ctx context.Context, plan *RestorePlan, emit func(string)) e
 		return err
 	}
 	defer payload.cleanup()
+	if err := preflightRestoreFilePublications(payload.restoreFiles, validated.Options.OverwriteFileSetFiles, validated.Inspection.Path, validated.Target.FilePath); err != nil {
+		return err
+	}
 
 	emitRestore(emit, "Backup verified; starting restore")
-	switch validated.Inspection.Format {
+	databaseFormat, err := databaseRestoreFormat(validated.Inspection)
+	if err != nil {
+		return err
+	}
+	switch databaseFormat {
 	case FormatPostgresCustom, FormatPostgresTar:
 		err = executePostgresArchiveRestore(ctx, validated, payload.path, emit)
 	case FormatPostgresSQL:
@@ -181,8 +231,27 @@ func ExecuteRestore(ctx context.Context, plan *RestorePlan, emit func(string)) e
 		}
 		return redactRestoreError(err, &validated.Target)
 	}
+	if len(payload.restoreFiles) > 0 {
+		emitRestore(emit, "Database restore completed; publishing explicitly selected file sets")
+		if err := publishRestoredFileSets(ctx, payload.restoreFiles, validated.Options.OverwriteFileSetFiles, emit); err != nil {
+			return fmt.Errorf("database restore succeeded, but bundled file publication failed: %w", err)
+		}
+	}
 	emitRestore(emit, "Restore completed successfully")
 	return nil
+}
+
+func databaseRestoreFormat(inspection *Inspection) (Format, error) {
+	if inspection == nil {
+		return FormatUnknown, fmt.Errorf("backup inspection is required before restore")
+	}
+	if inspection.Format != FormatDBTermBundle {
+		return inspection.Format, nil
+	}
+	if inspection.DatabaseFormat == "" || inspection.DatabaseFormat == FormatUnknown || inspection.DatabaseFormat == FormatDBTermBundle {
+		return FormatUnknown, fmt.Errorf("dbterm bundle inspection is missing a supported embedded database format")
+	}
+	return inspection.DatabaseFormat, nil
 }
 
 func engineForRestoreFormat(format Format) (config.DBType, error) {
@@ -298,7 +367,21 @@ func cloneInspection(source *Inspection) *Inspection {
 	copyValue.Evidence = append([]string(nil), source.Evidence...)
 	copyValue.Warnings = append([]string(nil), source.Warnings...)
 	copyValue.RequiredTools = append([]string(nil), source.RequiredTools...)
+	copyValue.FileSets = cloneManifestFileSets(source.FileSets)
 	return &copyValue
+}
+
+func cloneManifestFileSets(source []ManifestFileSet) []ManifestFileSet {
+	if source == nil {
+		return nil
+	}
+	result := make([]ManifestFileSet, len(source))
+	for index := range source {
+		result[index] = source[index]
+		result[index].ChangedFiles = append([]string(nil), source[index].ChangedFiles...)
+		result[index].Warnings = append([]string(nil), source[index].Warnings...)
+	}
+	return result
 }
 
 func restorePlanWarnings(format Format, options RestoreOptions) []string {
@@ -374,12 +457,24 @@ func materializeRestorePayload(ctx context.Context, inspection *Inspection, opti
 	if !slices.Equal(actualWrappers, inspection.Wrappers) {
 		return fail(fmt.Errorf("backup wrappers changed since inspection: detected %v, expected %v", actualWrappers, inspection.Wrappers))
 	}
+	if inspection.Format == FormatDBTermBundle {
+		database, err := materializeDBTermBundleRestore(ctx, current, inspection, options, maxDecoded)
+		if err != nil {
+			return fail(err)
+		}
+		current.cleanup()
+		current = database
+	}
 	format, engine, _, _, _, err := detectPayload(ctx, current)
 	if err != nil {
 		return fail(err)
 	}
-	if format != inspection.Format || engine != inspection.Engine {
-		return fail(fmt.Errorf("backup content changed since inspection: detected %s/%s, expected %s/%s", format, engine, inspection.Format, inspection.Engine))
+	expectedFormat, err := databaseRestoreFormat(inspection)
+	if err != nil {
+		return fail(err)
+	}
+	if format != expectedFormat || engine != inspection.Engine {
+		return fail(fmt.Errorf("backup content changed since inspection: detected %s/%s, expected %s/%s", format, engine, expectedFormat, inspection.Engine))
 	}
 	return current, nil
 }

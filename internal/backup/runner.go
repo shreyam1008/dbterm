@@ -178,10 +178,47 @@ func (r Runner) Run(ctx context.Context, job Job, cfg *config.ConnectionConfig, 
 		return Artifact{}, fmt.Errorf("verification phase: %w", err)
 	}
 	progress(ProgressEvent{Phase: "verify", Message: "engine-native backup passed basic validation"})
-
 	artifactDirectory := privateStage
 	if destination.kind == destinationLocal {
 		artifactDirectory = destination.localPath
+	}
+	payloadPath := rawPath
+	artifactFormat := plan.Format
+	manifestFileSets := []ManifestFileSet{}
+	manifestWarnings := []string{}
+	var bundleCapacity *bundleCapacityGuard
+	if len(job.FileSets) > 0 {
+		rawInfo, statErr := os.Lstat(rawPath)
+		if statErr != nil {
+			return Artifact{}, fmt.Errorf("inspect verified native dump for capacity planning: %w", statErr)
+		}
+		bundleCapacity, err = newBundleCapacityGuard(privateStage, artifactDirectory, rawInfo.Size(), DestinationDiskUsage)
+		if err != nil {
+			return Artifact{}, fmt.Errorf("file-set backup capacity preflight: %w", err)
+		}
+		progress(ProgressEvent{Phase: "files", Message: "capturing live application file sets privately with change detection (best-effort consistency)"})
+		bundle, err := buildDBTermBundleWithCapacity(ctx, privateStage, rawPath, cfg, plan, job.FileSets, bundleCapacity)
+		if err != nil {
+			return Artifact{}, fmt.Errorf("application file-set phase: %w", err)
+		}
+		payloadPath = bundle.path
+		artifactFormat = string(FormatDBTermBundle)
+		manifestFileSets = bundle.fileSets
+		manifestWarnings = bundle.warnings
+		for _, warning := range bundle.warnings {
+			progress(ProgressEvent{Phase: "files", Message: warning})
+		}
+		progress(ProgressEvent{Phase: "files", Message: fmt.Sprintf("dbterm bundle staged with %d configured file set(s)", len(job.FileSets))})
+	}
+
+	if bundleCapacity != nil {
+		payloadInfo, statErr := os.Lstat(payloadPath)
+		if statErr != nil {
+			return Artifact{}, fmt.Errorf("inspect dbterm bundle for final capacity check: %w", statErr)
+		}
+		if err := bundleCapacity.ensureArtifact(payloadInfo.Size()); err != nil {
+			return Artifact{}, fmt.Errorf("artifact capacity check after bundle creation: %w", err)
+		}
 	}
 	artifactOutput, err := privatefile.CreateTemp(artifactDirectory, ".dbterm-artifact-", ".partial")
 	if err != nil {
@@ -196,11 +233,11 @@ func (r Runner) Run(ctx context.Context, job Job, cfg *config.ConnectionConfig, 
 	defer os.Remove(artifactStage)
 	entryName := strings.TrimSuffix(fileName, ".age")
 	entryName = strings.TrimSuffix(entryName, ".zip")
-	checksum, size, err := wrapArtifact(ctx, rawPath, artifactOutput, entryName, job, progress)
+	checksum, size, err := wrapArtifact(ctx, payloadPath, artifactOutput, entryName, job, progress)
 	if err != nil {
 		return Artifact{}, fmt.Errorf("compression/encryption phase: %w", err)
 	}
-	manifest, err := buildArtifactManifest(job, cfg, runID, artifactID, producerID, dbtermVersion, now, plan.Format, size, checksum)
+	manifest, err := buildArtifactManifestWithFileSets(job, cfg, runID, artifactID, producerID, dbtermVersion, now, artifactFormat, size, checksum, manifestFileSets, manifestWarnings)
 	if err != nil {
 		return Artifact{}, fmt.Errorf("build artifact manifest: %w", err)
 	}
@@ -211,7 +248,7 @@ func (r Runner) Run(ctx context.Context, job Job, cfg *config.ConnectionConfig, 
 	defer os.Remove(manifestStage)
 	artifact = Artifact{
 		ID: artifactID, Path: finalPath, Size: size, SHA256: checksum,
-		Format: plan.Format, Verified: true, VerificationLevel: ArtifactVerificationBasic, CreatedAt: now, BackupName: job.Name,
+		Format: artifactFormat, Verified: true, VerificationLevel: ArtifactVerificationBasic, CreatedAt: now, BackupName: job.Name,
 		PublicationState: ArtifactPublicationUncertain,
 		ManifestPath:     manifestPath, ManifestSize: manifestSize, ManifestSHA256: manifestChecksum,
 	}
@@ -465,7 +502,11 @@ func buildArtifactFilename(job Job, cfg *config.ConnectionConfig, plan NativePla
 	if base == "" {
 		return "", fmt.Errorf("filename template produced an empty name")
 	}
-	name := base + plan.Extension
+	extension := plan.Extension
+	if len(job.FileSets) > 0 {
+		extension = ".dbterm"
+	}
+	name := base + extension
 	switch job.Compression {
 	case CompressionGzip:
 		name += ".gz"
@@ -486,6 +527,18 @@ func buildArtifactFilename(job Job, cfg *config.ConnectionConfig, plan NativePla
 func validateExactArtifactFilename(name string) error {
 	if name == "" || name == "." || name == ".." || filepath.IsAbs(name) || filepath.VolumeName(name) != "" || filepath.Base(name) != name || strings.ContainsAny(name, `/\\`) {
 		return fmt.Errorf("backup output filename must be one basename without folders")
+	}
+	if strings.ContainsAny(name, `<>:"|?*`) || strings.IndexFunc(name, func(r rune) bool { return r < 0x20 || r == 0x7f }) >= 0 {
+		return fmt.Errorf("backup output filename contains characters that are not portable across Windows, macOS, and Linux")
+	}
+	if strings.HasSuffix(name, ".") || strings.HasSuffix(name, " ") {
+		return fmt.Errorf("backup output filename cannot end with a dot or space")
+	}
+	deviceStem := strings.ToUpper(strings.SplitN(name, ".", 2)[0])
+	reservedDevice := deviceStem == "CON" || deviceStem == "PRN" || deviceStem == "AUX" || deviceStem == "NUL" ||
+		(len(deviceStem) == 4 && (strings.HasPrefix(deviceStem, "COM") || strings.HasPrefix(deviceStem, "LPT")) && deviceStem[3] >= '1' && deviceStem[3] <= '9')
+	if reservedDevice {
+		return fmt.Errorf("backup output filename uses the Windows-reserved device name %q", deviceStem)
 	}
 	if strings.HasPrefix(name, ".dbterm-") && strings.HasSuffix(name, ".partial") {
 		return fmt.Errorf("backup output filename uses dbterm's reserved private-partial namespace")

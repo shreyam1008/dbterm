@@ -31,12 +31,16 @@ const (
 	ArtifactVerificationBasic     = "basic-structural"
 	EncryptionSchemeNone          = "none"
 	EncryptionSchemeAgeX25519V1   = "age-x25519-v1"
+	FileSetConsistencyBestEffort  = "best-effort"
+	FileSetConsistencyOmitted     = "omitted"
 
 	maxArtifactManifestBytes = 1 << 20
 	producerIDFilename       = "producer-id"
 )
 
-// ManifestFileSet reserves the portable shape used by future dbterm bundles.
+// ManifestFileSet describes one portable application-file capture. A
+// best-effort capture is copied from a live folder with change detection; it
+// does not claim application, filesystem-snapshot, or cross-file atomicity.
 // Database-only backups deliberately publish an empty list rather than null.
 type ManifestFileSet struct {
 	Label        string   `json:"label"`
@@ -128,15 +132,35 @@ func (manifest ArtifactManifest) Validate() error {
 			return err
 		}
 	}
+	fileSetLabels := make(map[string]struct{}, len(manifest.FileSets))
 	for _, fileSet := range manifest.FileSets {
 		if err := validateManifestFileSet(fileSet); err != nil {
 			return err
 		}
+		label := strings.ToLower(fileSet.Label)
+		if _, duplicate := fileSetLabels[label]; duplicate {
+			return fmt.Errorf("artifact manifest file-set label %q is duplicated", fileSet.Label)
+		}
+		fileSetLabels[label] = struct{}{}
+	}
+	if manifest.Format == string(FormatDBTermBundle) && len(manifest.FileSets) == 0 {
+		return fmt.Errorf("dbterm bundle artifact manifest requires at least one file-set summary")
+	}
+	if manifest.Format != string(FormatDBTermBundle) && len(manifest.FileSets) != 0 {
+		return fmt.Errorf("artifact manifest file sets require format %q", FormatDBTermBundle)
 	}
 	return nil
 }
 
 func validateManifestEngineFormat(engine config.DBType, format string) error {
+	if format == string(FormatDBTermBundle) {
+		switch engine {
+		case config.PostgreSQL, config.MySQL, config.SQLite, config.Turso, config.CloudflareD1:
+			return nil
+		default:
+			return fmt.Errorf("artifact manifest has unsupported database engine %q", engine)
+		}
+	}
 	expected := ""
 	switch engine {
 	case config.PostgreSQL:
@@ -163,8 +187,20 @@ func validateManifestFileSet(fileSet ManifestFileSet) error {
 	if fileSet.FileCount < 0 || fileSet.SizeBytes < 0 {
 		return fmt.Errorf("artifact manifest file-set counts cannot be negative")
 	}
-	if err := validateManifestText("file-set consistency", fileSet.Consistency, 128); err != nil {
-		return err
+	switch fileSet.Consistency {
+	case FileSetConsistencyBestEffort:
+		if fileSet.FileCount < 1 || len(fileSet.Warnings) != 0 {
+			return fmt.Errorf("best-effort artifact manifest file set requires files and no warnings")
+		}
+	case FileSetConsistencyOmitted:
+		if fileSet.FileCount != 0 || fileSet.SizeBytes != 0 || len(fileSet.Warnings) == 0 {
+			return fmt.Errorf("omitted artifact manifest file set requires a warning and no files")
+		}
+	default:
+		return fmt.Errorf("artifact manifest file-set consistency %q is unsupported", fileSet.Consistency)
+	}
+	if fileSet.ChangedFiles == nil || fileSet.Warnings == nil {
+		return fmt.Errorf("artifact manifest file-set changed_files and warnings must be arrays")
 	}
 	for _, value := range append(append([]string{}, fileSet.ChangedFiles...), fileSet.Warnings...) {
 		if err := validateManifestText("file-set detail", value, 4096); err != nil {
@@ -486,6 +522,10 @@ func writeArtifactManifestStage(directory string, manifest ArtifactManifest) (pa
 }
 
 func buildArtifactManifest(job Job, cfg *config.ConnectionConfig, runID, artifactID, producerID, version string, createdAt time.Time, format string, size int64, digest string) (ArtifactManifest, error) {
+	return buildArtifactManifestWithFileSets(job, cfg, runID, artifactID, producerID, version, createdAt, format, size, digest, []ManifestFileSet{}, []string{})
+}
+
+func buildArtifactManifestWithFileSets(job Job, cfg *config.ConnectionConfig, runID, artifactID, producerID, version string, createdAt time.Time, format string, size int64, digest string, fileSets []ManifestFileSet, warnings []string) (ArtifactManifest, error) {
 	manifest := ArtifactManifest{
 		SchemaVersion: ArtifactManifestSchemaVersion,
 		ArtifactID:    artifactID, RunID: runID, JobID: job.ID,
@@ -493,7 +533,13 @@ func buildArtifactManifest(job Job, cfg *config.ConnectionConfig, runID, artifac
 		Engine: cfg.Type, Format: format, Compression: job.Compression,
 		Encryption: EncryptionSchemeNone, Encrypted: false,
 		SizeBytes: size, SHA256: strings.ToLower(digest), Verification: ArtifactVerificationPassed, VerificationLevel: ArtifactVerificationBasic,
-		FileSets: []ManifestFileSet{}, Warnings: []string{},
+		FileSets: append([]ManifestFileSet(nil), fileSets...), Warnings: append([]string(nil), warnings...),
+	}
+	if manifest.FileSets == nil {
+		manifest.FileSets = []ManifestFileSet{}
+	}
+	if manifest.Warnings == nil {
+		manifest.Warnings = []string{}
 	}
 	if job.Encryption == EncryptionAge {
 		manifest.Encryption = EncryptionSchemeAgeX25519V1
@@ -702,6 +748,11 @@ func verifyInspectionManifestDescription(inspection *Inspection) error {
 	}
 	if !manifestEngineMatchesInspection(manifest.Engine, inspection.Engine) {
 		return fmt.Errorf("artifact completion manifest engine %q does not match detected engine %q", manifest.Engine, inspection.Engine)
+	}
+	if manifest.Format == string(FormatDBTermBundle) {
+		if err := verifyBundleFileSetSummaries(manifest.FileSets, inspection.FileSets); err != nil {
+			return err
+		}
 	}
 	return nil
 }

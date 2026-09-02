@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -223,7 +224,7 @@ func TestParseBackupDecodedGiB(t *testing.T) {
 }
 
 func TestDefaultBackupRestoreModeOnlyReplacesSQLiteSnapshots(t *testing.T) {
-	if got := defaultBackupRestoreMode(backupcore.FormatSQLiteDatabase); got != 1 {
+	if got := defaultBackupRestoreMode(&backupcore.Inspection{Format: backupcore.FormatSQLiteDatabase}); got != 1 {
 		t.Fatalf("SQLite snapshot default mode index = %d, want clean/replace", got)
 	}
 	for _, format := range []backupcore.Format{
@@ -232,9 +233,115 @@ func TestDefaultBackupRestoreModeOnlyReplacesSQLiteSnapshots(t *testing.T) {
 		backupcore.FormatPostgresCustom,
 		backupcore.FormatMySQLSQL,
 	} {
-		if got := defaultBackupRestoreMode(format); got != 0 {
+		if got := defaultBackupRestoreMode(&backupcore.Inspection{Format: format}); got != 0 {
 			t.Errorf("%s default mode index = %d, want merge", format, got)
 		}
+	}
+	if got := defaultBackupRestoreMode(&backupcore.Inspection{Format: backupcore.FormatDBTermBundle, DatabaseFormat: backupcore.FormatSQLiteDatabase}); got != 1 {
+		t.Fatalf("SQLite bundle default mode index = %d, want clean/replace", got)
+	}
+	if got := defaultBackupRestoreMode(&backupcore.Inspection{Format: backupcore.FormatDBTermBundle, DatabaseFormat: backupcore.FormatMySQLSQL}); got != 0 {
+		t.Fatalf("MySQL bundle default mode index = %d, want merge", got)
+	}
+	if got := defaultBackupRestoreMode(nil); got != 0 {
+		t.Fatalf("nil inspection default mode index = %d, want merge", got)
+	}
+}
+
+func TestRestoreConfirmationValueUsesCompleteNormalizedSQLitePath(t *testing.T) {
+	target := config.ConnectionConfig{Type: config.SQLite, FilePath: filepath.Join("restore-target", "orders.sqlite3")}
+	want, err := filepath.Abs(filepath.Clean(target.FilePath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := restoreConfirmationValue(target); got != want {
+		t.Fatalf("restoreConfirmationValue() = %q, want complete normalized path %q", got, want)
+	}
+	if got := restoreConfirmationValue(target); got == filepath.Base(target.FilePath) {
+		t.Fatalf("restore confirmation fell back to ambiguous basename %q", got)
+	}
+}
+
+func TestRestoreTargetFormDisplaysCompleteSQLiteConfirmation(t *testing.T) {
+	application := tview.NewApplication()
+	pages := tview.NewPages()
+	pages.AddPage(pageBackupCenter, tview.NewTextView(), true, true)
+	application.SetRoot(pages, true)
+	target := config.ConnectionConfig{
+		ID: "restore_target", Name: "Restore target", Type: config.SQLite,
+		FilePath: "orders.sqlite3",
+	}
+	app := &App{
+		app: application, pages: pages, store: &config.Store{Connections: []config.ConnectionConfig{target}},
+		lastScreenW: 160, lastScreenH: 40,
+	}
+	screen := tcell.NewSimulationScreen("UTF-8")
+	application.SetScreen(screen)
+	screen.SetSize(160, 40)
+	t.Cleanup(screen.Fini)
+
+	app.showRestoreTargetForm(&backupcore.Inspection{
+		Format: backupcore.FormatSQLiteDatabase, Engine: config.SQLite, Confidence: "high",
+	}, "", backupcore.DefaultMaxDecodedBytes, nil, pageBackupCenter)
+	application.ForceDraw()
+	rendered := backupSimulationScreenText(screen)
+	want := restoreConfirmationValue(target)
+	if !strings.Contains(rendered, "Clean target (type exactly)") || !strings.Contains(rendered, want) {
+		t.Fatalf("restore target form did not display the complete normalized confirmation %q:\n%s", want, rendered)
+	}
+}
+
+func TestParseBackupRestoreFileTargets(t *testing.T) {
+	targets, err := parseBackupRestoreFileTargets(` photos = D:\Restore\Photos ; documents = D:\Restore\Documents `)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(targets) != 2 || targets[0].Label != "photos" || targets[0].Root != `D:\Restore\Photos` ||
+		targets[1].Label != "documents" || targets[1].Root != `D:\Restore\Documents` {
+		t.Fatalf("targets = %#v", targets)
+	}
+	if targets, err := parseBackupRestoreFileTargets("  "); err != nil || targets != nil {
+		t.Fatalf("blank targets = %#v, %v; want nil", targets, err)
+	}
+	for _, invalid := range []string{"photos", "=folder", "photos=", "photos=one;broken"} {
+		if _, err := parseBackupRestoreFileTargets(invalid); err == nil {
+			t.Errorf("parseBackupRestoreFileTargets(%q) succeeded", invalid)
+		}
+	}
+}
+
+func TestBackupBundleRestoreFormRendersAtCommonTerminalSizes(t *testing.T) {
+	for _, size := range []struct{ width, height int }{{80, 24}, {120, 35}} {
+		t.Run(fmt.Sprintf("%dx%d", size.width, size.height), func(t *testing.T) {
+			application := tview.NewApplication()
+			pages := tview.NewPages()
+			pages.AddPage(pageBackupCenter, tview.NewTextView(), true, true)
+			application.SetRoot(pages, true)
+			app := &App{
+				app: application, pages: pages, lastScreenW: size.width, lastScreenH: size.height,
+				store: &config.Store{Connections: []config.ConnectionConfig{{
+					ID: "restore", Name: "Isolated restore", Type: config.MySQL, Host: "127.0.0.1", Port: "3306", Database: "restore_test",
+				}}},
+			}
+			screen := tcell.NewSimulationScreen("UTF-8")
+			application.SetScreen(screen)
+			screen.SetSize(size.width, size.height)
+			t.Cleanup(screen.Fini)
+
+			app.showRestoreTargetForm(&backupcore.Inspection{
+				Format: backupcore.FormatDBTermBundle, DatabaseFormat: backupcore.FormatMySQLSQL,
+				Engine: config.MySQL, Confidence: backupcore.ConfidenceExact,
+				FileSets: []backupcore.ManifestFileSet{{Label: "profile-photos", FileCount: 234, SizeBytes: 12 << 20}},
+			}, "", backupcore.DefaultMaxDecodedBytes, nil, pageBackupCenter)
+			application.ForceDraw()
+			rendered := backupSimulationScreenText(screen)
+			t.Logf("%dx%d bundle restore form:\n%s", size.width, size.height, rendered)
+			for _, want := range []string{"Restore Destination", "Isolated restore", "Bundle files", "profile-photos", "File targets", "blank =", "Review Restore", "Esc Cancel"} {
+				if !strings.Contains(rendered, want) {
+					t.Errorf("render missing %q:\n%s", want, rendered)
+				}
+			}
+		})
 	}
 }
 
@@ -410,7 +517,7 @@ func TestBackupProtectionSummarySeparatesCopyLocationAndCount(t *testing.T) {
 					t.Errorf("protection summary %q missing %q", protection, want)
 				}
 			}
-			for _, want := range []string{test.wantCount, test.wantCopyDetail, "no extra copy"} {
+			for _, want := range []string{test.wantCount, test.wantCopyDetail} {
 				if !strings.Contains(copies, want) {
 					t.Errorf("copies summary %q missing %q", copies, want)
 				}
@@ -543,13 +650,40 @@ func TestBackupPlanDefaultsSummaryMakesSafeDefaultsVisible(t *testing.T) {
 	}
 }
 
-func TestBackupScheduleLabelIncludesWeeklyDays(t *testing.T) {
-	label := backupScheduleLabel(backupcore.Schedule{
-		Kind: backupcore.ScheduleWeekly, Weekdays: []int{int(time.Monday), int(time.Friday)}, TimeOfDay: "02:30", Timezone: "UTC",
-	})
-	for _, want := range []string{"Mon,Fri", "02:30", "UTC"} {
-		if !strings.Contains(label, want) {
-			t.Errorf("weekly schedule label %q missing %q", label, want)
+func TestBackupScheduleLabelIncludesCanonicalMultipleTimes(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		schedule backupcore.Schedule
+		want     []string
+	}{
+		{name: "daily", schedule: backupcore.Schedule{Kind: backupcore.ScheduleDaily, TimesOfDay: []string{"13:00", "01:00", "13:00"}, Timezone: "Asia/Kolkata"}, want: []string{"daily", "01:00, 13:00", "Asia/Kolkata"}},
+		{name: "weekly", schedule: backupcore.Schedule{Kind: backupcore.ScheduleWeekly, Weekdays: []int{int(time.Monday), int(time.Friday)}, TimesOfDay: []string{"14:30", "02:30"}, Timezone: "UTC"}, want: []string{"Mon,Fri", "02:30, 14:30", "UTC"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			label := backupScheduleLabel(test.schedule)
+			for _, want := range test.want {
+				if !strings.Contains(label, want) {
+					t.Errorf("schedule label %q missing %q", label, want)
+				}
+			}
+		})
+	}
+}
+
+func TestBackupScheduleTimesInputSupportsLegacyAndPlural(t *testing.T) {
+	if got := backupScheduleTimesInput(backupcore.Schedule{Kind: backupcore.ScheduleDaily, TimeOfDay: "07:15"}); got != "07:15" {
+		t.Fatalf("legacy input = %q, want 07:15", got)
+	}
+	if got := backupScheduleTimesInput(backupcore.Schedule{Kind: backupcore.ScheduleDaily, TimeOfDay: "ignored", TimesOfDay: []string{"13:00", "01:00"}}); got != "01:00, 13:00" {
+		t.Fatalf("plural input = %q, want canonical plural values", got)
+	}
+	times, err := parseBackupScheduleTimes(" 13:00, 01:00, 13:00 ")
+	if err != nil || strings.Join(times, ",") != "01:00,13:00" {
+		t.Fatalf("parse plural times = %#v, %v", times, err)
+	}
+	for _, raw := range []string{"", "25:00", "01:00,,bad"} {
+		if _, err := parseBackupScheduleTimes(raw); err == nil {
+			t.Errorf("parseBackupScheduleTimes(%q) succeeded", raw)
 		}
 	}
 }
@@ -746,7 +880,7 @@ func TestBackupJobFormStartsWithEssentialsOnly(t *testing.T) {
 	if form == nil {
 		t.Fatal("backup form was not created")
 	}
-	for _, label := range []string{"Database", backupFormLabelDestination, "Schedule", "Run At (HH:MM)", "Enable Schedule", "Included", backupFormLabelAdvanced} {
+	for _, label := range []string{"Database", backupFormLabelDestination, "Schedule", "Run At (comma-separated HH:MM)", "Enable Schedule", "Included", backupFormLabelAdvanced} {
 		if form.GetFormItemByLabel(label) == nil {
 			t.Errorf("essential form is missing %q", label)
 		}
@@ -755,6 +889,43 @@ func TestBackupJobFormStartsWithEssentialsOnly(t *testing.T) {
 		if form.GetFormItemByLabel(label) != nil {
 			t.Errorf("advanced field %q is visible in the essential form", label)
 		}
+	}
+}
+
+func TestBackupJobFormShowsExistingPluralTimesWithoutLegacyOverride(t *testing.T) {
+	backupStore, err := backupcore.OpenStore(filepath.Join(t.TempDir(), "backups.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = backupStore.Close() })
+	application := tview.NewApplication()
+	pages := tview.NewPages()
+	centerList := tview.NewList()
+	pages.AddPage(pageBackupCenter, centerList, true, true)
+	application.SetRoot(pages, true).SetFocus(centerList)
+	connection := config.ConnectionConfig{ID: "orders", Name: "Orders", Type: config.SQLite, FilePath: filepath.Join(t.TempDir(), "orders.sqlite3")}
+	app := &App{app: application, pages: pages, store: &config.Store{Connections: []config.ConnectionConfig{connection}}, backupStore: backupStore}
+	job := backupcore.Job{
+		ID: "job_plural", Name: "Orders backup", ConnectionID: connection.ID, Destination: t.TempDir(), Compression: backupcore.CompressionZstd, CompressionLevel: 3,
+		Schedule:  backupcore.Schedule{Kind: backupcore.ScheduleDaily, TimeOfDay: "09:00", TimesOfDay: []string{"13:00", "01:00"}, Timezone: "Asia/Kolkata"},
+		Retention: backupcore.Retention{KeepLast: 14}, TimeoutMinutes: 30,
+	}
+	form := app.showBackupJobFormForConnection(&job, "")
+	field, ok := form.GetFormItemByLabel("Run At (comma-separated HH:MM)").(*tview.InputField)
+	if !ok {
+		t.Fatal("plural run-time field was not created")
+	}
+	if got := field.GetText(); got != "01:00, 13:00" {
+		t.Fatalf("run-time field = %q, want plural values instead of legacy 09:00", got)
+	}
+	form.GetButton(0).InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(primitive tview.Primitive) { application.SetFocus(primitive) })
+	stored, err := backupStore.GetJob(context.Background(), job.ID)
+	if err != nil {
+		t.Fatalf("saved plural backup job: %v", err)
+	}
+	times, err := stored.Schedule.WallClockTimes()
+	if err != nil || strings.Join(times, ",") != "01:00,13:00" {
+		t.Fatalf("saved backup times = %#v, %v", times, err)
 	}
 }
 
@@ -885,7 +1056,7 @@ func TestBackupCenterProtectionSummaryFitsCommonTerminalSizes(t *testing.T) {
 
 			job := backupcore.Job{
 				ID: "job_orders", Name: "Orders", ConnectionID: "orders", Destination: jobDestination,
-				Compression: backupcore.CompressionZstd, Schedule: backupcore.Schedule{Kind: backupcore.ScheduleManual},
+				Compression: backupcore.CompressionZstd, Schedule: backupcore.Schedule{Kind: backupcore.ScheduleDaily, TimesOfDay: []string{"13:00", "01:00"}, Timezone: "Asia/Kolkata"},
 			}
 			if err := backupStore.UpsertJob(context.Background(), &job); err != nil {
 				t.Fatalf("store backup job: %v", err)
@@ -917,6 +1088,15 @@ func TestBackupCenterProtectionSummaryFitsCommonTerminalSizes(t *testing.T) {
 			if err := backupStore.FinishRun(context.Background(), &run, owner); err != nil {
 				t.Fatalf("finish backup run: %v", err)
 			}
+			copyJob := backupcore.CopyJob{
+				ID: "copy_vault", Name: "Vault mirror", Mode: backupcore.CopyModePush,
+				Source: backupcore.CopyEndpoint{Kind: backupcore.CopyEndpointLocal}, SourceBackupJobID: job.ID,
+				Destination: backupcore.CopyEndpoint{Kind: backupcore.CopyEndpointLocal, Location: filepath.Join(t.TempDir(), "independent-vault")},
+				Trigger:     backupcore.CopyTriggerManual, Schedule: backupcore.Schedule{Kind: backupcore.ScheduleManual}, Verification: backupcore.CopyVerificationSHA256Format, TimeoutMinutes: 30,
+			}
+			if err := backupStore.UpsertCopyJob(context.Background(), &copyJob); err != nil {
+				t.Fatalf("store copy job: %v", err)
+			}
 
 			application := tview.NewApplication()
 			pages := tview.NewPages()
@@ -935,7 +1115,7 @@ func TestBackupCenterProtectionSummaryFitsCommonTerminalSizes(t *testing.T) {
 			application.ForceDraw()
 			rendered := backupSimulationScreenText(screen)
 			t.Logf("%dx%d Backup Center render:\n%s", test.width, test.height, rendered)
-			for _, want := range []string{"Selected Backup", "PROTECTION", test.wantProtection, test.wantKind, test.wantDetail, "COPIES", test.wantCount, test.wantCopyDetail, "POLICY", "not encrypted"} {
+			for _, want := range []string{"Selected Backup", "1 copy job", "LOCAL BACKUP", test.wantProtection, test.wantKind, test.wantDetail, "LOCAL CHECK", test.wantCount, test.wantCopyDetail, "COPY JOBS", "1 configured", "Vault mirror", "COPY HEALTH", "1 never", "01:00, 13:00", "POLICY", "not encrypted"} {
 				if want == "" {
 					continue
 				}
