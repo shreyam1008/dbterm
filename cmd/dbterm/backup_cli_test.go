@@ -406,6 +406,8 @@ func TestRestoreTargetSummaryDoesNotExposePassword(t *testing.T) {
 func TestResolveBackupCLIPathExpandsHome(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	// os.UserHomeDir follows HOME on Unix and USERPROFILE on Windows.
+	t.Setenv("USERPROFILE", home)
 	got, err := resolveBackupCLIPath("~/nightly")
 	if err != nil {
 		t.Fatal(err)
@@ -416,12 +418,9 @@ func TestResolveBackupCLIPathExpandsHome(t *testing.T) {
 	}
 }
 
-func TestResolveBackupCLIPathPreservesRcloneDestination(t *testing.T) {
+func TestResolveBackupCLIPathRejectsRcloneDestination(t *testing.T) {
 	got, err := resolveBackupCLIPath("rclone://offsite/team//nightly/")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != "rclone://offsite/team/nightly" {
-		t.Fatalf("resolveBackupCLIPath() = %q", got)
+	if err == nil || !errors.Is(err, backupcore.ErrRcloneBackupPublicationDisabled) {
+		t.Fatalf("resolveBackupCLIPath() = %q, %v; want fail-closed rclone error", got, err)
 	}
 }

@@ -68,6 +68,155 @@ func TestStoreJobRunLifecycleAndLease(t *testing.T) {
 	}
 }
 
+func TestStoreListLatestVerifiedUnprunedRunsPerJob(t *testing.T) {
+	store, err := OpenStore(filepath.Join(t.TempDir(), "backups.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+	base := time.Date(2026, 9, 3, 1, 0, 0, 0, time.UTC)
+	newJob := func(name string) Job {
+		t.Helper()
+		job := Job{
+			Name: name, ConnectionID: "conn_" + name, Destination: t.TempDir(),
+			Compression: CompressionNone, Schedule: Schedule{Kind: ScheduleManual},
+			Retention: Retention{KeepLast: 2},
+		}
+		if err := job.ApplyDefaults(base); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.UpsertJob(ctx, &job); err != nil {
+			t.Fatal(err)
+		}
+		return job
+	}
+	finishSuccess := func(job Job, finishedAt time.Time, path string, pruned bool, mutate ...func(*Artifact)) Run {
+		t.Helper()
+		owner := "owner_" + path
+		if _, err := store.ClaimJob(ctx, job.ID, owner, finishedAt.Add(-time.Minute)); err != nil {
+			t.Fatal(err)
+		}
+		run, err := store.StartRun(ctx, job.ID, TriggerManual, finishedAt.Add(-time.Minute))
+		if err != nil {
+			t.Fatal(err)
+		}
+		run.Status = RunSucceeded
+		run.FinishedAt = finishedAt
+		run.Artifact = Artifact{Path: path, Verified: true, PublicationState: ArtifactPublicationComplete}
+		for _, apply := range mutate {
+			apply(&run.Artifact)
+		}
+		if pruned {
+			run.Artifact.PrunedAt = finishedAt.Add(time.Minute)
+			run.Artifact.PruneReason = "test retention"
+		}
+		if err := store.FinishRun(ctx, &run, owner); err != nil {
+			t.Fatal(err)
+		}
+		return run
+	}
+
+	firstJob := newJob("first")
+	firstRetained := finishSuccess(firstJob, base.Add(time.Hour), "first-retained", false)
+	finishSuccess(firstJob, base.Add(2*time.Hour), "first-newer-pruned", true)
+	finishSuccess(firstJob, base.Add(3*time.Hour), "first-newer-unverified", false, func(artifact *Artifact) {
+		artifact.Verified = false
+	})
+	finishSuccess(firstJob, base.Add(4*time.Hour), "first-newer-incomplete", false, func(artifact *Artifact) {
+		artifact.PublicationState = ArtifactPublicationArtifactOnly
+	})
+	secondJob := newJob("second")
+	finishSuccess(secondJob, base.Add(30*time.Minute), "second-older", false)
+	secondLatest := finishSuccess(secondJob, base.Add(3*time.Hour), "second-latest", false)
+
+	runs, err := store.ListLatestVerifiedUnprunedRuns(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(runs) != 2 {
+		t.Fatalf("ListLatestVerifiedUnprunedRuns() returned %d runs, want one for each of two jobs: %#v", len(runs), runs)
+	}
+	byJob := make(map[string]Run, len(runs))
+	for _, run := range runs {
+		if _, exists := byJob[run.JobID]; exists {
+			t.Fatalf("ListLatestVerifiedUnprunedRuns() returned more than one run for job %s", run.JobID)
+		}
+		byJob[run.JobID] = run
+	}
+	if got := byJob[firstJob.ID]; got.ID != firstRetained.ID {
+		t.Fatalf("first job latest retained run = %q, want older unpruned run %q", got.ID, firstRetained.ID)
+	}
+	if got := byJob[secondJob.ID]; got.ID != secondLatest.ID {
+		t.Fatalf("second job latest retained run = %q, want %q", got.ID, secondLatest.ID)
+	}
+}
+
+func TestTerminalRunJSONUpdatesMergeAfterConcurrentChange(t *testing.T) {
+	databasePath := filepath.Join(t.TempDir(), "backups.db")
+	firstStore, err := OpenStore(databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer firstStore.Close()
+	secondStore, err := OpenStore(databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer secondStore.Close()
+
+	ctx := context.Background()
+	now := time.Date(2026, 9, 3, 1, 0, 0, 0, time.UTC)
+	job := Job{
+		Name: "concurrent outcomes", ConnectionID: "conn", Destination: t.TempDir(),
+		Compression: CompressionNone, Schedule: Schedule{Kind: ScheduleManual}, Retention: Retention{KeepLast: 1},
+	}
+	if err := job.ApplyDefaults(now); err != nil {
+		t.Fatal(err)
+	}
+	if err := firstStore.UpsertJob(ctx, &job); err != nil {
+		t.Fatal(err)
+	}
+	const owner = "outcome-owner"
+	if _, err := firstStore.ClaimJob(ctx, job.ID, owner, now); err != nil {
+		t.Fatal(err)
+	}
+	run, err := firstStore.StartRun(ctx, job.ID, TriggerManual, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run.Status = RunSucceeded
+	run.FinishedAt = now.Add(time.Minute)
+	run.Artifact = Artifact{Path: "backup.dump", Verified: true, PublicationState: ArtifactPublicationComplete}
+	if err := firstStore.FinishRun(ctx, &run, owner); err != nil {
+		t.Fatal(err)
+	}
+
+	interleaved := false
+	prunedAt := now.Add(2 * time.Minute)
+	err = firstStore.updateTerminalRunJSON(ctx, run.ID, "interleaved prune", func(current *Run) error {
+		current.Artifact.PrunedAt = prunedAt
+		current.Artifact.PruneReason = "retention"
+		if !interleaved {
+			interleaved = true
+			return secondStore.recordRunNotification(ctx, run.ID, true, true, "")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored, err := firstStore.ListRuns(ctx, job.ID, 1)
+	if err != nil || len(stored) != 1 {
+		t.Fatalf("ListRuns() = %#v, %v", stored, err)
+	}
+	got := stored[0]
+	if !got.NotificationAttempted || !got.NotificationSent || got.Artifact.PrunedAt.IsZero() || got.Artifact.PruneReason != "retention" {
+		t.Fatalf("concurrent terminal updates did not merge: %#v", got)
+	}
+}
+
 func TestJobRejectsFilenameTraversal(t *testing.T) {
 	job := Job{
 		Name: "bad", ConnectionID: "conn", Destination: t.TempDir(),
@@ -115,6 +264,48 @@ func TestClaimDueJobsSkipsMissedRunWhenCatchUpDisabled(t *testing.T) {
 	want := time.Date(2026, 8, 4, 10, 13, 0, 0, time.UTC)
 	if !stored.NextRunAt.Equal(want) {
 		t.Fatalf("next run = %s, want %s", stored.NextRunAt, want)
+	}
+}
+
+func TestSetJobEnabledCanDisableButNotReenableLegacyRcloneJob(t *testing.T) {
+	store, err := OpenStore(filepath.Join(t.TempDir(), "backups.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	now := time.Date(2026, 9, 2, 12, 0, 0, 0, time.UTC)
+	job := Job{
+		ID: "job_legacy_rclone", Name: "legacy remote", ConnectionID: "conn", Enabled: true,
+		Destination: "rclone://vault/dbterm", FilenameTemplate: DefaultFilenameTemplate,
+		Compression: CompressionZstd, Encryption: EncryptionNone,
+		Schedule:  Schedule{Kind: ScheduleInterval, EveryMinutes: 30},
+		Retention: Retention{KeepLast: 2}, TimeoutMinutes: 30,
+		CreatedAt: now.Add(-time.Hour), UpdatedAt: now.Add(-time.Hour), NextRunAt: now,
+	}
+	payload, err := json.Marshal(job)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.ExecContext(context.Background(), `INSERT INTO backup_jobs
+		(id, name, connection_id, enabled, next_run_at, job_json, created_at, updated_at)
+		VALUES (?, ?, ?, 1, ?, ?, ?, ?)`, job.ID, job.Name, job.ConnectionID,
+		formatTime(job.NextRunAt), payload, formatTime(job.CreatedAt), formatTime(job.UpdatedAt)); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := store.SetJobEnabled(context.Background(), job.ID, false); err != nil {
+		t.Fatalf("disable legacy rclone job: %v", err)
+	}
+	disabled, err := store.GetJob(context.Background(), job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if disabled.Enabled || !disabled.NextRunAt.IsZero() {
+		t.Fatalf("disabled job = %#v, want disabled with no next run", disabled)
+	}
+	if err := store.SetJobEnabled(context.Background(), job.ID, true); !errors.Is(err, ErrRcloneBackupPublicationDisabled) {
+		t.Fatalf("re-enable legacy rclone job error = %v, want ErrRcloneBackupPublicationDisabled", err)
 	}
 }
 

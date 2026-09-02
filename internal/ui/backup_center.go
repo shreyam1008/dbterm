@@ -58,13 +58,38 @@ func (a *App) showBackupCenter() {
 		a.ShowAlert(fmt.Sprintf("%s Could not load backup jobs:\n\n%v", iconWarn, err), a.backupCenterReturnPage)
 		return
 	}
-	runs, _ := a.backupStore.ListRuns(context.Background(), "", 250)
+	runs, err := a.backupStore.ListRuns(context.Background(), "", 1000)
+	if err != nil {
+		a.ShowAlert(fmt.Sprintf("%s Could not load backup activity:\n\n%v", iconWarn, err), a.backupCenterReturnPage)
+		return
+	}
 	latest := make(map[string]backupcore.Run)
 	for _, run := range runs {
 		if _, exists := latest[run.JobID]; !exists {
 			latest[run.JobID] = run
 		}
 	}
+	// The activity list is intentionally bounded. Fill any inactive plan that
+	// fell outside that window so its selected-plan status never says "never".
+	for _, job := range jobs {
+		if _, exists := latest[job.ID]; exists {
+			continue
+		}
+		run, found, latestErr := a.backupStore.LatestRun(context.Background(), job.ID)
+		if latestErr != nil {
+			a.ShowAlert(fmt.Sprintf("%s Could not load latest backup activity:\n\n%v", iconWarn, latestErr), a.backupCenterReturnPage)
+			return
+		}
+		if found {
+			latest[job.ID] = run
+		}
+	}
+	verifiedRuns, err := a.backupStore.ListLatestVerifiedUnprunedRuns(context.Background())
+	if err != nil {
+		a.ShowAlert(fmt.Sprintf("%s Could not load recovery-point status:\n\n%v", iconWarn, err), a.backupCenterReturnPage)
+		return
+	}
+	latestVerified := latestVerifiedBackupRuns(verifiedRuns)
 
 	header := tview.NewTextView().SetDynamicColors(true).SetTextAlign(tview.AlignCenter)
 	header.SetBackgroundColor(bg)
@@ -83,24 +108,14 @@ func (a *App) showBackupCenter() {
 			agentLabel = "[yellow]backup running[-]"
 		}
 	}
-	protection := "[#f9e2af]setup needed[-]"
-	if len(jobs) > 0 {
-		protection = "[#89b4fa]on demand[-]"
-	}
-	if enabled > 0 {
-		if agentHealthy {
-			protection = "[green]protected[-]"
-		} else {
-			protection = "[#f9e2af]agent needed[-]"
-		}
-	}
+	automation := backupAutomationStatus(len(jobs), enabled, agentHealthy)
 	lastRun := "never"
 	if len(runs) > 0 {
 		lastRun = backupRunSummary(runs[0])
 	}
 	header.SetText(fmt.Sprintf(
 		"\n[::b][#cba6f7]%s Backups[-][-]  %s\n[#a6adc8]%d plans  │  %d scheduled  │  last %s  │  %s[-]",
-		iconBackup, protection, len(jobs), enabled, tview.Escape(lastRun), agentLabel,
+		iconBackup, automation, len(jobs), enabled, tview.Escape(lastRun), agentLabel,
 	))
 
 	list := tview.NewList().ShowSecondaryText(true)
@@ -136,7 +151,7 @@ func (a *App) showBackupCenter() {
 		}
 	}
 
-	detail := tview.NewTextView().SetDynamicColors(true).SetWrap(true).SetWordWrap(true)
+	detail := tview.NewTextView().SetDynamicColors(true).SetWrap(false)
 	detail.SetBorder(true).SetTitle(" Selected Backup ").SetTitleColor(mauve).SetBorderColor(surface1).SetBackgroundColor(mantle)
 	updateDetail := func(index int) {
 		if index < 0 || index >= len(jobs) {
@@ -150,18 +165,17 @@ func (a *App) showBackupCenter() {
 		if !job.NextRunAt.IsZero() {
 			next = job.NextRunAt.Local().Format("Mon 02 Jan, 15:04 MST")
 		}
-		encryption := "not encrypted"
-		if job.Encryption == backupcore.EncryptionAge {
-			encryption = "age encrypted"
-		}
+		encryption := backupEncryptionLabel(job.Encryption)
 		last := "never run"
 		if run, ok := latest[job.ID]; ok {
 			last = backupRunSummary(run)
 		}
+		verifiedRun, hasVerifiedCopy := latestVerified[job.ID]
+		protection, copies := backupProtectionSummary(job, verifiedRun, hasVerifiedCopy)
 		detail.SetText(fmt.Sprintf(
-			" [#89b4fa]DATABASE[-] %s\n [#89b4fa]WHEN[-]     %s  │  next %s\n [#89b4fa]SAVE TO[-]  %s\n [#89b4fa]LAST[-]     %s  │  keep %s  │  %s  │  %s",
+			" [#89b4fa]DATABASE[-]   %s\n [#89b4fa]WHEN[-]       %s  │  next %s\n [#89b4fa]SAVE TO[-]    %s\n [#89b4fa]PROTECTION[-] %s\n [#89b4fa]COPIES[-]     %s\n [#89b4fa]LAST[-]       %s\n [#89b4fa]POLICY[-]     keep %s  │  %s  │  %s",
 			tview.Escape(backupJobConnectionDetail(a.store.Connections, job.ConnectionID)),
-			tview.Escape(backupScheduleLabel(job.Schedule)), tview.Escape(next), tview.Escape(job.Destination), tview.Escape(last),
+			tview.Escape(backupScheduleLabel(job.Schedule)), tview.Escape(next), tview.Escape(job.Destination), protection, copies, tview.Escape(last),
 			tview.Escape(backupRetentionSummary(job.Retention)), tview.Escape(string(job.Compression)), encryption,
 		))
 	}
@@ -287,7 +301,7 @@ func (a *App) showBackupCenter() {
 	layout := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(header, 4, 0, false).
 		AddItem(list, 0, 1, true).
-		AddItem(detail, 6, 0, false).
+		AddItem(detail, 9, 0, false).
 		AddItem(footer, 1, 0, false)
 	a.pages.AddAndSwitchToPage(pageBackupCenter, layout, true)
 	a.app.SetFocus(list)
@@ -585,7 +599,7 @@ func backupPlanDefaultsSummary(job backupcore.Job) string {
 
 const (
 	backupFormLabelConnection  = "Database Connection"
-	backupFormLabelDestination = "Save To (folder or rclone://remote/path)"
+	backupFormLabelDestination = "Save To (absolute/mounted folder)"
 	backupFormLabelAdvanced    = "More Settings (Enter)"
 )
 
@@ -827,24 +841,24 @@ func (a *App) showBackupJobFormForConnection(existing *backupcore.Job, preferred
 			return
 		}
 		destinationInput := candidate.Destination
-		if !backupcore.IsRemoteBackupDestination(destinationInput) {
-			expandedDestination, pathErr := expandHomePath(destinationInput)
-			if pathErr != nil {
-				a.ShowAlert(fmt.Sprintf("%s Invalid destination:\n\n%v", iconWarn, pathErr), pageBackupForm)
-				return
-			}
-			destinationInput = expandedDestination
+		if backupcore.IsRemoteBackupDestination(destinationInput) {
+			a.ShowAlert(fmt.Sprintf("%s %s\n\nExisting remote history remains visible.", iconWarn, backupcore.ErrRcloneBackupPublicationDisabled), pageBackupForm)
+			return
 		}
+		expandedDestination, pathErr := expandHomePath(destinationInput)
+		if pathErr != nil {
+			a.ShowAlert(fmt.Sprintf("%s Invalid destination:\n\n%v", iconWarn, pathErr), pageBackupForm)
+			return
+		}
+		destinationInput = expandedDestination
 		destination, pathErr := backupcore.NormalizeBackupDestination(destinationInput)
 		if pathErr != nil {
 			a.ShowAlert(fmt.Sprintf("%s Invalid destination:\n\n%v", iconWarn, pathErr), pageBackupForm)
 			return
 		}
-		if !backupcore.IsRemoteBackupDestination(destination) {
-			if mkdirErr := os.MkdirAll(destination, 0o700); mkdirErr != nil {
-				a.ShowAlert(fmt.Sprintf("%s Could not create destination:\n\n%v", iconWarn, mkdirErr), pageBackupForm)
-				return
-			}
+		if mkdirErr := os.MkdirAll(destination, 0o700); mkdirErr != nil {
+			a.ShowAlert(fmt.Sprintf("%s Could not create destination:\n\n%v", iconWarn, mkdirErr), pageBackupForm)
+			return
 		}
 		candidate.Destination = destination
 		if err := a.backupStore.UpsertJob(context.Background(), &candidate); err != nil {
@@ -876,7 +890,7 @@ func (a *App) showBackupJobFormForConnection(existing *backupcore.Job, preferred
 		form.SetItemPadding(0)
 		form.SetFieldBackgroundColor(mantle).SetFieldTextColor(text).SetLabelColor(text).
 			SetButtonBackgroundColor(surface1).SetButtonTextColor(green)
-		addBackupFormSection(form, "ESSENTIALS", "Database, local/rclone destination, and timing")
+		addBackupFormSection(form, "ESSENTIALS", "Database, local or OS-mounted destination, and timing")
 		connectionIndex := backupConnectionIndex(a.store.Connections, draft.job.ConnectionID)
 		connectionText := "[#f9e2af]Missing saved connection — choose a replacement in More Settings.[-]"
 		if connectionIndex >= 0 {
@@ -891,7 +905,7 @@ func (a *App) showBackupJobFormForConnection(existing *backupcore.Job, preferred
 		form.AddInputField(backupFormLabelDestination, draft.job.Destination, 40, nil, func(value string) {
 			draft.job.Destination = value
 		})
-		form.AddTextView("Destination Help", "[#a6adc8]Absolute/mounted folder, or rclone://remote/path after `rclone config`.[-]", 0, 1, true, false)
+		form.AddTextView("Destination Help", "[#a6adc8]Absolute local folder or OS-mounted volume. New rclone publication is disabled.[-]", 0, 1, true, false)
 		form.AddDropDown("Schedule", scheduleOptions, backupScheduleIndex(draft.job.Schedule.Kind), func(_ string, index int) {
 			if index >= 0 && index < 4 {
 				kind := []backupcore.ScheduleKind{backupcore.ScheduleManual, backupcore.ScheduleInterval, backupcore.ScheduleDaily, backupcore.ScheduleWeekly}[index]
@@ -1220,6 +1234,9 @@ func backupDestinationStorageText(path string) string {
 	if path == "" {
 		return "[#f9e2af]DEST[-] Enter or choose a folder.\n" + stageLine
 	}
+	if backupcore.IsRemoteBackupDestination(path) {
+		return "[#f9e2af]DEST[-] Legacy rclone destination; new backup publication is disabled.\n" + stageLine
+	}
 	expanded, expandErr := expandHomePath(path)
 	if expandErr != nil {
 		return fmt.Sprintf("[#f9e2af]DEST[-] %s\n%s", tview.Escape(expandErr.Error()), stageLine)
@@ -1271,11 +1288,15 @@ func (a *App) runBackupJobNow(jobID string) {
 			a.backupCenterSelectedJob = jobID
 			a.showBackupCenter()
 			if canceled.Load() && strings.TrimSpace(run.Artifact.Path) != "" {
+				outcome := "Artifact and completion manifest were published."
+				if run.Status != backupcore.RunSucceeded || err != nil {
+					outcome = "The artifact was preserved, but publication did not finish cleanly; inspect the run before use."
+				}
 				detail := ""
 				if err != nil {
 					detail = "\n\nPost-backup outcome: " + tview.Escape(err.Error())
 				}
-				a.ShowAlert(fmt.Sprintf("%s Cancel was requested after the complete artifact was safely published. It was preserved at:\n\n%s%s", iconWarn, tview.Escape(run.Artifact.Path), detail), pageBackupCenter)
+				a.ShowAlert(fmt.Sprintf("%s Cancel arrived at the publication boundary. %s\n\n%s%s", iconWarn, outcome, tview.Escape(run.Artifact.Path), detail), pageBackupCenter)
 				return
 			}
 			if canceled.Load() && (run.Status == backupcore.RunCanceled || errors.Is(err, context.Canceled)) {
@@ -1291,7 +1312,11 @@ func (a *App) runBackupJobNow(jobID string) {
 			if strings.TrimSpace(run.NotificationError) != "" {
 				notification += ": " + run.NotificationError
 			}
-			a.ShowAlert(fmt.Sprintf("%s Backup complete\n\nPath: %s\nSize: %s\nSHA-256: %s\nNotification: %s", iconSuccess, tview.Escape(run.Artifact.Path), backupByteSize(uint64(run.Artifact.Size)), run.Artifact.SHA256, tview.Escape(notification)), pageBackupCenter)
+			retention := "complete"
+			if strings.TrimSpace(run.RetentionError) != "" {
+				retention = "WARNING: " + run.RetentionError
+			}
+			a.ShowAlert(fmt.Sprintf("%s Backup complete\n\nPath: %s\nManifest: %s\nSize: %s\nSHA-256: %s\nVerification: %s\nRetention: %s\nNotification: %s", iconSuccess, tview.Escape(run.Artifact.Path), tview.Escape(nonEmptyOr(run.Artifact.ManifestPath, "not recorded")), backupByteSize(uint64(run.Artifact.Size)), run.Artifact.SHA256, tview.Escape(nonEmptyOr(run.Artifact.VerificationLevel, "legacy level not recorded")), tview.Escape(retention), tview.Escape(notification)), pageBackupCenter)
 		})
 	}()
 }
@@ -1376,23 +1401,42 @@ func (a *App) showBackupRunDetails(run backupcore.Run, jobName string) {
 		if artifactSize < 0 {
 			artifactSize = 0
 		}
-		artifact = fmt.Sprintf("Path: %s\nSize: %s\nSHA-256: %s\nVerified: %t",
-			run.Artifact.Path, backupByteSize(uint64(artifactSize)), nonEmptyOr(run.Artifact.SHA256, "not recorded"), run.Artifact.Verified)
+		verification := nonEmptyOr(run.Artifact.VerificationLevel, "legacy level not recorded")
+		artifactCheck := "not passed"
+		if run.Artifact.Verified {
+			artifactCheck = "passed (" + verification + ")"
+		}
+		artifact = fmt.Sprintf("Path: %s\nManifest: %s\nSize: %s\nSHA-256: %s\nArtifact check: %s\nPublication: %s",
+			run.Artifact.Path, nonEmptyOr(run.Artifact.ManifestPath, "not recorded"), backupByteSize(uint64(artifactSize)), nonEmptyOr(run.Artifact.SHA256, "not recorded"), artifactCheck, backupArtifactPublicationLabel(run.Artifact))
 	}
 	failure := nonEmptyOr(run.Error, "none")
+	retention := nonEmptyOr(run.RetentionError, "none")
 	notification := backupRunNotificationSummary(run)
 	if strings.TrimSpace(run.NotificationError) != "" {
 		notification += ": " + run.NotificationError
 	}
-	message := fmt.Sprintf("%s Backup run details\n\nJob: %s\nRun: %s\nTrigger: %s\nStatus: %s\nStarted: %s\nFinished: %s\nDuration: %s\n\n%s\n\nBackup error: %s\nNotification: %s",
+	message := fmt.Sprintf("%s Backup run details\n\nJob: %s\nRun: %s\nTrigger: %s\nStatus: %s\nStarted: %s\nFinished: %s\nDuration: %s\n\n%s\n\nBackup error: %s\nRetention warning: %s\nNotification: %s",
 		iconBackup, tview.Escape(nonEmptyOr(jobName, run.JobID)), tview.Escape(run.ID), run.Trigger, run.Status,
 		run.StartedAt.Local().Format(time.RFC3339), finished, formatBackupProgressDuration(duration),
-		tview.Escape(artifact), tview.Escape(failure), tview.Escape(notification))
+		tview.Escape(artifact), tview.Escape(failure), tview.Escape(retention), tview.Escape(notification))
 	modal := tview.NewModal().SetText(message).AddButtons([]string{" Close "}).SetDoneFunc(func(_ int, _ string) {
 		a.pages.RemovePage("backupRunDetails")
 	})
 	modal.SetBackgroundColor(bg).SetButtonBackgroundColor(surface1).SetButtonTextColor(green).SetTextColor(text)
 	a.pages.AddPage("backupRunDetails", modal, true, true)
+}
+
+func backupArtifactPublicationLabel(artifact backupcore.Artifact) string {
+	switch artifact.PublicationState {
+	case backupcore.ArtifactPublicationComplete:
+		return "complete (artifact + completion manifest)"
+	case backupcore.ArtifactPublicationArtifactOnly:
+		return "artifact only; completion manifest missing or unconfirmed; not recovery-ready"
+	case backupcore.ArtifactPublicationUncertain:
+		return "uncertain finalization; not recovery-ready"
+	default:
+		return "legacy state not recorded"
+	}
 }
 
 func (a *App) confirmDeleteBackupJob(job backupcore.Job) {
@@ -2787,8 +2831,127 @@ func backupAgentLogsFooterText(width int) string {
 	)
 }
 
+func backupAutomationStatus(jobCount, scheduledCount int, agentHealthy bool) string {
+	if jobCount == 0 {
+		return "[#f9e2af]setup needed[-]"
+	}
+	if scheduledCount == 0 {
+		return "[#89b4fa]on demand[-]"
+	}
+	if agentHealthy {
+		return "[green]schedule ready[-]"
+	}
+	return "[#f9e2af]agent needed[-]"
+}
+
+func backupEncryptionLabel(encryption backupcore.Encryption) string {
+	if encryption == backupcore.EncryptionAge {
+		return "age (X25519 recipient)"
+	}
+	return "not encrypted"
+}
+
+func latestVerifiedBackupRuns(runs []backupcore.Run) map[string]backupcore.Run {
+	latest := make(map[string]backupcore.Run)
+	for _, run := range runs {
+		if run.Status != backupcore.RunSucceeded || !run.Artifact.Verified || strings.TrimSpace(run.Artifact.Path) == "" || !run.Artifact.PrunedAt.IsZero() {
+			continue
+		}
+		if run.Artifact.PublicationState != "" && run.Artifact.PublicationState != backupcore.ArtifactPublicationComplete {
+			continue
+		}
+		current, exists := latest[run.JobID]
+		if !exists || backupRunRecordedAt(run).After(backupRunRecordedAt(current)) {
+			latest[run.JobID] = run
+		}
+	}
+	return latest
+}
+
+func backupProtectionSummary(job backupcore.Job, verifiedRun backupcore.Run, hasVerifiedCopy bool) (protection, copies string) {
+	isRemote := backupcore.IsRemoteBackupDestination(job.Destination)
+	if hasVerifiedCopy {
+		// A job can be edited after a run. Describe the recorded recovery point,
+		// not the job's current destination, when one exists.
+		isRemote = backupcore.IsRemoteBackupDestination(verifiedRun.Artifact.Path)
+	}
+	if isRemote {
+		if !hasVerifiedCopy {
+			return "[#f9e2af]NO LEGACY REMOTE COPY RECORDED[-]  │  rclone",
+				"0 recorded  │  no extra copy  │  new rclone publication disabled"
+		}
+		verifiedAt := backupRunRecordedAt(verifiedRun)
+		when := "time not recorded"
+		if !verifiedAt.IsZero() {
+			when = verifiedAt.Local().Format("Jan 02 15:04")
+		}
+		return fmt.Sprintf("[#89b4fa]LEGACY REMOTE COPY RECORDED[-]  │  rclone  │  size checked %s", when),
+			"1 legacy record  │  availability not rechecked  │  no extra copy  │  new publication disabled"
+	}
+	if !hasVerifiedCopy {
+		return "[#f9e2af]NO SUCCESSFUL COPY RECORDED[-]  │  local",
+			"0 recorded  │  extra copy not configured"
+	}
+	verifiedAt := backupRunRecordedAt(verifiedRun)
+	when := "time not recorded"
+	if !verifiedAt.IsZero() {
+		when = verifiedAt.Local().Format("Jan 02 15:04")
+	}
+	state, detail := localRecordedCopyState(verifiedRun.Artifact)
+	switch state {
+	case "present":
+		return fmt.Sprintf("[#f9e2af]LOCAL COPY PRESENT[-]  │  last verified %s", when),
+			"1 found  │  checksum not re-read  │  no extra copy"
+	case "missing":
+		return fmt.Sprintf("[red]RECORDED COPY MISSING[-]  │  last verified %s", when),
+			"0 found  │  " + detail
+	case "changed":
+		return fmt.Sprintf("[red]LOCAL COPY CHANGED[-]  │  last verified %s", when),
+			"0 trusted  │  " + detail
+	default:
+		return fmt.Sprintf("[#f9e2af]LOCAL COPY NOT CHECKED[-]  │  last verified %s", when),
+			"1 recorded  │  " + detail
+	}
+}
+
+func localRecordedCopyState(artifact backupcore.Artifact) (state, detail string) {
+	info, err := os.Lstat(artifact.Path)
+	if os.IsNotExist(err) {
+		return "missing", "artifact path is absent"
+	}
+	if err != nil {
+		return "unknown", "artifact path could not be checked"
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() || (artifact.Size > 0 && info.Size() != artifact.Size) {
+		return "changed", "artifact type or size differs"
+	}
+	if strings.TrimSpace(artifact.ManifestPath) != "" {
+		manifestInfo, manifestErr := os.Lstat(artifact.ManifestPath)
+		if os.IsNotExist(manifestErr) {
+			return "changed", "completion manifest is absent"
+		}
+		if manifestErr != nil {
+			return "unknown", "completion manifest could not be checked"
+		}
+		if manifestInfo.Mode()&os.ModeSymlink != 0 || !manifestInfo.Mode().IsRegular() || (artifact.ManifestSize > 0 && manifestInfo.Size() != artifact.ManifestSize) {
+			return "changed", "completion manifest type or size differs"
+		}
+	}
+	return "present", ""
+}
+
+func backupRunRecordedAt(run backupcore.Run) time.Time {
+	if !run.FinishedAt.IsZero() {
+		return run.FinishedAt
+	}
+	if !run.Artifact.CreatedAt.IsZero() {
+		return run.Artifact.CreatedAt
+	}
+	return run.StartedAt
+}
+
 func backupRunSummary(run backupcore.Run) string {
-	when := run.StartedAt.Local().Format("Jan 02 15:04")
+	when := backupRunRecordedAt(run).Local().Format("Jan 02 15:04")
 	return fmt.Sprintf("%s %s", run.Status, when)
 }
 

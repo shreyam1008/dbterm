@@ -68,7 +68,7 @@ The old search result—“dbterm — Fast, Keyboard-First Terminal Database Cli
 
 1. PostgreSQL/MySQL connections can start at server scope; the database name is optional.
 2. One focused keyboard workflow covers objects, queries, typed filters, relationship navigation, import, and streamed export.
-3. Local and remote sources can back up to local/mounted or rclone storage in all four combinations.
+3. Local and remote sources can back up to absolute local or OS-mounted storage through the same verified pipeline.
 4. A small native OS agent keeps scheduled jobs running after the TUI closes.
 5. Backup artifacts are staged privately, verified, optionally compressed/encrypted, hashed, retained conservatively, inspected by content, and restored through explicit guards.
 
@@ -76,7 +76,8 @@ The old search result—“dbterm — Fast, Keyboard-First Terminal Database Cli
 
 - Do not say “fastest,” “lightest,” “most secure,” “production-proof,” or “best DBeaver alternative” without a repeatable benchmark or external evidence.
 - Do not imply that Turso or D1 restore is supported; their artifacts are inspectable, while restore currently targets PostgreSQL, MySQL/MariaDB, and local SQLite.
-- Do not call the local/cloud backup matrix “zero configuration”; official database clients and rclone may be required.
+- Do not call local or cloud-source backup “zero configuration”; official database clients may be required.
+- Do not advertise new rclone backup generation or remote retention. Both fail closed until a destination-specific copy layer can meet the immutable-publication and version-aware-deletion contracts.
 - Do not say credentials are encrypted at rest. They are stored in private per-user files/catalog state and redacted from output.
 - Do not present a synthetic comparison score or misrepresent competitors.
 
@@ -164,11 +165,11 @@ Publish original, tested workflow guides. Each should contain real commands, sup
 
 | Priority | Proposed URL | Search intent and angle |
 | --- | --- | --- |
-| P0 | `/guides/remote-postgresql-backup-local-rclone/` | Back up reachable PostgreSQL to a local folder or rclone remote; explain agent PATH, `pg_dump`, encryption, inspection, and restore drill. |
+| P0 | `/guides/remote-postgresql-backup-local-mounted/` | Back up reachable PostgreSQL to a local or OS-mounted folder; explain agent PATH, `pg_dump`, encryption, inspection, and restore drill. |
 | P0 | `/guides/mysql-list-databases-without-default/` | Connect to MySQL without knowing a database name, browse account-visible databases, choose an optional default, and avoid sudo/database-password confusion. |
 | P0 | `/guides/sqlite-backup-and-restore/` | Consistent snapshot, private staging, pre-restore copy, snapshot vs SQL restore, and filesystem safeguards. |
 | P1 | `/guides/database-backup-agent-systemd-launchd-windows/` | Explain desktop/user vs server/system scheduling and when each scope is correct. |
-| P1 | `/guides/encrypted-database-backups-age-rclone/` | End-to-end threat model, X25519 recipient/key custody, compression order, off-site storage, and recovery test. |
+| P1 | `/guides/encrypted-database-backups-age/` | End-to-end threat model, X25519 recipient/key custody, compression order, independent off-site copies, and recovery test. |
 | P1 | `/guides/terminal-sql-client-workflow/` | Table pins, object palette, typed filters, foreign-key navigation, and streamed export as one practical walkthrough. |
 | P2 | `/guides/cloudflare-d1-turso-backups/` | Clearly separate D1 native export and Turso transaction-backed logical export, limitations, and inspect-only restore status. |
 | P2 | `/releases/` | Human-readable release notes with visible dates, changed workflows, upgrade notes, and links to GitHub artifacts. |
@@ -282,7 +283,7 @@ Maker comment opening:
 
 ### Personal/LinkedIn post
 
-> dbterm has grown from a focused SQL TUI into a complete terminal database workbench. Save a PostgreSQL or MySQL server login once, browse every accessible database, query and inspect data, and route local or remote backups to local/mounted or rclone storage. The native agent keeps scheduled jobs running after the TUI closes, with verification, compression, age encryption, retention, alerts, inspection, and guarded restore. v0.6.4 is open source and available for Linux, macOS, and Windows: https://github.com/shreyam1008/dbterm
+> dbterm has grown from a focused SQL TUI into a complete terminal database workbench. Save a PostgreSQL or MySQL server login once, browse every accessible database, query and inspect data, and create local or remote-source backups on local/OS-mounted storage. The native agent keeps scheduled jobs running after the TUI closes, with verification, portable manifests, compression, age encryption, retention, alerts, inspection, and guarded restore. v0.6.4 is open source and available for Linux, macOS, and Windows: https://github.com/shreyam1008/dbterm
 
 ## Assets to prepare before the public launch
 

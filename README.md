@@ -19,14 +19,16 @@ Save a PostgreSQL or MySQL server login once—without memorizing a database nam
 | **Data workspace** | Local schema-aware SQL autocomplete, schema/object discovery, named Change Profiler anchors with row/cell/schema diffs, a command/object/recent-SQL palette, persistent table pins, query history, asynchronous cancellable execution, typed results, composable `AND` filters, sorting, first/last pagination, bidirectional related-row navigation, same-value discovery, schema inspection, and streamed CSV export. |
 | **Database operations** | PostgreSQL/MySQL SQL-dump import with progress and cancellation, plus local MySQL/PostgreSQL service status, start, stop, install guidance, saved-login connection, and server-wide database browsing. |
 | **Local agent access** | STDIO MCP server for scoped schema inspection, bounded read-only SQL, query plans, and declared relationship following; stored secrets stay hidden and profile changes require explicit opt-in. |
-| **Backup and recovery** | Instant or scheduled backups from local or remote sources to local/mounted or rclone destinations; native dumps, private staging, verification, compression, age encryption, SHA-256 history, retention, email alerts, native OS agents, content inspection, and guarded PostgreSQL/MySQL/SQLite restore. |
+| **Backup and recovery** | Instant or scheduled backups from local or remote sources to absolute local or OS-mounted destinations; native dumps, private staging, portable manifests, verification, compression, age encryption, SHA-256 history, retention, email alerts, native OS agents, content inspection, and guarded PostgreSQL/MySQL/SQLite restore. |
 
-The backup routing model covers all four combinations:
+The current backup-generation routes are:
 
-| Source | Local / mounted destination | rclone remote destination |
-| --- | --- | --- |
-| **Local database** | Supported | Supported |
-| **Remote / cloud database** | Supported | Supported |
+| Source | Absolute local / OS-mounted destination |
+| --- | --- |
+| **Local database** | Supported |
+| **Remote / cloud database** | Supported |
+
+New `rclone://...` generation jobs fail closed. Generic rclone finalization cannot guarantee dbterm's atomic create-only publication rule across backends. Existing rclone history remains visible for migration, while a future independent copy-job layer can add off-machine copies with destination-specific safety.
 
 PostgreSQL uses custom `pg_dump` archives; MySQL/MariaDB uses single-database `mysqldump` SQL; SQLite uses a consistent built-in snapshot; Turso uses a single-transaction logical export; and D1 uses Cloudflare's native export API. Restore currently targets PostgreSQL, MySQL/MariaDB, and local SQLite.
 
@@ -186,9 +188,9 @@ The portable engine works across every supported database without installing tri
 
 ## Backup Center
 
-For a one-off copy, press `Alt+B` from Tables, Query, or Results; use `F2` for the native folder chooser, type a path, or enter `rclone://remote/path`. `F3` refreshes local destination and private-staging capacity. For durable jobs, press `B` on Dashboard or `Alt+K` anywhere. `N` then chooses an existing saved database or lets you add one; `Ctrl+N` adds another database from the plan form. `Ctrl+B` on a highlighted Dashboard connection starts with it preselected. A job binds one saved local or remote connection to:
+For a one-off copy, press `Alt+B` from Tables, Query, or Results; use `F2` for the native folder chooser or type an absolute local/OS-mounted path. `F3` refreshes destination and private-staging capacity. For durable jobs, press `B` on Dashboard or `Alt+K` anywhere. `N` then chooses an existing saved database or lets you add one; `Ctrl+N` adds another database from the plan form. `Ctrl+B` on a highlighted Dashboard connection starts with it preselected. A job binds one saved local or remote connection to:
 
-- an absolute local/mounted folder or an rclone-backed remote destination, with an optional native GUI folder chooser and local volume/free-space details;
+- an absolute local or OS-mounted folder, with an optional native GUI folder chooser and local volume/free-space details;
 - manual, interval, daily, or weekly timing with an IANA timezone;
 - a safe filename template using `{job}`, `{connection}`, `{database}`, `{engine}`, `{date}`, `{time}`, `{timestamp}`, and `{run}`;
 - no compression, gzip, ZIP, or single-worker Zstandard with a chosen level;
@@ -293,7 +295,7 @@ PostgreSQL/MySQL backup and restore use their official clients; bounded-memory S
 - macOS: `brew install libpq mysql-client sqlite`
 - Windows: install PostgreSQL/MySQL clients as needed and `sqlite3` from the [official SQLite downloads](https://sqlite.org/download.html)
 
-Remote sources work through saved connections, including reachable cloud databases. Destinations can be absolute local/OS-mounted folders or configured rclone remotes such as `rclone://offsite/dbterm`, so local→local, local→remote, remote→local, and remote→remote backups all use the same verified pipeline. Install rclone, run `rclone config` as the backup-agent OS account, and verify the remote with `rclone lsd offsite:`. Remote credentials stay in rclone rather than dbterm's catalog.
+Remote sources work through saved connections, including reachable cloud databases. Backup generation currently publishes only to absolute local or OS-mounted folders, so local→local and remote→local/mounted backups use the verified pipeline. New `rclone://...` generation jobs are rejected because generic rclone moves cannot provide a portable atomic create-if-absent guarantee. Existing rclone records remain visible for migration; use a separately verified storage workflow until dbterm's independent copy-job layer is available.
 
 Turso logical exports keep schema and data reads on one source transaction. Virtual/FTS tables are rejected before publication because exporting their shadow tables independently can produce an unrestorable dump. Cloudflare D1 uses Cloudflare's native export API and streams its short-lived signed HTTPS result into dbterm's private staging area; Cloudflare can temporarily make the database unavailable while that export runs. Restore in this release targets PostgreSQL, MySQL/MariaDB, and local SQLite; Turso/D1 SQL backups remain inspectable artifacts.
 

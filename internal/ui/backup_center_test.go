@@ -315,6 +315,161 @@ func TestBackupCenterFooterFitsCommonTerminalWidths(t *testing.T) {
 	}
 }
 
+func TestBackupAutomationStatusDoesNotCallSchedulerReadinessProtection(t *testing.T) {
+	tests := []struct {
+		name           string
+		jobCount       int
+		scheduledCount int
+		agentHealthy   bool
+		want           string
+	}{
+		{name: "empty", want: "setup needed"},
+		{name: "manual only", jobCount: 1, want: "on demand"},
+		{name: "agent missing", jobCount: 1, scheduledCount: 1, want: "agent needed"},
+		{name: "scheduler ready", jobCount: 1, scheduledCount: 1, agentHealthy: true, want: "schedule ready"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := backupAutomationStatus(test.jobCount, test.scheduledCount, test.agentHealthy)
+			if !strings.Contains(got, test.want) {
+				t.Fatalf("automation status = %q, want %q", got, test.want)
+			}
+			if strings.Contains(strings.ToLower(got), "protected") {
+				t.Fatalf("automation status %q claims a protection state", got)
+			}
+		})
+	}
+}
+
+func TestLatestVerifiedBackupRunsRequiresSuccessfulUnprunedArtifact(t *testing.T) {
+	base := time.Date(2026, time.September, 3, 1, 0, 0, 0, time.UTC)
+	verified := func(id, jobID string, finished time.Time) backupcore.Run {
+		return backupcore.Run{
+			ID: id, JobID: jobID, Status: backupcore.RunSucceeded, StartedAt: finished.Add(-time.Minute), FinishedAt: finished,
+			Artifact: backupcore.Artifact{Path: id + ".dump", Verified: true, CreatedAt: finished.Add(-time.Minute)},
+		}
+	}
+	older := verified("run_old", "orders", base)
+	newer := verified("run_new", "orders", base.Add(time.Hour))
+	pruned := verified("run_pruned", "orders", base.Add(2*time.Hour))
+	pruned.Artifact.PrunedAt = base.Add(3 * time.Hour)
+	unverified := verified("run_unverified", "orders", base.Add(4*time.Hour))
+	unverified.Artifact.Verified = false
+	failed := verified("run_failed", "orders", base.Add(5*time.Hour))
+	failed.Status = backupcore.RunFailed
+	incomplete := verified("run_incomplete", "orders", base.Add(6*time.Hour))
+	incomplete.Artifact.PublicationState = backupcore.ArtifactPublicationArtifactOnly
+	other := verified("run_other", "customers", base.Add(6*time.Hour))
+
+	got := latestVerifiedBackupRuns([]backupcore.Run{older, failed, pruned, other, incomplete, unverified, newer})
+	if len(got) != 2 {
+		t.Fatalf("verified job count = %d, want 2: %#v", len(got), got)
+	}
+	if got["orders"].ID != newer.ID {
+		t.Fatalf("orders recovery point = %q, want %q", got["orders"].ID, newer.ID)
+	}
+	if got["customers"].ID != other.ID {
+		t.Fatalf("customers recovery point = %q, want %q", got["customers"].ID, other.ID)
+	}
+}
+
+func TestBackupProtectionSummarySeparatesCopyLocationAndCount(t *testing.T) {
+	verifiedAt := time.Date(2026, time.September, 3, 1, 4, 0, 0, time.Local)
+	localDestination := t.TempDir()
+	localArtifact := filepath.Join(localDestination, "orders.dump")
+	if err := os.WriteFile(localArtifact, []byte("safe"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		name           string
+		destination    string
+		wantKind       string
+		wantProtection string
+		wantCount      string
+		wantDetail     string
+		wantCopyDetail string
+		reject         []string
+	}{
+		{name: "local", destination: localDestination, wantKind: "LOCAL", wantProtection: "LOCAL COPY PRESENT", wantCount: "1 found", wantDetail: "last verified", wantCopyDetail: "checksum not re-read", reject: []string{"ONE VERIFIED COPY", "1 verified", "checksum verified"}},
+		{name: "rclone", destination: "rclone://vault/dbterm", wantKind: "rclone", wantProtection: "LEGACY REMOTE COPY RECORDED", wantCount: "1 legacy record", wantDetail: "size checked", wantCopyDetail: "availability not rechecked", reject: []string{"LOCAL COPY PRESENT", "checksum verified"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			run := backupcore.Run{FinishedAt: verifiedAt, Artifact: backupcore.Artifact{PublicationState: backupcore.ArtifactPublicationComplete}}
+			if test.name == "local" {
+				run.Artifact.Path = localArtifact
+				run.Artifact.Size = int64(len("safe"))
+			} else {
+				run.Artifact.Path = test.destination + "/orders.dump"
+			}
+			protection, copies := backupProtectionSummary(backupcore.Job{Destination: test.destination}, run, true)
+			for _, want := range []string{test.wantProtection, test.wantKind, test.wantDetail, "Sep 03 01:04"} {
+				if want == "" {
+					continue
+				}
+				if !strings.Contains(protection, want) {
+					t.Errorf("protection summary %q missing %q", protection, want)
+				}
+			}
+			for _, want := range []string{test.wantCount, test.wantCopyDetail, "no extra copy"} {
+				if !strings.Contains(copies, want) {
+					t.Errorf("copies summary %q missing %q", copies, want)
+				}
+			}
+			for _, rejected := range test.reject {
+				if strings.Contains(protection, rejected) || strings.Contains(copies, rejected) {
+					t.Errorf("copy summary overstates verification with %q: protection=%q copies=%q", rejected, protection, copies)
+				}
+			}
+		})
+	}
+
+	protection, copies := backupProtectionSummary(backupcore.Job{Destination: "rclone://vault/dbterm"}, backupcore.Run{}, false)
+	if !strings.Contains(protection, "NO LEGACY REMOTE COPY") || !strings.Contains(protection, "rclone") {
+		t.Fatalf("empty protection summary = %q", protection)
+	}
+	if !strings.Contains(copies, "0 recorded") || !strings.Contains(copies, "new rclone publication disabled") {
+		t.Fatalf("empty copies summary = %q", copies)
+	}
+	protection, copies = backupProtectionSummary(backupcore.Job{Destination: filepath.Join(t.TempDir(), "backups")}, backupcore.Run{}, false)
+	if !strings.Contains(protection, "NO SUCCESSFUL COPY RECORDED") || !strings.Contains(copies, "0 recorded") {
+		t.Fatalf("empty local summary = protection %q, copies %q", protection, copies)
+	}
+	missingRun := backupcore.Run{FinishedAt: verifiedAt, Artifact: backupcore.Artifact{Path: filepath.Join(localDestination, "missing.dump"), Size: 4}}
+	protection, copies = backupProtectionSummary(backupcore.Job{Destination: localDestination}, missingRun, true)
+	if !strings.Contains(protection, "RECORDED COPY MISSING") || !strings.Contains(copies, "0 found") {
+		t.Fatalf("missing local summary = protection %q, copies %q", protection, copies)
+	}
+
+	remoteRun := backupcore.Run{FinishedAt: verifiedAt, Artifact: backupcore.Artifact{Path: "rclone://old-vault/orders.dump"}}
+	protection, _ = backupProtectionSummary(backupcore.Job{Destination: localDestination}, remoteRun, true)
+	if !strings.Contains(protection, "LEGACY REMOTE COPY RECORDED") {
+		t.Fatalf("edited remote-to-local job mislabeled its recorded artifact: %q", protection)
+	}
+	localRun := backupcore.Run{FinishedAt: verifiedAt, Artifact: backupcore.Artifact{Path: localArtifact, Size: int64(len("safe"))}}
+	protection, _ = backupProtectionSummary(backupcore.Job{Destination: "rclone://new-vault/orders"}, localRun, true)
+	if !strings.Contains(protection, "LOCAL COPY PRESENT") {
+		t.Fatalf("edited local-to-remote job mislabeled its recorded artifact: %q", protection)
+	}
+}
+
+func TestBackupRunSummaryUsesCompletionTime(t *testing.T) {
+	started := time.Date(2026, time.September, 3, 1, 3, 0, 0, time.Local)
+	finished := started.Add(time.Minute)
+	summary := backupRunSummary(backupcore.Run{Status: backupcore.RunSucceeded, StartedAt: started, FinishedAt: finished})
+	if !strings.Contains(summary, "Sep 03 01:04") || strings.Contains(summary, "Sep 03 01:03") {
+		t.Fatalf("run summary = %q, want completion time", summary)
+	}
+}
+
+func TestBackupEncryptionLabelNamesAgeStandard(t *testing.T) {
+	if got := backupEncryptionLabel(backupcore.EncryptionAge); got != "age (X25519 recipient)" {
+		t.Fatalf("age encryption label = %q", got)
+	}
+	if got := backupEncryptionLabel(backupcore.EncryptionNone); got != "not encrypted" {
+		t.Fatalf("unencrypted label = %q", got)
+	}
+}
+
 func TestBackupConnectionChoicesKeepSavedConnectionsBeforeAddAction(t *testing.T) {
 	connections := []config.ConnectionConfig{
 		{ID: "conn_local", Name: "local", Type: config.SQLite, FilePath: "/tmp/local.db"},
@@ -611,6 +766,12 @@ func TestBackupStorageTextShowsDestinationAndPrivateStageVolumes(t *testing.T) {
 			t.Errorf("storage text %q missing %q", text, want)
 		}
 	}
+	legacy := backupDestinationStorageText("rclone://vault/dbterm")
+	for _, want := range []string{"Legacy rclone destination", "new backup publication is disabled", "STAGE"} {
+		if !strings.Contains(legacy, want) {
+			t.Errorf("legacy storage text %q missing %q", legacy, want)
+		}
+	}
 }
 
 func TestBackupCenterRebuildsDashboardAfterConnectionsChange(t *testing.T) {
@@ -688,4 +849,126 @@ func TestBackupCenterRefreshKeepsSelectedJob(t *testing.T) {
 	if got := list.GetCurrentItem(); got != 1 {
 		t.Fatalf("selected job index after refresh = %d, want 1", got)
 	}
+}
+
+func TestBackupCenterProtectionSummaryFitsCommonTerminalSizes(t *testing.T) {
+	for _, test := range []struct {
+		name           string
+		width          int
+		height         int
+		destination    string
+		wantKind       string
+		wantProtection string
+		wantCount      string
+		wantDetail     string
+		wantCopyDetail string
+		reject         []string
+	}{
+		{name: "local 80x24 long values", width: 80, height: 24, destination: filepath.Join(t.TempDir(), "registration-production-backups", "daily-database-archives"), wantKind: "LOCAL", wantProtection: "LOCAL COPY PRESENT", wantCount: "1 found", wantDetail: "last verified", wantCopyDetail: "checksum not re-read", reject: []string{"ONE VERIFIED COPY", "1 verified", "checksum verified"}},
+		{name: "legacy rclone record 120x35", width: 120, height: 35, destination: "rclone://vault/dbterm", wantKind: "rclone", wantProtection: "LEGACY REMOTE COPY RECORDED", wantCount: "1 legacy record", wantDetail: "size checked", wantCopyDetail: "availability not rechecked", reject: []string{"LOCAL COPY PRESENT", "checksum verified"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			jobDestination := test.destination
+			if backupcore.IsRemoteBackupDestination(test.destination) {
+				// New rclone generation fails closed. A migrated local job can
+				// still display its historical remote run conservatively.
+				jobDestination = filepath.Join(t.TempDir(), "current-local-destination")
+			}
+			if err := os.MkdirAll(jobDestination, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			backupStore, err := backupcore.OpenStore(filepath.Join(t.TempDir(), "backups.db"))
+			if err != nil {
+				t.Fatalf("open backup store: %v", err)
+			}
+			t.Cleanup(func() { _ = backupStore.Close() })
+
+			job := backupcore.Job{
+				ID: "job_orders", Name: "Orders", ConnectionID: "orders", Destination: jobDestination,
+				Compression: backupcore.CompressionZstd, Schedule: backupcore.Schedule{Kind: backupcore.ScheduleManual},
+			}
+			if err := backupStore.UpsertJob(context.Background(), &job); err != nil {
+				t.Fatalf("store backup job: %v", err)
+			}
+			const owner = "ui-render-test"
+			verifiedAt := time.Date(2026, time.September, 3, 1, 4, 0, 0, time.Local)
+			if _, err := backupStore.ClaimJob(context.Background(), job.ID, owner, verifiedAt.Add(-time.Minute)); err != nil {
+				t.Fatalf("claim backup job: %v", err)
+			}
+			run, err := backupStore.StartRun(context.Background(), job.ID, backupcore.TriggerManual, verifiedAt.Add(-time.Minute))
+			if err != nil {
+				t.Fatalf("start backup run: %v", err)
+			}
+			artifactPath, err := backupcore.JoinBackupDestination(test.destination, "orders.sqlite3.zst")
+			if err != nil {
+				t.Fatalf("build artifact path: %v", err)
+			}
+			run.Status = backupcore.RunSucceeded
+			run.FinishedAt = verifiedAt
+			run.Artifact = backupcore.Artifact{
+				Path: artifactPath, Size: 4096, SHA256: strings.Repeat("a", 64), Format: "sqlite+zstd", Verified: true,
+				PublicationState: backupcore.ArtifactPublicationComplete, CreatedAt: verifiedAt,
+			}
+			if !backupcore.IsRemoteBackupDestination(test.destination) {
+				if err := os.WriteFile(artifactPath, make([]byte, 4096), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := backupStore.FinishRun(context.Background(), &run, owner); err != nil {
+				t.Fatalf("finish backup run: %v", err)
+			}
+
+			application := tview.NewApplication()
+			pages := tview.NewPages()
+			pages.AddPage("origin", tview.NewTextView(), true, true)
+			application.SetRoot(pages, true)
+			app := &App{
+				app: application, pages: pages, backupStore: backupStore, lastScreenW: test.width, lastScreenH: test.height,
+				store: &config.Store{Connections: []config.ConnectionConfig{{ID: "orders", Name: "Registration Production Orders Database", Type: config.SQLite, FilePath: filepath.Join(jobDestination, "source-database-with-a-long-name.sqlite3")}}},
+			}
+			screen := tcell.NewSimulationScreen("UTF-8")
+			application.SetScreen(screen)
+			screen.SetSize(test.width, test.height)
+			t.Cleanup(screen.Fini)
+
+			app.showBackupCenter()
+			application.ForceDraw()
+			rendered := backupSimulationScreenText(screen)
+			t.Logf("%dx%d Backup Center render:\n%s", test.width, test.height, rendered)
+			for _, want := range []string{"Selected Backup", "PROTECTION", test.wantProtection, test.wantKind, test.wantDetail, "COPIES", test.wantCount, test.wantCopyDetail, "POLICY", "not encrypted"} {
+				if want == "" {
+					continue
+				}
+				if !strings.Contains(rendered, want) {
+					t.Errorf("%dx%d render missing %q:\n%s", test.width, test.height, want, rendered)
+				}
+			}
+			for _, rejected := range test.reject {
+				if strings.Contains(rendered, rejected) {
+					t.Errorf("%dx%d render overstates verification with %q:\n%s", test.width, test.height, rejected, rendered)
+				}
+			}
+			if strings.Contains(strings.ToLower(rendered), "protected") {
+				t.Fatalf("%dx%d render claims scheduler readiness is protection:\n%s", test.width, test.height, rendered)
+			}
+		})
+	}
+}
+
+func backupSimulationScreenText(screen tcell.SimulationScreen) string {
+	cells, width, height := screen.GetContents()
+	lines := make([]string, height)
+	for row := 0; row < height; row++ {
+		var line strings.Builder
+		for column := 0; column < width; column++ {
+			cell := cells[row*width+column]
+			if len(cell.Runes) == 0 {
+				line.WriteRune(' ')
+				continue
+			}
+			line.WriteString(string(cell.Runes))
+		}
+		lines[row] = strings.TrimRight(line.String(), " ")
+	}
+	return strings.Join(lines, "\n")
 }

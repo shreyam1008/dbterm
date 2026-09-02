@@ -17,12 +17,14 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 
 	"filippo.io/age"
 	"filippo.io/age/armor"
 	"github.com/klauspost/compress/zstd"
 	"github.com/shreyam1008/dbterm/internal/config"
+	"github.com/shreyam1008/dbterm/internal/privatefile"
 )
 
 const (
@@ -69,6 +71,7 @@ type Inspection struct {
 	Path          string
 	Size          int64
 	SHA256        string
+	Manifest      *ArtifactManifest
 	Wrappers      []Wrapper
 	Format        Format
 	Engine        config.DBType
@@ -137,6 +140,10 @@ func Inspect(ctx context.Context, path string, opts InspectOptions) (*Inspection
 		_ = outer.Close()
 		return nil, fmt.Errorf("backup file is empty: %s", resolved)
 	}
+	if !os.SameFile(info, openedInfo) {
+		_ = outer.Close()
+		return nil, fmt.Errorf("backup file changed while it was being opened: %s", resolved)
+	}
 
 	digest, err := hashOpenedFile(ctx, outer)
 	if err != nil {
@@ -160,6 +167,19 @@ func Inspect(ctx context.Context, path string, opts InspectOptions) (*Inspection
 		SHA256:     digest,
 		Format:     FormatUnknown,
 		Confidence: ConfidenceUnknown,
+	}
+	manifest, foundManifest, err := ReadArtifactManifestForArtifact(resolved)
+	if err != nil {
+		_ = outer.Close()
+		return nil, err
+	}
+	if foundManifest {
+		if err := verifyManifestArtifact(manifest, Artifact{Size: result.Size, SHA256: result.SHA256}); err != nil {
+			_ = outer.Close()
+			return nil, fmt.Errorf("artifact completion manifest does not match %s: %w", resolved, err)
+		}
+		result.Manifest = manifest
+		result.Evidence = append(result.Evidence, "dbterm completion manifest v1 matches the artifact size and SHA-256")
 	}
 
 	current := &payloadSource{file: outer, path: resolved, size: openedInfo.Size()}
@@ -189,6 +209,9 @@ func Inspect(ctx context.Context, path string, opts InspectOptions) (*Inspection
 			result.Confidence = ConfidenceLocked
 			result.Warnings = append(result.Warnings,
 				"Encrypted age backup detected; select an identity file to inspect its database format.")
+			if err := verifyInspectionManifestDescription(result); err != nil {
+				return nil, err
+			}
 			addExtensionWarnings(result)
 			return result, nil
 		}
@@ -222,6 +245,9 @@ func Inspect(ctx context.Context, path string, opts InspectOptions) (*Inspection
 	result.Evidence = append(result.Evidence, evidence...)
 	result.Warnings = append(result.Warnings, warnings...)
 	result.RequiredTools = requiredToolsFor(format)
+	if err := verifyInspectionManifestDescription(result); err != nil {
+		return nil, err
+	}
 	addExtensionWarnings(result)
 	return result, nil
 }
@@ -244,12 +270,15 @@ func resolveInspectionPath(path string) (string, os.FileInfo, error) {
 	if err != nil {
 		return "", nil, fmt.Errorf("resolve backup file path %q: %w", path, err)
 	}
-	info, err := os.Stat(abs)
+	info, err := os.Lstat(abs)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return "", nil, fmt.Errorf("backup file not found: %s", abs)
 		}
 		return "", nil, fmt.Errorf("access backup file %q: %w", abs, err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return "", nil, fmt.Errorf("backup source must not be a symbolic link: %s", abs)
 	}
 	if !info.Mode().IsRegular() {
 		return "", nil, fmt.Errorf("backup source must be a regular file: %s", abs)
@@ -279,7 +308,15 @@ func verifyOpenedFileUnchanged(file *os.File, expected os.FileInfo, path string)
 	if err != nil {
 		return fmt.Errorf("inspect backup file %q after reading: %w", path, err)
 	}
-	if current.Size() != expected.Size() || current.ModTime() != expected.ModTime() {
+	if !os.SameFile(current, expected) || current.Size() != expected.Size() || current.ModTime() != expected.ModTime() {
+		return fmt.Errorf("backup file changed while it was being inspected: %s", path)
+	}
+	pathInfo, err := os.Lstat(path)
+	if err != nil {
+		return fmt.Errorf("backup file changed while it was being inspected: %s: %w", path, err)
+	}
+	if pathInfo.Mode()&os.ModeSymlink != 0 || !pathInfo.Mode().IsRegular() || !os.SameFile(pathInfo, expected) ||
+		pathInfo.Size() != expected.Size() || pathInfo.ModTime() != expected.ModTime() {
 		return fmt.Errorf("backup file changed while it was being inspected: %s", path)
 	}
 	return nil
@@ -424,6 +461,14 @@ func decodeWrapper(ctx context.Context, source *payloadSource, kind Wrapper, arm
 }
 
 func readAgeIdentities(path string) ([]age.Identity, error) {
+	return readAgeIdentitiesWithOps(path, os.Lstat, os.Open)
+}
+
+func readAgeIdentitiesWithOps(
+	path string,
+	lstat func(string) (os.FileInfo, error),
+	open func(string) (*os.File, error),
+) ([]age.Identity, error) {
 	if strings.TrimSpace(path) == "" {
 		return nil, fmt.Errorf("age identity file is required")
 	}
@@ -431,30 +476,52 @@ func readAgeIdentities(path string) ([]age.Identity, error) {
 	if err != nil {
 		return nil, fmt.Errorf("resolve age identity path %q: %w", path, err)
 	}
-	file, err := os.Open(abs)
+	info, err := lstat(abs)
+	if err != nil {
+		return nil, fmt.Errorf("inspect age identity file %q: %w", abs, err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() || info.Size() == 0 {
+		return nil, fmt.Errorf("age identity must be a non-empty regular file, not a symlink: %s", abs)
+	}
+	if runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0 {
+		return nil, fmt.Errorf("age identity file permissions are too broad (%04o); require 0600 or stricter: %s", info.Mode().Perm(), abs)
+	}
+	file, err := open(abs)
 	if err != nil {
 		return nil, fmt.Errorf("open age identity file %q: %w", abs, err)
 	}
 	defer file.Close()
-	info, err := file.Stat()
+	openedInfo, err := file.Stat()
 	if err != nil {
 		return nil, fmt.Errorf("inspect age identity file %q: %w", abs, err)
 	}
-	if !info.Mode().IsRegular() || info.Size() == 0 {
-		return nil, fmt.Errorf("age identity must be a non-empty regular file: %s", abs)
+	if !openedInfo.Mode().IsRegular() || !os.SameFile(info, openedInfo) {
+		return nil, fmt.Errorf("age identity file changed while it was being opened: %s", abs)
 	}
 	identities, err := age.ParseIdentities(bufio.NewReader(file))
 	if err != nil {
-		return nil, fmt.Errorf("parse age identity file %q: %w", abs, err)
+		// age parser errors can quote the full invalid input line. Do not echo a
+		// malformed private key (or another accidentally selected secret file)
+		// into terminal output or logs.
+		return nil, fmt.Errorf("parse age identity file %q: identity data is invalid", abs)
 	}
 	if len(identities) == 0 {
 		return nil, fmt.Errorf("age identity file contains no identities: %s", abs)
+	}
+	after, err := file.Stat()
+	if err != nil || !os.SameFile(openedInfo, after) || openedInfo.Size() != after.Size() || openedInfo.ModTime() != after.ModTime() {
+		return nil, fmt.Errorf("age identity file changed while it was being read: %s", abs)
+	}
+	currentPath, err := lstat(abs)
+	if err != nil || currentPath.Mode()&os.ModeSymlink != 0 || !os.SameFile(openedInfo, currentPath) ||
+		openedInfo.Size() != currentPath.Size() || openedInfo.ModTime() != currentPath.ModTime() {
+		return nil, fmt.Errorf("age identity file changed while it was being read: %s", abs)
 	}
 	return identities, nil
 }
 
 func materializeDecoded(ctx context.Context, reader io.Reader, maxDecoded int64) (*payloadSource, error) {
-	file, err := os.CreateTemp("", "dbterm-inspect-*")
+	file, err := privatefile.CreateTemp("", "dbterm-inspect-", "")
 	if err != nil {
 		return nil, fmt.Errorf("create private inspection file: %w", err)
 	}

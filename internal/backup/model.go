@@ -3,6 +3,7 @@ package backup
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -14,6 +15,18 @@ const (
 	DefaultFilenameTemplate = "{connection}_{engine}_{date}_{time}_{run}"
 	DefaultTimeoutMinutes   = 30
 )
+
+// ErrRcloneBackupPublicationDisabled is returned for generation jobs that
+// target a generic rclone remote. rclone's single-object move operation is not
+// an atomic create-if-absent primitive across its provider ecosystem, so it
+// cannot uphold dbterm's immutable publication contract under a race.
+var ErrRcloneBackupPublicationDisabled = errors.New("rclone backup publication is disabled: generic rclone finalization cannot guarantee atomic create-only publication; use an absolute local or mounted destination, then copy the completed artifact separately")
+
+// ErrRcloneRetentionDisabled prevents a check-then-delete race where a remote
+// object could be replaced after verification but before generic rclone
+// deletefile removes it. Safe remote retention needs a backend generation or
+// ETag-aware conditional delete operation.
+var ErrRcloneRetentionDisabled = errors.New("rclone backup retention is disabled: generic rclone cannot conditionally delete the exact remote object version that dbterm verified; use a backend-specific version-aware retention policy")
 
 type Compression string
 
@@ -79,6 +92,14 @@ const (
 	RunCanceled  RunStatus = "canceled"
 )
 
+type ArtifactPublicationState string
+
+const (
+	ArtifactPublicationComplete     ArtifactPublicationState = "complete"
+	ArtifactPublicationArtifactOnly ArtifactPublicationState = "artifact-only"
+	ArtifactPublicationUncertain    ArtifactPublicationState = "uncertain"
+)
+
 // Job is a durable backup policy. It references a saved connection by its
 // stable ID so renaming or reordering dashboard entries cannot redirect it.
 type Job struct {
@@ -109,15 +130,21 @@ type Retention struct {
 }
 
 type Artifact struct {
-	Path        string    `json:"path"`
-	Size        int64     `json:"size"`
-	SHA256      string    `json:"sha256"`
-	Format      string    `json:"format"`
-	Verified    bool      `json:"verified"`
-	CreatedAt   time.Time `json:"created_at"`
-	BackupName  string    `json:"backup_name,omitempty"`
-	PrunedAt    time.Time `json:"pruned_at,omitempty"`
-	PruneReason string    `json:"prune_reason,omitempty"`
+	ID                string                   `json:"id,omitempty"`
+	Path              string                   `json:"path"`
+	Size              int64                    `json:"size"`
+	SHA256            string                   `json:"sha256"`
+	Format            string                   `json:"format"`
+	Verified          bool                     `json:"verified"`
+	VerificationLevel string                   `json:"verification_level,omitempty"`
+	PublicationState  ArtifactPublicationState `json:"publication_state,omitempty"`
+	CreatedAt         time.Time                `json:"created_at"`
+	BackupName        string                   `json:"backup_name,omitempty"`
+	ManifestPath      string                   `json:"manifest_path,omitempty"`
+	ManifestSize      int64                    `json:"manifest_size,omitempty"`
+	ManifestSHA256    string                   `json:"manifest_sha256,omitempty"`
+	PrunedAt          time.Time                `json:"pruned_at,omitempty"`
+	PruneReason       string                   `json:"prune_reason,omitempty"`
 }
 
 type Run struct {
@@ -129,6 +156,7 @@ type Run struct {
 	FinishedAt            time.Time `json:"finished_at,omitempty"`
 	Artifact              Artifact  `json:"artifact,omitempty"`
 	Error                 string    `json:"error,omitempty"`
+	RetentionError        string    `json:"retention_error,omitempty"`
 	NotificationAttempted bool      `json:"notification_attempted,omitempty"`
 	NotificationSent      bool      `json:"notification_sent,omitempty"`
 	NotificationError     string    `json:"notification_error,omitempty"`
@@ -203,6 +231,9 @@ func (j Job) Validate() error {
 	}
 	if normalizedDestination != j.Destination {
 		return fmt.Errorf("backup destination must be normalized as %q", normalizedDestination)
+	}
+	if IsRemoteBackupDestination(normalizedDestination) {
+		return ErrRcloneBackupPublicationDisabled
 	}
 	if strings.ContainsAny(j.FilenameTemplate, `/\\`) {
 		return fmt.Errorf("filename template must not contain path separators")

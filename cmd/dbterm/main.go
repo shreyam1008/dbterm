@@ -5,10 +5,12 @@ import (
 	"os"
 	"strings"
 
+	backupcore "github.com/shreyam1008/dbterm/internal/backup"
 	"github.com/shreyam1008/dbterm/internal/ui"
 )
 
 func main() {
+	backupcore.SetDBTermVersion(buildVersion())
 	if sudoUser := interactiveSudoInvoker(); sudoUser != "" && shouldUseInvokerProfile(os.Args[1:]) {
 		if count, source := legacySudoConnectionCount(sudoUser); count > 0 {
 			fmt.Fprintf(os.Stderr, "\n  Found %d connection(s) in the older root-only profile at %s.\n", count, source)

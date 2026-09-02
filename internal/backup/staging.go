@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/shreyam1008/dbterm/internal/appdirs"
+	"github.com/shreyam1008/dbterm/internal/privatefile"
 )
 
 const (
@@ -31,13 +32,9 @@ func newPrivateNativeStage(now time.Time) (string, error) {
 	if _, err := cleanupStalePrivateStages(root, now.Add(-privateStageMaxAge)); err != nil {
 		return "", fmt.Errorf("clean stale private backup staging directories: %w", err)
 	}
-	directory, err := os.MkdirTemp(root, privateStagePrefix)
+	directory, err := privatefile.CreateTempDirectory(root, privateStagePrefix)
 	if err != nil {
 		return "", fmt.Errorf("create private backup staging directory: %w", err)
-	}
-	if err := os.Chmod(directory, 0o700); err != nil {
-		_ = os.RemoveAll(directory)
-		return "", fmt.Errorf("protect private backup staging directory: %w", err)
 	}
 	return directory, nil
 }
@@ -47,7 +44,7 @@ func privateNativeStageRoot() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(root, 0o700); err != nil {
+	if err := privatefile.EnsurePrivateDirectory(root); err != nil {
 		return "", fmt.Errorf("create private backup staging root: %w", err)
 	}
 	info, err := os.Lstat(root)
@@ -56,9 +53,6 @@ func privateNativeStageRoot() (string, error) {
 	}
 	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
 		return "", fmt.Errorf("private backup staging root must be a real directory: %s", root)
-	}
-	if err := os.Chmod(root, 0o700); err != nil {
-		return "", fmt.Errorf("protect private backup staging root: %w", err)
 	}
 	return root, nil
 }

@@ -47,7 +47,11 @@ assert(sitePackage.version === releaseVersion, "site/package.json version differ
 const sitemap = await readDist("sitemap.xml");
 const sitemapUrls = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1]);
 const expectedUrls = routes.map(expectedUrl);
-const generatedPaths = await readdir(distDir, { recursive: true });
+// Node returns platform separators for recursive directory entries. Keep the
+// verifier's route contract URL-shaped so it behaves identically on Windows
+// and POSIX CI hosts.
+const generatedPaths = (await readdir(distDir, { recursive: true }))
+  .map((relativePath) => relativePath.split(path.sep).join("/"));
 const generatedFiles = new Set(generatedPaths);
 const generatedRoutes = generatedPaths
   .filter((relativePath) => relativePath === "index.html" || relativePath.endsWith("/index.html"))
@@ -220,7 +224,11 @@ const localSkill = await read(repoDir, ".agents/skills/use-dbterm/SKILL.md");
 const publicSkill = await read(siteDir, "public/.well-known/agent-skills/use-dbterm/SKILL.md");
 const generatedSkill = await readDist(".well-known/agent-skills/use-dbterm/SKILL.md");
 assert(localSkill === publicSkill && localSkill === generatedSkill, "Agent Skill copies have drifted");
-const skillDigest = `sha256:${createHash("sha256").update(localSkill).digest("hex")}`;
+// Git may materialize text with CRLF on Windows. Discovery digests are based
+// on the repository's canonical LF representation so one index works on every
+// supported build host.
+const canonicalSkill = localSkill.replace(/\r\n/g, "\n");
+const skillDigest = `sha256:${createHash("sha256").update(canonicalSkill).digest("hex")}`;
 const publicIndex = await read(siteDir, "public/.well-known/agent-skills/index.json");
 const generatedIndex = await readDist(".well-known/agent-skills/index.json");
 assert(publicIndex === generatedIndex, "generated Agent Skill index differs from its public source");

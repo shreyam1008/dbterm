@@ -14,6 +14,7 @@ import (
 	"unicode"
 
 	"github.com/shreyam1008/dbterm/internal/config"
+	"github.com/shreyam1008/dbterm/internal/privatefile"
 )
 
 type RestoreMode string
@@ -404,7 +405,7 @@ func snapshotRestoreArtifact(ctx context.Context, inspection *Inspection) (*payl
 		return nil, fmt.Errorf("backup changed before restore materialization")
 	}
 
-	temporary, err := os.CreateTemp("", "dbterm-restore-source-*")
+	temporary, err := privatefile.CreateTemp("", "dbterm-restore-source-", "")
 	if err != nil {
 		return nil, fmt.Errorf("create private restore staging file: %w", err)
 	}

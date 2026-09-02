@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -114,7 +115,9 @@ func TestWriteResultExportCSVAtomicPublishesPrivateCompleteFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat CSV: %v", err)
 	}
-	if got := info.Mode().Perm(); got != 0o600 {
+	// Windows reports synthetic Unix permission bits; access is governed by
+	// the destination directory's inherited ACL instead.
+	if got := info.Mode().Perm(); runtime.GOOS != "windows" && got != 0o600 {
 		t.Fatalf("CSV permissions = %o, want 600", got)
 	}
 
@@ -202,7 +205,7 @@ func TestPortableResultExportPublicationIsPrivateAndNoClobber(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat portable destination: %v", err)
 	}
-	if got := info.Mode().Perm(); got != 0o600 {
+	if got := info.Mode().Perm(); runtime.GOOS != "windows" && got != 0o600 {
 		t.Fatalf("portable permissions = %o, want 600", got)
 	}
 

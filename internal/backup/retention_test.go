@@ -1,7 +1,10 @@
 package backup
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -9,7 +12,172 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/shreyam1008/dbterm/internal/config"
 )
+
+func TestApplyRetentionDeletesOwnedManifestBeforeArtifact(t *testing.T) {
+	store, job, destination, now := retentionPairFixture(t)
+	old := addRetentionPairRun(t, store, job, destination, now.Add(-2*time.Hour), "old")
+	newest := addRetentionPairRun(t, store, job, destination, now.Add(-time.Hour), "new")
+
+	removed, err := ApplyRetention(context.Background(), store, job, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(removed) != 1 || removed[0] != old.Artifact.Path {
+		t.Fatalf("removed = %#v, want %s", removed, old.Artifact.Path)
+	}
+	for _, path := range []string{old.Artifact.ManifestPath, old.Artifact.Path} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("expired pair member remains at %s: %v", path, err)
+		}
+	}
+	for _, path := range []string{newest.Artifact.Path, newest.Artifact.ManifestPath} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("newest pair member was removed at %s: %v", path, err)
+		}
+	}
+}
+
+func TestApplyRetentionRefusesTamperedArtifactWithoutRemovingManifest(t *testing.T) {
+	store, job, destination, now := retentionPairFixture(t)
+	old := addRetentionPairRun(t, store, job, destination, now.Add(-2*time.Hour), "old")
+	_ = addRetentionPairRun(t, store, job, destination, now.Add(-time.Hour), "new")
+	if err := os.WriteFile(old.Artifact.Path, []byte("tampered"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := ApplyRetention(context.Background(), store, job, now)
+	if err == nil || !strings.Contains(err.Error(), "changed artifact") {
+		t.Fatalf("ApplyRetention() error = %v, want changed-artifact refusal", err)
+	}
+	for _, path := range []string{old.Artifact.Path, old.Artifact.ManifestPath} {
+		if _, statErr := os.Stat(path); statErr != nil {
+			t.Fatalf("retention changed pair member %s after refusal: %v", path, statErr)
+		}
+	}
+}
+
+func TestApplyRetentionResumesAfterManifestWasAlreadyRemoved(t *testing.T) {
+	store, job, destination, now := retentionPairFixture(t)
+	old := addRetentionPairRun(t, store, job, destination, now.Add(-2*time.Hour), "old")
+	_ = addRetentionPairRun(t, store, job, destination, now.Add(-time.Hour), "new")
+	if err := os.Remove(old.Artifact.ManifestPath); err != nil {
+		t.Fatal(err)
+	}
+
+	removed, err := ApplyRetention(context.Background(), store, job, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(removed) != 1 || removed[0] != old.Artifact.Path {
+		t.Fatalf("resumed retention removed %#v, want %s", removed, old.Artifact.Path)
+	}
+}
+
+func TestApplyRetentionRejectsRcloneBeforeToolLookupOrDeletion(t *testing.T) {
+	store, job, destination, now := retentionPairFixture(t)
+	old := addRetentionPairRun(t, store, job, destination, now.Add(-2*time.Hour), "old")
+	newest := addRetentionPairRun(t, store, job, destination, now.Add(-time.Hour), "new")
+	job.Destination = "rclone://archive/team/backups"
+
+	toolLookedUp := false
+	originalFinder := findRcloneTool
+	findRcloneTool = func(string) (string, error) {
+		toolLookedUp = true
+		return "", os.ErrNotExist
+	}
+	t.Cleanup(func() { findRcloneTool = originalFinder })
+
+	removed, err := ApplyRetention(context.Background(), store, job, now)
+	if err == nil || !strings.Contains(err.Error(), "rclone backup retention is disabled") {
+		t.Fatalf("ApplyRetention() = %#v, %v; want explicit fail-closed error", removed, err)
+	}
+	if len(removed) != 0 {
+		t.Fatalf("disabled rclone retention reported removals: %#v", removed)
+	}
+	if toolLookedUp {
+		t.Fatal("disabled rclone retention looked up or invoked rclone")
+	}
+	for _, path := range []string{
+		old.Artifact.Path, old.Artifact.ManifestPath,
+		newest.Artifact.Path, newest.Artifact.ManifestPath,
+	} {
+		if _, statErr := os.Stat(path); statErr != nil {
+			t.Fatalf("disabled rclone retention touched recorded artifact %s: %v", path, statErr)
+		}
+	}
+}
+
+func retentionPairFixture(t *testing.T) (*Store, Job, string, time.Time) {
+	t.Helper()
+	store, err := OpenStore(filepath.Join(t.TempDir(), "backups.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	destination := t.TempDir()
+	now := time.Date(2026, 9, 3, 6, 30, 0, 0, time.UTC)
+	job := Job{
+		Name: "manifest retention", ConnectionID: "conn", Destination: destination,
+		Compression: CompressionNone, Encryption: EncryptionNone, Schedule: Schedule{Kind: ScheduleManual},
+		Retention: Retention{KeepLast: 1}, TimeoutMinutes: 5,
+	}
+	if err := store.UpsertJob(context.Background(), &job); err != nil {
+		t.Fatal(err)
+	}
+	return store, job, destination, now
+}
+
+func addRetentionPairRun(t *testing.T, store *Store, job Job, destination string, startedAt time.Time, suffix string) Run {
+	t.Helper()
+	ctx := context.Background()
+	owner := "pair-retention-" + suffix
+	if _, err := store.ClaimJob(ctx, job.ID, owner, startedAt); err != nil {
+		t.Fatal(err)
+	}
+	run, err := store.StartRun(ctx, job.ID, TriggerManual, startedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := []byte("backup-" + suffix)
+	digest := sha256.Sum256(payload)
+	artifactPath := filepath.Join(destination, "backup-"+suffix+".dump")
+	if err := os.WriteFile(artifactPath, payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	artifact := Artifact{
+		ID: "artifact_" + suffix, Path: artifactPath, Size: int64(len(payload)), SHA256: hex.EncodeToString(digest[:]),
+		Format: "postgres_custom", Verified: true, CreatedAt: startedAt,
+		ManifestPath: artifactPath + ArtifactManifestSuffix,
+	}
+	manifest := ArtifactManifest{
+		SchemaVersion: ArtifactManifestSchemaVersion,
+		ArtifactID:    artifact.ID, RunID: run.ID, JobID: job.ID, CreatedAt: startedAt,
+		ProducerID: "producer_retention", DBTermVersion: "test", Engine: config.PostgreSQL,
+		Format: artifact.Format, Compression: CompressionNone, Encryption: EncryptionSchemeNone,
+		SizeBytes: artifact.Size, SHA256: artifact.SHA256, Verification: ArtifactVerificationPassed, VerificationLevel: ArtifactVerificationBasic,
+		FileSets: []ManifestFileSet{}, Warnings: []string{},
+	}
+	var manifestData bytes.Buffer
+	if err := EncodeArtifactManifest(&manifestData, manifest); err != nil {
+		t.Fatal(err)
+	}
+	manifestDigest := sha256.Sum256(manifestData.Bytes())
+	artifact.ManifestSize = int64(manifestData.Len())
+	artifact.ManifestSHA256 = hex.EncodeToString(manifestDigest[:])
+	if err := os.WriteFile(artifact.ManifestPath, manifestData.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	run.Status = RunSucceeded
+	run.FinishedAt = startedAt.Add(time.Minute)
+	run.Artifact = artifact
+	if err := store.FinishRun(ctx, &run, owner); err != nil {
+		t.Fatal(err)
+	}
+	return run
+}
 
 func TestApplyRetentionDeletesArtifactsAndMarksRunsPruned(t *testing.T) {
 	stateDir := t.TempDir()
@@ -121,6 +289,86 @@ func TestVerifyRecordedArtifactForPruneRefusesChangedContent(t *testing.T) {
 	}
 	if _, statErr := os.Stat(path); statErr != nil {
 		t.Fatalf("changed artifact was modified: %v", statErr)
+	}
+}
+
+func TestLocalRetentionQuarantineRefusesPathSwapBeforeCapture(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "artifact.dump")
+	payload := []byte("recorded backup")
+	digest := sha256.Sum256(payload)
+	if err := os.WriteFile(path, payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	expected := Artifact{Path: path, Size: int64(len(payload)), SHA256: hex.EncodeToString(digest[:])}
+	replacement := []byte("unrelated replacement")
+	attackerPath := filepath.Join(directory, "attacker-kept-original.dump")
+
+	removed, err := removeVerifiedLocalForPruneWithRename(context.Background(), path, expected, nil, func(source, quarantine string) error {
+		if err := os.Rename(source, attackerPath); err != nil {
+			return err
+		}
+		if err := os.WriteFile(source, replacement, 0o600); err != nil {
+			return err
+		}
+		return os.Rename(source, quarantine)
+	})
+	if err == nil || removed || !strings.Contains(err.Error(), "preserved a changed capture") {
+		t.Fatalf("removeVerifiedLocalForPruneWithRename() = %t, %v; want preserved swap refusal", removed, err)
+	}
+	if got, readErr := os.ReadFile(attackerPath); readErr != nil || !bytes.Equal(got, payload) {
+		t.Fatalf("recorded bytes = %q, %v; want preserved original", got, readErr)
+	}
+	entries, readErr := os.ReadDir(directory)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	preservedReplacement := false
+	for _, entry := range entries {
+		if !strings.HasPrefix(entry.Name(), ".dbterm-prune_") || !strings.HasSuffix(entry.Name(), ".quarantine") {
+			continue
+		}
+		got, readErr := os.ReadFile(filepath.Join(directory, entry.Name()))
+		if readErr == nil && bytes.Equal(got, replacement) {
+			preservedReplacement = true
+		}
+	}
+	if !preservedReplacement {
+		t.Fatalf("swapped replacement was deleted instead of preserved: %v", entries)
+	}
+}
+
+func TestApplyRetentionResumesDurableQuarantineAfterCrash(t *testing.T) {
+	for _, capturedMember := range []string{"artifact", "manifest"} {
+		t.Run(capturedMember, func(t *testing.T) {
+			store, job, destination, now := retentionPairFixture(t)
+			old := addRetentionPairRun(t, store, job, destination, now.Add(-2*time.Hour), "old-"+capturedMember)
+			_ = addRetentionPairRun(t, store, job, destination, now.Add(-time.Hour), "new-"+capturedMember)
+
+			capturedPath := old.Artifact.Path
+			capturedArtifact := old.Artifact
+			if capturedMember == "manifest" {
+				capturedPath = old.Artifact.ManifestPath
+				capturedArtifact = Artifact{Size: old.Artifact.ManifestSize, SHA256: old.Artifact.ManifestSHA256}
+			}
+			quarantinePath := localPruneQuarantinePath(capturedPath, capturedArtifact)
+			if err := os.Rename(capturedPath, quarantinePath); err != nil {
+				t.Fatal(err)
+			}
+
+			removed, err := ApplyRetention(context.Background(), store, job, now)
+			if err != nil {
+				t.Fatalf("resume retention after captured %s: %v", capturedMember, err)
+			}
+			if len(removed) != 1 || removed[0] != old.Artifact.Path {
+				t.Fatalf("removed = %#v, want %s", removed, old.Artifact.Path)
+			}
+			for _, path := range []string{old.Artifact.Path, old.Artifact.ManifestPath, quarantinePath} {
+				if _, err := os.Lstat(path); !os.IsNotExist(err) {
+					t.Fatalf("resumed retention left %s: %v", path, err)
+				}
+			}
+		})
 	}
 }
 

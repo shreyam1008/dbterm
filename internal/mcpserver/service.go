@@ -167,7 +167,14 @@ func sqliteReadOnlyDSN(path string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("resolve SQLite file path: %w", err)
 	}
-	parsed := &url.URL{Scheme: "file", Path: absolute}
+	// URL.Path uses slash separators. Feeding a Windows path with backslashes
+	// to url.URL percent-encodes those separators and modernc SQLite can parse
+	// the result as an invalid URI (observed as SQLITE_NOMEM).
+	slashed := filepath.ToSlash(absolute)
+	if filepath.VolumeName(absolute) != "" && !strings.HasPrefix(slashed, "/") {
+		slashed = "/" + slashed
+	}
+	parsed := &url.URL{Scheme: "file", Path: slashed}
 	query := parsed.Query()
 	query.Set("mode", "ro")
 	parsed.RawQuery = query.Encode()

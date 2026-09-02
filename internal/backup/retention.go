@@ -2,6 +2,8 @@ package backup
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -36,6 +38,9 @@ func ApplyRetention(ctx context.Context, store *Store, job Job, now time.Time) (
 	root, err := parseDestination(job.Destination)
 	if err != nil {
 		return nil, err
+	}
+	if root.kind == destinationRclone {
+		return nil, ErrRcloneRetentionDisabled
 	}
 	cutoff := time.Time{}
 	if job.Retention.MaxAgeDays > 0 {
@@ -79,51 +84,214 @@ func ApplyRetention(ctx context.Context, store *Store, job Job, now time.Time) (
 		}
 		run := successes[index]
 		artifactPath := run.Artifact.Path
-		if root.kind == destinationRclone {
-			object, pathErr := parseRemoteArtifactWithin(root, artifactPath)
-			if pathErr != nil {
-				return removed, pathErr
-			}
-			exists, verifyErr := verifyRcloneArtifactForPrune(ctx, object, run.Artifact)
+		localPath, pathErr := filepath.Abs(filepath.Clean(artifactPath))
+		if pathErr != nil || !pathWithin(root.localPath, localPath) {
+			return removed, fmt.Errorf("retention refused path outside destination: %s", run.Artifact.Path)
+		}
+		exists, verifyErr := verifyLocalPruneCandidate(ctx, localPath, run.Artifact)
+		if verifyErr != nil {
+			return removed, verifyErr
+		}
+		if manifestErr := removeLocalManifestForPrune(ctx, root.localPath, run); manifestErr != nil {
+			return removed, manifestErr
+		}
+		if exists {
+			exists, verifyErr = removeVerifiedLocalForPruneWithRename(ctx, localPath, run.Artifact, nil, os.Rename)
 			if verifyErr != nil {
 				return removed, verifyErr
 			}
-			if !exists {
-				if err := store.MarkArtifactPruned(ctx, run.ID, "missing", now); err != nil {
-					return removed, err
-				}
-				continue
-			}
-			if err := deleteRcloneArtifact(ctx, object); err != nil {
+		}
+		if !exists {
+			if err := store.MarkArtifactPruned(ctx, run.ID, "missing", now); err != nil {
 				return removed, err
 			}
-			artifactPath = object.String()
-		} else {
-			localPath, pathErr := filepath.Abs(filepath.Clean(artifactPath))
-			if pathErr != nil || !pathWithin(root.localPath, localPath) {
-				return removed, fmt.Errorf("retention refused path outside destination: %s", run.Artifact.Path)
-			}
-			exists, verifyErr := verifyRecordedArtifactForPrune(ctx, localPath, run.Artifact)
-			if verifyErr != nil {
-				return removed, verifyErr
-			}
-			if !exists {
-				if err := store.MarkArtifactPruned(ctx, run.ID, "missing", now); err != nil {
-					return removed, err
-				}
-				continue
-			}
-			if err := os.Remove(localPath); err != nil {
-				return removed, fmt.Errorf("remove expired backup %s: %w", localPath, err)
-			}
-			artifactPath = localPath
+			continue
 		}
+		artifactPath = localPath
 		if err := store.MarkArtifactPruned(ctx, run.ID, "retention", now); err != nil {
 			return removed, err
 		}
 		removed = append(removed, artifactPath)
 	}
 	return removed, nil
+}
+
+// removeLocalManifestForPrune removes the portable publication signal before
+// its artifact. A missing signal is tolerated so a sidecar-first interrupted
+// prune can safely resume after the artifact is re-verified.
+func removeLocalManifestForPrune(ctx context.Context, root string, run Run) error {
+	if strings.TrimSpace(run.Artifact.ManifestPath) == "" {
+		return nil // Legacy catalog row: no sidecar is owned by this run.
+	}
+	manifestPath, err := filepath.Abs(filepath.Clean(run.Artifact.ManifestPath))
+	if err != nil || !pathWithin(root, manifestPath) {
+		return fmt.Errorf("retention refused manifest path outside destination: %s", run.Artifact.ManifestPath)
+	}
+	_, err = removeVerifiedLocalForPruneWithRename(ctx, manifestPath, Artifact{
+		Size: run.Artifact.ManifestSize, SHA256: run.Artifact.ManifestSHA256,
+	}, func(capturedPath string) error {
+		manifest, readErr := ReadArtifactManifest(capturedPath)
+		if readErr != nil {
+			return readErr
+		}
+		if verifyErr := verifyManifestRun(manifest, run); verifyErr != nil {
+			return fmt.Errorf("retention refused mismatched artifact manifest %s: %w", manifestPath, verifyErr)
+		}
+		return nil
+	}, os.Rename)
+	return err
+}
+
+// removeVerifiedLocalForPruneWithRename captures the directory entry under a
+// deterministic same-directory quarantine name, then verifies the captured
+// entry again before deletion. The deterministic name lets a later run safely
+// reconcile a crash after capture. A writer that swaps the original pathname
+// during the retention window causes a refusal instead of deleting unchecked
+// bytes.
+func removeVerifiedLocalForPruneWithRename(
+	ctx context.Context,
+	artifactPath string,
+	artifact Artifact,
+	validate func(string) error,
+	rename func(string, string) error,
+) (bool, error) {
+	exists, err := verifyLocalPruneCandidate(ctx, artifactPath, artifact)
+	if err != nil || !exists {
+		return exists, err
+	}
+	quarantinePath := localPruneQuarantinePath(artifactPath, artifact)
+	if _, err := os.Lstat(quarantinePath); err == nil {
+		if _, sourceErr := os.Lstat(artifactPath); sourceErr == nil {
+			return false, fmt.Errorf("retention found both the original and captured backup; preserved both for manual review: %s and %s", artifactPath, quarantinePath)
+		} else if !os.IsNotExist(sourceErr) {
+			return false, fmt.Errorf("recheck expired backup before captured deletion: %w", sourceErr)
+		}
+		return verifyAndRemoveLocalPruneCapture(ctx, quarantinePath, artifact, validate)
+	} else if !os.IsNotExist(err) {
+		return false, fmt.Errorf("inspect retention quarantine %s: %w", quarantinePath, err)
+	}
+	return captureAndRemoveLocalForPrune(ctx, artifactPath, quarantinePath, artifact, validate, rename)
+}
+
+// captureAndRemoveLocalForPrune assumes the caller just verified artifactPath.
+// The captured name is synced and re-hashed afterward, which detects changes
+// during the gap while keeping normal retention to two artifact reads.
+func captureAndRemoveLocalForPrune(
+	ctx context.Context,
+	artifactPath string,
+	quarantinePath string,
+	artifact Artifact,
+	validate func(string) error,
+	rename func(string, string) error,
+) (bool, error) {
+	if rename == nil {
+		return false, fmt.Errorf("retention quarantine rename is unavailable")
+	}
+	if err := rename(artifactPath, quarantinePath); err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("capture expired backup %s for verified deletion: %w", artifactPath, err)
+	}
+	if err := syncDirectory(filepath.Dir(quarantinePath)); err != nil {
+		return false, fmt.Errorf("retention preserved a captured backup for retry at %s because its rename could not be synced: %w", quarantinePath, err)
+	}
+	return verifyAndRemoveLocalPruneCapture(ctx, quarantinePath, artifact, validate)
+}
+
+func verifyAndRemoveLocalPruneCapture(ctx context.Context, quarantinePath string, artifact Artifact, validate func(string) error) (bool, error) {
+	preserve := func(cause error) (bool, error) {
+		return false, fmt.Errorf("retention preserved a changed capture for manual review at %s: %w", quarantinePath, cause)
+	}
+	captured, err := verifyRecordedArtifactForPrune(ctx, quarantinePath, artifact)
+	if err != nil {
+		return preserve(err)
+	}
+	if !captured {
+		return preserve(fmt.Errorf("captured entry disappeared before verification"))
+	}
+	if validate != nil {
+		if err := validate(quarantinePath); err != nil {
+			return preserve(err)
+		}
+	}
+	if err := os.Remove(quarantinePath); err != nil {
+		return false, fmt.Errorf("remove verified expired backup capture %s: %w", quarantinePath, err)
+	}
+	if err := syncDirectory(filepath.Dir(quarantinePath)); err != nil {
+		return false, fmt.Errorf("sync backup directory after retention deletion: %w", err)
+	}
+	return true, nil
+}
+
+func verifyLocalPruneCandidate(ctx context.Context, artifactPath string, artifact Artifact) (bool, error) {
+	sourceExists, sourceErr := verifyRecordedArtifactForPrune(ctx, artifactPath, artifact)
+	if sourceErr != nil {
+		return false, sourceErr
+	}
+	quarantinePath := localPruneQuarantinePath(artifactPath, artifact)
+	_, quarantineErr := os.Lstat(quarantinePath)
+	quarantineExists := quarantineErr == nil
+	if quarantineErr != nil && !os.IsNotExist(quarantineErr) {
+		return false, fmt.Errorf("inspect retention quarantine %s: %w", quarantinePath, quarantineErr)
+	}
+	if sourceExists && quarantineExists {
+		return false, fmt.Errorf("retention found both the original and captured backup; preserved both for manual review: %s and %s", artifactPath, quarantinePath)
+	}
+	if sourceExists {
+		return true, nil
+	}
+	if !quarantineExists {
+		return false, nil
+	}
+	return verifyRecordedArtifactForPrune(ctx, quarantinePath, artifact)
+}
+
+func localPruneQuarantinePath(artifactPath string, artifact Artifact) string {
+	identity := fmt.Sprintf("%s\x00%d\x00%s", filepath.Base(artifactPath), artifact.Size, strings.ToLower(strings.TrimSpace(artifact.SHA256)))
+	digest := sha256.Sum256([]byte(identity))
+	return filepath.Join(filepath.Dir(artifactPath), ".dbterm-prune_"+hex.EncodeToString(digest[:12])+".quarantine")
+}
+
+func removeRemoteManifestForPrune(ctx context.Context, root destinationSpec, run Run) error {
+	if strings.TrimSpace(run.Artifact.ManifestPath) == "" {
+		return nil
+	}
+	object, err := parseRemoteArtifactWithin(root, run.Artifact.ManifestPath)
+	if err != nil {
+		return err
+	}
+	initial, exists, err := inspectRcloneObject(ctx, object)
+	if err != nil {
+		return fmt.Errorf("inspect expired remote backup manifest %s: %w", object.String(), err)
+	}
+	if !exists {
+		return nil
+	}
+	if run.Artifact.ManifestSize > 0 && initial.Size != run.Artifact.ManifestSize {
+		return fmt.Errorf("retention refused changed remote manifest %s: size is %d, catalog recorded %d", object.String(), initial.Size, run.Artifact.ManifestSize)
+	}
+	manifest, size, digest, err := readRcloneArtifactManifest(ctx, object)
+	if err != nil {
+		return fmt.Errorf("verify remote artifact manifest %s before deletion: %w", object.String(), err)
+	}
+	if run.Artifact.ManifestSize > 0 && size != run.Artifact.ManifestSize {
+		return fmt.Errorf("retention refused changed remote manifest %s: downloaded size is %d, catalog recorded %d", object.String(), size, run.Artifact.ManifestSize)
+	}
+	if run.Artifact.ManifestSHA256 != "" && !strings.EqualFold(digest, run.Artifact.ManifestSHA256) {
+		return fmt.Errorf("retention refused changed remote manifest %s: SHA-256 no longer matches the catalog", object.String())
+	}
+	if err := verifyManifestRun(manifest, run); err != nil {
+		return fmt.Errorf("retention refused mismatched remote artifact manifest %s: %w", object.String(), err)
+	}
+	after, stillExists, err := inspectRcloneObject(ctx, object)
+	if err != nil {
+		return err
+	}
+	if !stillExists || after.Size != initial.Size || (initial.ModTime != "" && after.ModTime != initial.ModTime) {
+		return fmt.Errorf("retention refused remote manifest that changed during verification: %s", object.String())
+	}
+	return deleteRcloneArtifact(ctx, object)
 }
 
 func verifyRecordedArtifactForPrune(ctx context.Context, path string, artifact Artifact) (bool, error) {

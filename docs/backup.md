@@ -1,8 +1,8 @@
 # dbterm Backup Center
 
 This document is the operating and maintenance guide for dbterm backups. It
-covers one-off backups, durable schedules, native background services,
-retention, notifications, inspection, and restore.
+covers one-off backups, durable schedules, portable completion manifests,
+native background services, retention, notifications, inspection, and restore.
 
 ## What the Backup Center protects
 
@@ -14,11 +14,30 @@ retention, notifications, inspection, and restore.
 | Turso / LibSQL | Single-transaction logical SQL export | Inspectable; virtual/FTS schemas fail closed; automatic restore is not enabled yet |
 | Cloudflare D1 | Cloudflare native SQL export API | Inspectable; automatic restore is not enabled yet |
 
-The source can be local or remote. For example, a saved PostgreSQL connection
-to an AWS-hosted database can write backups to a local disk, an OS-mounted
-volume, or any configured rclone remote. The four source/destination pairings
-are supported: local-to-local, local-to-remote, remote-to-local, and
-remote-to-remote.
+The database source can be local or remote. For example, a saved PostgreSQL
+connection to an AWS-hosted database can write backups to a local disk or an
+OS-mounted volume on the machine running dbterm. New backup-generation
+destinations must currently be absolute local or mounted-local paths.
+
+### Current protection boundary
+
+The portable manifest is the foundation for producer/vault copies, but the
+current catalog still owns backup-generation jobs only. One job creates one
+artifact at one absolute local or OS-mounted destination. New rclone generation
+fails closed because generic rclone finalization cannot provide an atomic
+create-only final-name operation and can overwrite an object after a preflight
+check. Existing rclone job and run records remain visible for migration and
+manual inspection, but they cannot be saved again or run until their generation
+destination is changed to local.
+
+The current release does **not** yet provide a first-class `CopyJob`/`CopyRun`,
+vault-owned SSH/SFTP pull, independent push health, multiple daily wall-clock
+times, application file bundles, managed removable-disk lifecycle, or remote
+restore selection. A future copy-job layer may use rclone where its backend can
+meet the copy contract; that does not weaken the generation fail-closed rule.
+Do not disable an existing PullMount-style service until the copy-job slice has
+repeated parity tests. Backup Center calls the current destination one copy and
+explicitly says that an extra copy is not configured.
 
 Turso schema and data reads stay on one source transaction. dbterm rejects
 virtual/FTS tables before publication because separately exporting their shadow
@@ -37,15 +56,16 @@ the D1 database temporarily unavailable while its native export runs.
 4. Keep the storage, security, and notification defaults unless the backup has
    a specific operational requirement.
 5. Save the job and install either the desktop or server backup agent.
-6. Run the job once manually. Confirm its path, checksum, duration, and history
-   entry before relying on the schedule.
+6. Run the job once manually. Confirm its artifact, adjacent `.dbterm.json`
+   completion manifest, checksum, duration, and history entry before relying on
+   the schedule.
 7. Periodically test inspection and restore with a non-production target.
 
 Instant backup remains available with `Alt+B` from any active workspace panel.
-It uses the same engine-aware native dump and verification pipeline but does not
-create a durable schedule. Press `F2` to choose a folder, type an absolute path,
-or enter `rclone://remote/path`; `F3` refreshes local destination and
-private-staging capacity.
+It uses the same engine-aware native dump, verification, checksum, and
+completion-manifest pipeline but does not create a durable schedule or catalog
+history row. Press `F2` to choose a folder or type an absolute local/mounted
+path; `F3` refreshes destination and private-staging capacity.
 
 ### Backup Center controls
 
@@ -76,9 +96,10 @@ The form is ordered by operational importance and uses progressive disclosure.
 - **Saved connection:** stable connection identity; renaming or reordering the
   Dashboard cannot silently redirect a job.
 - **Job name:** used in history, logs, notifications, and optional filenames.
-- **Destination:** an absolute local/mounted path, or a configured rclone path
-  such as `rclone://offsite/dbterm`. Local paths can be typed or chosen with the
-  native folder dialog when a desktop session is available.
+- **Destination:** an absolute local path or an OS-mounted volume. It can be
+  typed or chosen with the native folder dialog when a desktop session is
+  available. A UNC/NFS/SMB volume must already be mounted or otherwise exposed
+  as a normal machine-visible filesystem path for the agent's OS identity.
 - **Schedule and enabled state:** manual, interval, daily, or weekly.
 
 The default policy uses Zstandard compression, a daily 02:00 local schedule,
@@ -101,32 +122,23 @@ the schedule advances to its next future time.
 
 ### Destination and capacity
 
-Backup Center shows local volume capacity when the OS exposes it. Remote quota
-is provider-specific; use `rclone about remote:` when that backend supports
-quota reporting. The progress view reports the destination and bytes written.
-dbterm still needs private temporary space for the native dump and, for a
-remote destination, the completed wrapped artifact before upload.
+Backup Center shows destination capacity when the OS exposes it. The progress
+view reports the destination and bytes written. dbterm also needs private
+temporary space for the native dump and completed wrapped artifact.
 
-Configure a remote once under the same OS account that runs the backup agent:
-
-```bash
-rclone config
-rclone lsd offsite:
-dbterm backup create --connection production \
-  --destination rclone://offsite/dbterm --name offsite
-```
-
-The text before the first slash is the rclone remote name; the remainder is its
-folder/object prefix. dbterm does not store remote credentials. It invokes
-rclone non-interactively, creates the prefix when needed, uploads with immutable
-semantics, verifies the reported remote size, and records the canonical
-`rclone://...` artifact path. Make the rclone config available to a desktop or
-server agent exactly as it is to an interactive `rclone` command.
+Rclone generation is intentionally disabled. A generic sequence that checks a
+final name, uploads a partial object, and runs `rclone moveto` has a race:
+another writer can create the final object after the check, and `moveto` may
+replace it. `--immutable` does not turn that sequence into a portable atomic
+create-if-absent operation across rclone backends. dbterm therefore rejects
+`rclone://...` when creating, editing, or running a generation job instead of
+claiming no-clobber publication it cannot guarantee.
 
 The folder chooser is a convenience, not a requirement. On a headless server,
-over SSH, or when no supported desktop chooser is installed, type or paste the
-absolute path or rclone URI. dbterm creates local folders when the job is saved;
-the first run validates rclone and prepares its remote prefix.
+over SSH, or when no supported desktop chooser is installed, type or paste an
+absolute local or mounted-local path. dbterm creates the folder when the job is
+saved. Use an existing independently verified copy mechanism for off-machine
+protection until the durable copy-job layer is available.
 
 ### File names
 
@@ -156,8 +168,10 @@ not loaded into memory.
 
 ### Encryption
 
-Jobs can encrypt artifacts with an age X25519 public recipient. Generate an
-identity with:
+The encryption choice is deliberately small: **Off** or **age X25519**. There
+is no cipher or KDF menu. Encrypted writes use the age v1 file format with one
+X25519 public recipient; Zstandard remains the normal compression default.
+Generate an identity with:
 
 ```bash
 dbterm backup keygen
@@ -165,7 +179,85 @@ dbterm backup keygen
 
 Only the public `age1...` recipient belongs in a job. Keep the private identity
 separately from the backup destination and include it in the disaster-recovery
-plan. Losing it makes encrypted artifacts unrecoverable.
+plan. Losing it makes encrypted artifacts unrecoverable. The artifact checksum
+is over the final ciphertext, so transport verification never needs the private
+identity. The portable manifest records `age-x25519-v1` but never records the
+recipient, a recipient-derived identifier, an identity, or a connection secret.
+
+On POSIX systems, `dbterm backup keygen` creates the identity with mode `0600`.
+Inspection refuses a symlink, a non-regular or empty identity file, and any
+identity file with group or other permission bits; an imported identity must
+therefore be `0600` or stricter. On Windows, a newly generated identity uses a
+protected DACL rather than relying on POSIX mode emulation.
+
+### Completion manifests and copy truth
+
+Every backup created through Backup Center, `dbterm backup create`, or a saved
+job publishes a sidecar next to the final artifact:
+
+```text
+orders_mysql_20260903_010000_run-abc.sql.zst
+orders_mysql_20260903_010000_run-abc.sql.zst.dbterm.json
+```
+
+The strict schema-v1 JSON records stable artifact/run/job/producer identities,
+creation time, dbterm version, engine, format, wrappers, final byte count,
+SHA-256, basic structural verification result, and warnings. `verification`
+is `passed` only after that engine check, while `verification_level` is
+`basic-structural`; this is not a substitute for a periodic restore drill. The
+manifest does not include a host, database name, user, password, connection
+string, age recipient, or private identity. Unknown fields, unsupported schema
+versions, malformed checksums, oversized files, symlinked manifests, and
+trailing JSON are rejected.
+
+The sidecar is not signed. Treat its producer identity, engine, format,
+compression, and encryption fields as unsigned producer assertions, not as
+proof of authorship. For a locked age artifact, dbterm can independently match
+the ciphertext's size and SHA-256, detect the outer age envelope, and require
+the sidecar to describe age encryption. It cannot validate the claimed database
+engine, inner format, or compression without the private identity. After
+decryption, inspection detects the payload and wrapper stack from the bytes and
+requires those observations to match the sidecar. That content check still does
+not turn the manifest into a producer signature.
+
+The artifact is published first and the manifest is published last. Local
+publication fsyncs the completed bytes and containing directory. A future copy
+scanner can therefore use the sidecar as the completion signal instead of
+guessing from filename age. Run history distinguishes these publication states:
+
+| State | Meaning | Recovery/copy status |
+| --- | --- | --- |
+| `complete` | Artifact and completion manifest reached their immutable final names and their publication checks completed | Successful recovery point; eligible as a completion signal |
+| `artifact-only` | The artifact is final, but the manifest is absent or its finalization could not be confirmed | Failed run and orphan candidate; copy scanners ignore it |
+| `uncertain` | Publication crossed or may have crossed an irreversible boundary, but final presence, size, or durability could not be confirmed | Failed run; not recovery-ready until a human investigates |
+
+An orphan is deliberately preserved so a failure after the irreversible
+artifact boundary does not destroy potentially useful bytes. Review the failed
+run's exact path, publication state, recorded size, and SHA-256. Inspect the
+local candidate and any adjacent sidecar. For a legacy rclone run, use rclone
+itself to list and download the exact final object and sidecar before inspection.
+Do not hand-author a sidecar or mark the failed run successful. Quarantine or
+remove the candidate after review, then rerun the job to create a new supported
+local artifact/manifest pair. Instant backups have no durable history row, so
+retain the candidate path shown by the error dialog or CLI before closing it.
+There is currently no automatic orphan-promotion/reconciliation command.
+
+Backup Center keeps copy claims intentionally conservative:
+
+- a recorded local success is rechecked for a regular artifact, recorded size,
+  and any catalog-recorded completion manifest, then shown as a local copy
+  present with the explicit warning that its checksum was not re-read;
+- a legacy recorded rclone artifact is labeled as historical remote state whose
+  size was checked by the older publication path, with availability not
+  rechecked; it is not shown as a current or checksum-verified vault copy; and
+- scheduler or agent health is automation readiness, never evidence that a
+  recovery copy exists.
+
+Inspection remains compatible with legacy artifacts that have no sidecar. When
+an adjacent sidecar is present, inspection always requires its size and SHA-256
+to match. If the payload is unlocked, it also requires engine, format,
+encryption, and wrapper descriptions to match the decoded bytes; while locked,
+only the observable outer age description can be checked.
 
 ### Retention
 
@@ -178,11 +270,29 @@ Retention can combine three ceilings:
 
 The newest successful artifact is always retained. Cleanup only considers
 successful artifacts recorded for that exact job and still contained by that
-job's destination. Before deletion, dbterm verifies size and the recorded
-SHA-256 when available. Remote checksum verification streams the object back
-through `rclone cat`, which can incur provider download/egress usage. A changed
-file, symlink, remote name, or path outside the destination is refused rather
-than deleted.
+job's destination. New artifacts and their completion manifests are pruned as
+one pair: dbterm verifies the sidecar's catalog identity and checksum, removes
+the completion signal first, re-verifies the artifact, and only then removes
+the artifact. A local file is atomically moved to a deterministic,
+artifact-derived same-directory quarantine name and re-verified there before it
+is deleted. The stable capture name lets a later run safely reconcile a crash;
+a changed capture is preserved there for manual review. Before deletion, dbterm
+verifies size and the recorded SHA-256 when available. A changed file, manifest,
+symlink, or path outside the destination is refused rather than deleted.
+
+Retention for legacy rclone jobs also fails closed. Generic rclone cannot
+conditionally delete the exact remote object version dbterm verified, so a
+replacement could win the gap between verification and deletion. Preserve
+those objects and use a backend-specific, version-aware retention policy until
+the copy-job layer can enforce an equivalent conditional-delete contract.
+
+A retention refusal does not invalidate the newly published backup. The warning
+is stored on that terminal run before notification is attempted and appears in
+activity/run details. A configured success, failure-only, or both policy can
+therefore deliver a warning email even though the backup status remains
+`succeeded`; the message explicitly separates valid backup creation from failed
+storage cleanup. If updating history itself fails, live progress reports that
+separate persistence problem and notification still uses the in-memory warning.
 
 Deleting a job, stopping the service, updating dbterm, or uninstalling dbterm
 does not delete chosen backup artifacts.
@@ -212,9 +322,10 @@ For those engines, dbterm reports live dump-file growth and elapsed time rather
 than inventing a percentage. Wrapping can use the completed raw dump size for
 an exact byte percentage.
 
-Every durable run records status, timestamps, trigger, error, artifact path,
-size, format, checksum, and verification state. Interrupted runs are reconciled
-as failed after their lease expires so they do not stay “running” forever.
+Every durable run records status, timestamps, trigger, error, artifact and
+manifest paths, sizes and checksums, format, verification state, publication
+state, and retention/notification outcomes. Interrupted runs are reconciled
+as failed after their lease expires so they do not stay `running` forever.
 
 ## Email notifications
 
@@ -366,8 +477,8 @@ then detects PostgreSQL custom/tar/plain SQL, MySQL SQL, SQLite databases, or
 SQLite SQL from bytes rather than trusting the extension. Misleading names
 produce warnings.
 
-Inspection and restore currently accept a local file. Download an rclone-backed
-artifact first, then inspect the downloaded copy:
+Inspection and restore currently accept a local file. To inspect an artifact
+from a legacy rclone run, download it first and then inspect the local copy:
 
 ```bash
 rclone copyto offsite:dbterm/orders.dump.zst ./orders.dump.zst
@@ -415,6 +526,27 @@ schedules, SMTP settings, leases, run history, checksums, and heartbeats live
 in `backup/backups.db`. Raw dumps and temporary database-client credential
 files are staged in the private state area and cleaned after use. Old crash
 partials are cleaned on a later run.
+
+Guarded temporary files and directories use no-clobber random names; named
+private files use create-new semantics or have their permissions tightened. On
+POSIX, files use mode `0600` and private directories use `0700`. On Windows,
+dbterm installs and verifies a protected DACL granting the current runtime
+identity, `SYSTEM`, and built-in Administrators while rejecting broad inherited
+access. This path protects the default backup state directory and catalog
+files, native dump and database-client credential files, artifact/manifest
+publication stages, decoded inspection and restore temporary files, producer-ID
+staging, and newly generated age identities. It does not retroactively secure
+an operator-supplied file or directory. Protect the dbterm state tree and run
+the agent as the intended restricted OS account.
+
+The destination directory is a security boundary. The writability probe proves
+that dbterm can create a file at preflight time; it does not prove that the
+directory is private or remains unchanged. No-clobber publication, regular-file
+and symlink checks, same-file checks, size/hash checks, and rechecks before
+retention deletion reduce time-of-check/time-of-use risk, but they cannot make
+a namespace writable by an untrusted account safe. Use a destination that
+untrusted users cannot rename, replace, or delete, and treat a writable shared
+directory as untrusted even when each staged file has private permissions.
 
 ## Reliability checklist
 

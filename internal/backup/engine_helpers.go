@@ -3,6 +3,7 @@ package backup
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -11,9 +12,13 @@ import (
 	"time"
 
 	"github.com/shreyam1008/dbterm/internal/config"
+	"github.com/shreyam1008/dbterm/internal/privatefile"
 )
 
-func verifyNativeBackup(cfg *config.ConnectionConfig, path string) error {
+func verifyNativeBackup(ctx context.Context, cfg *config.ConnectionConfig, path string) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	file, err := os.Open(path)
 	if err != nil {
 		return fmt.Errorf("open staged backup for verification: %w", err)
@@ -26,7 +31,7 @@ func verifyNativeBackup(cfg *config.ConnectionConfig, path string) error {
 	if info.Size() == 0 {
 		return fmt.Errorf("backup tool produced an empty file")
 	}
-	prefix := make([]byte, 32)
+	prefix := make([]byte, payloadPeekBytes)
 	n, _ := io.ReadFull(file, prefix)
 	prefix = prefix[:n]
 	switch cfg.Type {
@@ -35,12 +40,26 @@ func verifyNativeBackup(cfg *config.ConnectionConfig, path string) error {
 			return fmt.Errorf("PostgreSQL backup validation failed: pg_dump output is not a custom archive")
 		}
 	case config.SQLite:
-		if !bytes.HasPrefix(prefix, []byte("SQLite format 3\x00")) {
-			return fmt.Errorf("SQLite backup validation failed: snapshot header is invalid")
+		if err := validateSQLiteHeader(prefix, info.Size()); err != nil {
+			return fmt.Errorf("SQLite backup validation failed: snapshot header is invalid: %w", err)
 		}
-	case config.MySQL, config.Turso, config.CloudflareD1:
-		if len(bytes.TrimSpace(prefix)) == 0 {
-			return fmt.Errorf("logical backup validation failed: output contains no SQL")
+		if err := validateSQLiteDatabaseFile(ctx, path); err != nil {
+			return fmt.Errorf("SQLite backup validation failed: %w", err)
+		}
+	case config.MySQL:
+		format, engine, _, _, _ := detectSQL(prefix)
+		if format != FormatMySQLSQL || engine != config.MySQL {
+			return fmt.Errorf("MySQL backup validation failed: output does not contain a recognizable mysqldump/MariaDB SQL header")
+		}
+	case config.Turso:
+		format, engine, _, _, _ := detectSQL(prefix)
+		if format != FormatSQLiteSQL || engine != config.SQLite {
+			return fmt.Errorf("SQLite-compatible logical backup validation failed: output does not contain dbterm's expected PRAGMA and transaction header")
+		}
+	case config.CloudflareD1:
+		format, _, _, _, _ := detectSQL(prefix)
+		if format != FormatSQLiteSQL && format != FormatGenericSQL {
+			return fmt.Errorf("Cloudflare D1 backup validation failed: native export does not contain recognizable SQLite-compatible SQL statements")
 		}
 	}
 	return nil
@@ -60,6 +79,22 @@ func publishNoReplace(ctx context.Context, stagedPath, finalPath string, progres
 type publicationOps struct {
 	link   func(string, string) error
 	atomic func(string, string) error
+}
+
+// publicationBoundaryError reports that an immutable final name was created,
+// but a later durability or metadata check failed. Callers must preserve and
+// record the artifact instead of describing the run as pre-publication.
+type publicationBoundaryError struct {
+	path string
+	err  error
+}
+
+func (err *publicationBoundaryError) Error() string { return err.err.Error() }
+func (err *publicationBoundaryError) Unwrap() error { return err.err }
+
+func publicationCrossed(err error) bool {
+	var boundary *publicationBoundaryError
+	return errors.As(err, &boundary)
 }
 
 func publishNoReplaceWithOps(ctx context.Context, stagedPath, finalPath string, progress ProgressFunc, ops publicationOps) error {
@@ -109,7 +144,7 @@ func publishNoReplaceWithOps(ctx context.Context, stagedPath, finalPath string, 
 		return finishPublishedBackup(stagedPath, finalPath)
 	}
 
-	partial, err := os.CreateTemp(filepath.Dir(finalPath), ".dbterm-publish-*.partial")
+	partial, err := privatefile.CreateTemp(filepath.Dir(finalPath), ".dbterm-publish-", ".partial")
 	if err != nil {
 		return fmt.Errorf("create destination-local backup staging file: %w", err)
 	}
@@ -129,7 +164,12 @@ func publishNoReplaceWithOps(ctx context.Context, stagedPath, finalPath string, 
 	if err != nil {
 		return fmt.Errorf("open completed backup for publication: %w", err)
 	}
-	defer source.Close()
+	sourceClosed := false
+	defer func() {
+		if !sourceClosed {
+			_ = source.Close()
+		}
+	}()
 	sourceInfo, err := source.Stat()
 	if err != nil {
 		return fmt.Errorf("inspect completed backup for publication: %w", err)
@@ -146,6 +186,10 @@ func publishNoReplaceWithOps(ctx context.Context, stagedPath, finalPath string, 
 	if err != nil {
 		return fmt.Errorf("stage completed backup in destination: %w", err)
 	}
+	if err := source.Close(); err != nil {
+		return fmt.Errorf("close completed backup after destination staging: %w", err)
+	}
+	sourceClosed = true
 	if err := partial.Sync(); err != nil {
 		return fmt.Errorf("sync destination-local backup staging file: %w", err)
 	}
@@ -234,7 +278,7 @@ func finishPublishedBackup(stagedPath, finalPath string) error {
 	// Publication has crossed its atomic boundary. Never remove finalPath from
 	// this point onward, including if cancellation arrives concurrently.
 	if err := syncDirectory(filepath.Dir(finalPath)); err != nil {
-		return fmt.Errorf("backup was published at %s but its directory could not be synced; the completed artifact was preserved: %w", finalPath, err)
+		return &publicationBoundaryError{path: finalPath, err: fmt.Errorf("backup was published at %s but its directory could not be synced; the completed artifact was preserved: %w", finalPath, err)}
 	}
 	_ = os.Remove(stagedPath)
 	return nil
@@ -248,7 +292,7 @@ func cleanupStalePublicationPartials(directory string, olderThan time.Time) (int
 	removed := 0
 	for _, entry := range entries {
 		name := entry.Name()
-		if entry.Type()&os.ModeSymlink != 0 || !strings.HasPrefix(name, ".dbterm-publish-") || !strings.HasSuffix(name, ".partial") {
+		if entry.Type()&os.ModeSymlink != 0 || !strings.HasPrefix(name, ".dbterm-publish-") || !isDBTermPartialName(name) {
 			continue
 		}
 		info, err := entry.Info()

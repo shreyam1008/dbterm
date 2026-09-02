@@ -257,6 +257,32 @@ func (s *Store) SetJobEnabled(ctx context.Context, id string, enabled bool) erro
 	if err != nil {
 		return err
 	}
+	// Disabling is a fail-safe state transition and must remain possible for a
+	// legacy job whose former destination or settings are no longer accepted.
+	// Enabling still goes through full validation below.
+	if !enabled {
+		job.Enabled = false
+		job.NextRunAt = time.Time{}
+		job.UpdatedAt = time.Now().UTC()
+		payload, marshalErr := json.Marshal(job)
+		if marshalErr != nil {
+			return fmt.Errorf("encode disabled backup job: %w", marshalErr)
+		}
+		result, updateErr := s.db.ExecContext(ctx, `UPDATE backup_jobs
+			SET enabled = 0, next_run_at = NULL, job_json = ?, updated_at = ? WHERE id = ?`,
+			payload, formatTime(job.UpdatedAt), job.ID)
+		if updateErr != nil {
+			return fmt.Errorf("disable backup job: %w", updateErr)
+		}
+		updated, rowsErr := result.RowsAffected()
+		if rowsErr != nil {
+			return fmt.Errorf("confirm disabled backup job: %w", rowsErr)
+		}
+		if updated != 1 {
+			return fmt.Errorf("backup job %q was not found", job.ID)
+		}
+		return nil
+	}
 	job.Enabled = enabled
 	job.NextRunAt = time.Time{}
 	return s.UpsertJob(ctx, &job)
@@ -616,6 +642,46 @@ func (s *Store) listSuccessfulUnprunedRuns(ctx context.Context, jobID string) ([
 	return runs, nil
 }
 
+// ListLatestVerifiedUnprunedRuns returns at most one retained recovery point
+// per job without applying the bounded activity-history limit. UI protection
+// summaries must not forget an inactive job merely because other jobs produced
+// more recent run rows.
+func (s *Store) ListLatestVerifiedUnprunedRuns(ctx context.Context) ([]Run, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT run_json FROM backup_runs
+		WHERE status = ? ORDER BY finished_at DESC, started_at DESC`, RunSucceeded)
+	if err != nil {
+		return nil, fmt.Errorf("list latest successful backup artifacts: %w", err)
+	}
+	defer rows.Close()
+	seen := make(map[string]struct{})
+	var runs []Run
+	for rows.Next() {
+		var payload []byte
+		if err := rows.Scan(&payload); err != nil {
+			return nil, fmt.Errorf("read latest successful backup artifact: %w", err)
+		}
+		var run Run
+		if err := json.Unmarshal(payload, &run); err != nil {
+			return nil, fmt.Errorf("decode latest successful backup artifact: %w", err)
+		}
+		if run.Status != RunSucceeded || !run.Artifact.Verified || strings.TrimSpace(run.Artifact.Path) == "" || !run.Artifact.PrunedAt.IsZero() {
+			continue
+		}
+		if run.Artifact.PublicationState != "" && run.Artifact.PublicationState != ArtifactPublicationComplete {
+			continue
+		}
+		if _, exists := seen[run.JobID]; exists {
+			continue
+		}
+		seen[run.JobID] = struct{}{}
+		runs = append(runs, run)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("scan latest successful backup artifacts: %w", err)
+	}
+	return runs, nil
+}
+
 func (s *Store) LatestRun(ctx context.Context, jobID string) (Run, bool, error) {
 	runs, err := s.ListRuns(ctx, jobID, 1)
 	if err != nil || len(runs) == 0 {
@@ -624,14 +690,18 @@ func (s *Store) LatestRun(ctx context.Context, jobID string) (Run, bool, error) 
 	return runs[0], true, nil
 }
 
+func (s *Store) recordRunRetentionOutcome(ctx context.Context, runID, retentionError string) error {
+	return s.updateTerminalRunJSON(ctx, runID, "retention outcome", func(run *Run) error {
+		run.RetentionError = boundedNotificationError(retentionError)
+		return nil
+	})
+}
+
 // recordRunNotification updates only notification fields in the existing run
 // JSON. It intentionally leaves the indexed terminal status, timestamps, job
 // schedule, and lease untouched because SMTP is always attempted after the
 // backup transaction has committed.
 func (s *Store) recordRunNotification(ctx context.Context, runID string, attempted, sent bool, notificationError string) error {
-	if s == nil || s.db == nil {
-		return fmt.Errorf("backup store is not open")
-	}
 	runID = strings.TrimSpace(runID)
 	if runID == "" {
 		return fmt.Errorf("backup run ID is required")
@@ -639,48 +709,71 @@ func (s *Store) recordRunNotification(ctx context.Context, runID string, attempt
 	if sent && !attempted {
 		return fmt.Errorf("a notification cannot be sent without being attempted")
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin notification outcome update: %w", err)
+	return s.updateTerminalRunJSON(ctx, runID, "notification outcome", func(run *Run) error {
+		run.NotificationAttempted = attempted
+		run.NotificationSent = sent
+		run.NotificationError = boundedNotificationError(notificationError)
+		if sent {
+			run.NotificationError = ""
+		}
+		return nil
+	})
+}
+
+// updateTerminalRunJSON applies a narrow read-modify-write patch with an
+// optimistic comparison against the exact JSON bytes that were read. Retention
+// and notification processing can overlap after FinishRun releases a job lease;
+// retrying a lost comparison merges their independent fields instead of letting
+// the last whole-document writer silently erase the earlier outcome.
+func (s *Store) updateTerminalRunJSON(ctx context.Context, runID, action string, mutate func(*Run) error) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("backup store is not open")
 	}
-	defer tx.Rollback()
-	var payload []byte
-	var indexedStatus RunStatus
-	if err := tx.QueryRowContext(ctx, `SELECT status, run_json FROM backup_runs WHERE id = ?`, runID).Scan(&indexedStatus, &payload); err != nil {
-		return fmt.Errorf("load backup run notification outcome: %w", err)
+	runID = strings.TrimSpace(runID)
+	if runID == "" {
+		return fmt.Errorf("backup run ID is required")
 	}
-	if indexedStatus == RunRunning || indexedStatus == "" {
-		return fmt.Errorf("cannot record notification outcome for a non-terminal backup run")
+	if mutate == nil {
+		return fmt.Errorf("backup run %s update is required", action)
 	}
-	var run Run
-	if err := json.Unmarshal(payload, &run); err != nil {
-		return fmt.Errorf("decode backup run notification outcome: %w", err)
+	const maximumAttempts = 16
+	for attempt := 0; attempt < maximumAttempts; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("record backup run %s: %w", action, err)
+		}
+		var original []byte
+		var indexedStatus RunStatus
+		if err := s.db.QueryRowContext(ctx, `SELECT status, run_json FROM backup_runs WHERE id = ?`, runID).Scan(&indexedStatus, &original); err != nil {
+			return fmt.Errorf("load backup run %s: %w", action, err)
+		}
+		if indexedStatus == RunRunning || indexedStatus == "" {
+			return fmt.Errorf("cannot record %s for a non-terminal backup run", action)
+		}
+		var run Run
+		if err := json.Unmarshal(original, &run); err != nil {
+			return fmt.Errorf("decode backup run %s: %w", action, err)
+		}
+		if err := mutate(&run); err != nil {
+			return err
+		}
+		updatedPayload, err := json.Marshal(run)
+		if err != nil {
+			return fmt.Errorf("encode backup run %s: %w", action, err)
+		}
+		result, err := s.db.ExecContext(ctx, `UPDATE backup_runs SET run_json = ? WHERE id = ? AND status = ? AND run_json = ?`,
+			updatedPayload, runID, indexedStatus, original)
+		if err != nil {
+			return fmt.Errorf("record backup run %s: %w", action, err)
+		}
+		updated, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("confirm backup run %s: %w", action, err)
+		}
+		if updated == 1 {
+			return nil
+		}
 	}
-	run.NotificationAttempted = attempted
-	run.NotificationSent = sent
-	run.NotificationError = boundedNotificationError(notificationError)
-	if sent {
-		run.NotificationError = ""
-	}
-	payload, err = json.Marshal(run)
-	if err != nil {
-		return fmt.Errorf("encode backup run notification outcome: %w", err)
-	}
-	result, err := tx.ExecContext(ctx, `UPDATE backup_runs SET run_json = ? WHERE id = ? AND status = ?`, payload, runID, indexedStatus)
-	if err != nil {
-		return fmt.Errorf("record backup run notification outcome: %w", err)
-	}
-	updated, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("confirm backup run notification outcome: %w", err)
-	}
-	if updated != 1 {
-		return fmt.Errorf("backup run changed while recording notification outcome")
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit backup run notification outcome: %w", err)
-	}
-	return nil
+	return fmt.Errorf("backup run changed repeatedly while recording %s", action)
 }
 
 func boundedNotificationError(message string) string {
@@ -697,24 +790,11 @@ func boundedNotificationError(message string) string {
 }
 
 func (s *Store) MarkArtifactPruned(ctx context.Context, runID, reason string, at time.Time) error {
-	var payload []byte
-	if err := s.db.QueryRowContext(ctx, `SELECT run_json FROM backup_runs WHERE id = ?`, runID).Scan(&payload); err != nil {
-		return fmt.Errorf("load pruned backup run: %w", err)
-	}
-	var run Run
-	if err := json.Unmarshal(payload, &run); err != nil {
-		return fmt.Errorf("decode pruned backup run: %w", err)
-	}
-	run.Artifact.PrunedAt = at.UTC()
-	run.Artifact.PruneReason = strings.TrimSpace(reason)
-	payload, err := json.Marshal(run)
-	if err != nil {
-		return err
-	}
-	if _, err := s.db.ExecContext(ctx, `UPDATE backup_runs SET run_json = ? WHERE id = ?`, payload, run.ID); err != nil {
-		return fmt.Errorf("record pruned backup artifact: %w", err)
-	}
-	return nil
+	return s.updateTerminalRunJSON(ctx, runID, "pruned artifact", func(run *Run) error {
+		run.Artifact.PrunedAt = at.UTC()
+		run.Artifact.PruneReason = strings.TrimSpace(reason)
+		return nil
+	})
 }
 
 func (s *Store) SetMeta(ctx context.Context, key, value string) error {

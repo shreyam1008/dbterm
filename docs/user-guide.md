@@ -300,14 +300,14 @@ Install only the native tools required by the databases and destinations you use
 - MySQL/MariaDB backup requires `mysqldump`; import and restore require `mysql`.
 - SQLite snapshot backup and snapshot restore are built in. Restoring a streamed SQLite SQL dump requires `sqlite3`.
 - Turso/LibSQL logical export and Cloudflare D1 native export do not require those database command-line clients.
-- An `rclone://...` destination requires `rclone`, configured for the same OS account that runs the interactive app or backup agent.
+- New backup-generation jobs require an absolute local or OS-mounted destination. Legacy `rclone://...` records remain visible, but new rclone generation and remote retention fail closed.
 
 Install the matching packages:
 
-- Ubuntu: `sudo apt install postgresql-client mysql-client sqlite3 rclone`
-- Debian: `sudo apt install postgresql-client default-mysql-client sqlite3 rclone`
-- macOS with Homebrew: `brew install libpq mysql-client sqlite rclone`
-- Windows: install the PostgreSQL and MySQL command-line clients when those engines are used, install `sqlite3` from the [official SQLite tools downloads](https://sqlite.org/download.html), and install `rclone` from the [official rclone downloads](https://rclone.org/downloads/). Add their executable directories to the PATH of the user or system account that runs the backup agent.
+- Ubuntu: `sudo apt install postgresql-client mysql-client sqlite3`
+- Debian: `sudo apt install postgresql-client default-mysql-client sqlite3`
+- macOS with Homebrew: `brew install libpq mysql-client sqlite`
+- Windows: install the PostgreSQL and MySQL command-line clients when those engines are used, and install `sqlite3` from the [official SQLite tools downloads](https://sqlite.org/download.html). Add their executable directories to the PATH of the user or system account that runs the backup agent.
 
 Verify the relevant tools from that same account:
 
@@ -318,14 +318,13 @@ psql --version
 mysqldump --version
 mysql --version
 sqlite3 --version
-rclone version
 ```
 
-Homebrew's `libpq` and `mysql-client` formulae may be keg-only, so make their `bin` directories available to the agent rather than relying only on an interactive shell profile. For remote storage, run `rclone config` and a read check such as `rclone lsd offsite:` as the agent account before saving `rclone://offsite/...`. A Windows system task cannot use a per-user mapped-drive letter; use a local path, UNC/mounted path available to that account, or rclone.
+Homebrew's `libpq` and `mysql-client` formulae may be keg-only, so make their `bin` directories available to the agent rather than relying only on an interactive shell profile. A Windows system task cannot use a per-user mapped-drive letter; use a local path or UNC/mounted path available to that account.
 
 ### Instant backup
 
-Press `Alt+B` from Tables, Query, or Results. Choose an absolute local/mounted folder or `rclone://remote/path`; `F2` opens the native folder chooser and `F3` refreshes destination and private-staging capacity. dbterm chooses the engine-appropriate format, refuses to overwrite an existing file, cancels safely, and publishes only a finished artifact. The default folder is `~/dbterm-backups`.
+Press `Alt+B` from Tables, Query, or Results. Choose an absolute local or OS-mounted folder; `F2` opens the native folder chooser and `F3` refreshes destination and private-staging capacity. dbterm chooses the engine-appropriate format, refuses to overwrite an existing file, cancels safely, and publishes only a finished artifact with an adjacent portable manifest. The default folder is `~/dbterm-backups`.
 
 ### Durable plans
 
@@ -334,7 +333,7 @@ Open Backup Center with `Alt+K` or Dashboard `B`. Press `N` to select a saved da
 A plan configures:
 
 - Manual, interval, daily, or weekly scheduling with timezone, weekdays, catch-up behavior, and enabled state.
-- Absolute local/mounted or rclone destinations.
+- Absolute local or OS-mounted destinations.
 - Filename tokens: `{job}`, `{connection}`, `{database}`, `{engine}`, `{date}`, `{time}`, `{timestamp}`, and `{run}`.
 - Count, maximum-age, and total-size retention ceilings. The newest verified artifact is always preserved.
 - Timeout and compression: none, gzip, ZIP, or Zstandard with a chosen level.
@@ -498,7 +497,7 @@ Common `help`, `version`, `info`, `update`, and `remove` aliases are accepted, b
 
 ```text
 dbterm backup list|jobs [--json]
-dbterm backup create --connection <id|name> --destination <folder|rclone://remote/path>
+dbterm backup create --connection <id|name> --destination <absolute-local-or-mounted-folder>
   [--name LABEL] [--filename TEMPLATE]
   [--compression none|gzip|zip|zstd] [--level N]
   [--age-recipient AGE1...] [--timeout MINUTES]
@@ -591,7 +590,7 @@ dbterm backup status
 dbterm backup logs --lines 200
 ```
 
-Confirm registration, startup policy, manager runtime, heartbeat, job enabled state, next run, destination capacity, and that the native clients required by that job are in the agent account's `PATH`. SQLite snapshot jobs need no `sqlite3`; local destinations need no `rclone`.
+Confirm registration, startup policy, manager runtime, heartbeat, job enabled state, next run, destination capacity, and that the native clients required by that job are in the agent account's `PATH`. SQLite snapshot jobs need no `sqlite3`.
 
 ### Server agent installation fails
 

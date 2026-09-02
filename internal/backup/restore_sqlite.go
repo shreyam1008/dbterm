@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/shreyam1008/dbterm/internal/privatefile"
 	_ "modernc.org/sqlite"
 )
 
@@ -46,7 +47,7 @@ func executeSQLiteDatabaseRestore(ctx context.Context, plan *RestorePlan, payloa
 		emitRestore(emit, "SQLite target is new; no pre-restore snapshot was needed")
 	}
 
-	stage, err := os.CreateTemp(targetDir, "."+filepath.Base(targetPath)+".restore-*")
+	stage, err := privatefile.CreateTemp(targetDir, "."+filepath.Base(targetPath)+".restore-", "")
 	if err != nil {
 		return fmt.Errorf("create SQLite restore staging file: %w", err)
 	}
@@ -143,7 +144,7 @@ func executeSQLiteSQLRestore(ctx context.Context, plan *RestorePlan, payload *pa
 		emitRestore(emit, "SQLite target is new; no pre-restore snapshot was needed")
 	}
 
-	stage, err := os.CreateTemp(targetDir, "."+filepath.Base(targetPath)+".sql-restore-*")
+	stage, err := privatefile.CreateTemp(targetDir, "."+filepath.Base(targetPath)+".sql-restore-", "")
 	if err != nil {
 		return fmt.Errorf("create SQLite SQL restore staging file: %w", err)
 	}
@@ -179,7 +180,7 @@ func executeSQLiteSQLRestore(ctx context.Context, plan *RestorePlan, payload *pa
 		return fmt.Errorf("close SQLite SQL restore staging file: %w", err)
 	}
 
-	initFile, err := os.CreateTemp(filepath.Dir(payload.path), "dbterm-sqlite-init-*")
+	initFile, err := privatefile.CreateTemp(filepath.Dir(payload.path), "dbterm-sqlite-init-", "")
 	if err != nil {
 		return fmt.Errorf("create private sqlite3 initialization file: %w", err)
 	}
@@ -348,7 +349,7 @@ func createSQLitePreRestoreSnapshot(ctx context.Context, targetPath string) (str
 		_ = os.Remove(snapshotPath)
 		return "", fmt.Errorf("close SQLite target after pre-restore snapshot: %w", err)
 	}
-	if err := os.Chmod(snapshotPath, 0o600); err != nil {
+	if err := privatefile.Protect(snapshotPath); err != nil {
 		_ = os.Remove(snapshotPath)
 		return "", fmt.Errorf("protect pre-restore SQLite snapshot: %w", err)
 	}

@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -374,6 +375,180 @@ func TestInspectRejectsWrongAgeIdentity(t *testing.T) {
 	}
 }
 
+func TestInspectRejectsTruncatedAndBitFlippedAgeArtifacts(t *testing.T) {
+	payload := append([]byte("PGDMP"), 1, 15, 0, 4)
+	ciphertext, identity := ageFixture(t, payload, false)
+	identityPath := writeInspectionFixture(t, "tamper-identity.txt", []byte(identity.String()+"\n"))
+
+	truncated := append([]byte(nil), ciphertext[:len(ciphertext)-8]...)
+	bitFlipped := append([]byte(nil), ciphertext...)
+	bitFlipped[len(bitFlipped)/2] ^= 0x40
+	for _, test := range []struct {
+		name string
+		data []byte
+	}{
+		{name: "truncated", data: truncated},
+		{name: "bit flipped", data: bitFlipped},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			path := writeInspectionFixture(t, strings.ReplaceAll(test.name, " ", "-")+".dump.age", test.data)
+			if _, err := Inspect(context.Background(), path, InspectOptions{AgeIdentityPath: identityPath}); err == nil {
+				t.Fatal("tampered age artifact passed inspection")
+			}
+		})
+	}
+}
+
+func TestInspectAgeIdentityFileSupportsKeyRotationSet(t *testing.T) {
+	oldIdentity, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	currentIdentity, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var encrypted bytes.Buffer
+	writer, err := age.Encrypt(&encrypted, currentIdentity.Recipient())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writer.Write(append([]byte("PGDMP"), 1, 15, 0, 4)); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	identityPath := writeInspectionFixture(t, "rotated-identities.txt", []byte(oldIdentity.String()+"\n"+currentIdentity.String()+"\n"))
+	artifactPath := writeInspectionFixture(t, "rotated.dump.age", encrypted.Bytes())
+	inspection, err := Inspect(context.Background(), artifactPath, InspectOptions{AgeIdentityPath: identityPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inspection.Format != FormatPostgresCustom || inspection.Engine != config.PostgreSQL {
+		t.Fatalf("rotated identity inspection = %#v", inspection)
+	}
+}
+
+func TestReadAgeIdentitiesRejectsSymlinkAndNonRegularPaths(t *testing.T) {
+	directory := t.TempDir()
+	identity, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	realPath := filepath.Join(directory, "identity.txt")
+	if err := os.WriteFile(realPath, []byte(identity.String()+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("symlink", func(t *testing.T) {
+		linkedPath := filepath.Join(directory, "identity-link.txt")
+		if err := os.Symlink(realPath, linkedPath); err != nil {
+			t.Skipf("symbolic links unavailable: %v", err)
+		}
+		if _, err := readAgeIdentities(linkedPath); err == nil || !strings.Contains(err.Error(), "symlink") {
+			t.Fatalf("readAgeIdentities() error = %v, want symlink refusal", err)
+		}
+	})
+
+	t.Run("directory", func(t *testing.T) {
+		if _, err := readAgeIdentities(directory); err == nil || !strings.Contains(err.Error(), "regular file") {
+			t.Fatalf("readAgeIdentities() error = %v, want non-regular-file refusal", err)
+		}
+	})
+}
+
+func TestReadAgeIdentitiesDoesNotEchoInvalidSecretData(t *testing.T) {
+	const sentinel = "private-secret-material-that-must-not-be-logged"
+	path := filepath.Join(t.TempDir(), "invalid-identity.txt")
+	if err := os.WriteFile(path, []byte(sentinel+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := readAgeIdentities(path)
+	if err == nil {
+		t.Fatal("readAgeIdentities() accepted invalid identity data")
+	}
+	if strings.Contains(err.Error(), sentinel) {
+		t.Fatalf("readAgeIdentities() exposed invalid secret data: %v", err)
+	}
+}
+
+func TestReadAgeIdentitiesRejectsBroadUnixPermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows identity privacy is enforced by DACL")
+	}
+	identity, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "identity.txt")
+	if err := os.WriteFile(path, []byte(identity.String()+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readAgeIdentities(path); err == nil || !strings.Contains(err.Error(), "permissions are too broad") {
+		t.Fatalf("readAgeIdentities() error = %v, want broad-permission refusal", err)
+	}
+}
+
+func TestReadAgeIdentitiesRefusesFileSwappedBetweenCheckAndOpen(t *testing.T) {
+	directory := t.TempDir()
+	firstIdentity, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondIdentity, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstPath := filepath.Join(directory, "first.txt")
+	secondPath := filepath.Join(directory, "second.txt")
+	if err := os.WriteFile(firstPath, []byte(firstIdentity.String()+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(secondPath, []byte(secondIdentity.String()+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = readAgeIdentitiesWithOps(firstPath, os.Lstat, func(string) (*os.File, error) {
+		return os.Open(secondPath)
+	})
+	if err == nil || !strings.Contains(err.Error(), "changed while it was being opened") {
+		t.Fatalf("readAgeIdentitiesWithOps() error = %v, want swapped-file refusal", err)
+	}
+}
+
+func TestReadAgeIdentitiesRefusesPathSwappedAfterOpen(t *testing.T) {
+	directory := t.TempDir()
+	firstIdentity, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondIdentity, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstPath := filepath.Join(directory, "first.txt")
+	secondPath := filepath.Join(directory, "second.txt")
+	if err := os.WriteFile(firstPath, []byte(firstIdentity.String()+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(secondPath, []byte(secondIdentity.String()+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	lstatCalls := 0
+	_, err = readAgeIdentitiesWithOps(firstPath, func(string) (os.FileInfo, error) {
+		lstatCalls++
+		if lstatCalls == 1 {
+			return os.Lstat(firstPath)
+		}
+		return os.Lstat(secondPath)
+	}, os.Open)
+	if err == nil || !strings.Contains(err.Error(), "changed while it was being read") {
+		t.Fatalf("readAgeIdentitiesWithOps() error = %v, want post-open path-swap refusal", err)
+	}
+}
+
 func TestInspectSourceValidationAndCancellation(t *testing.T) {
 	t.Parallel()
 
@@ -395,6 +570,22 @@ func TestInspectSourceValidationAndCancellation(t *testing.T) {
 		_, err := Inspect(context.Background(), t.TempDir(), InspectOptions{})
 		if err == nil || !strings.Contains(err.Error(), "regular file") {
 			t.Fatalf("Inspect() error = %v", err)
+		}
+	})
+
+	t.Run("symbolic link is refused", func(t *testing.T) {
+		directory := t.TempDir()
+		target := filepath.Join(directory, "backup.sql")
+		if err := os.WriteFile(target, []byte("SELECT 1;"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		linkedPath := filepath.Join(directory, "backup-link.sql")
+		if err := os.Symlink(target, linkedPath); err != nil {
+			t.Skipf("symbolic links unavailable: %v", err)
+		}
+		_, err := Inspect(context.Background(), linkedPath, InspectOptions{})
+		if err == nil || !strings.Contains(err.Error(), "symbolic link") {
+			t.Fatalf("Inspect() error = %v, want symbolic-link refusal", err)
 		}
 	})
 
@@ -425,7 +616,9 @@ func TestInspectSourceValidationAndCancellation(t *testing.T) {
 	})
 
 	t.Run("spaces in a real filename are preserved", func(t *testing.T) {
-		path := writeInspectionFixture(t, " backup.dump ", append([]byte("PGDMP"), 1, 15, 0, 4))
+		// Win32 normalizes a trailing space away when creating a file. Leading
+		// and internal spaces still prove that Inspect preserves the real path.
+		path := writeInspectionFixture(t, " backup file.dump", append([]byte("PGDMP"), 1, 15, 0, 4))
 		result, err := Inspect(context.Background(), path, InspectOptions{})
 		if err != nil {
 			t.Fatalf("Inspect() error = %v", err)

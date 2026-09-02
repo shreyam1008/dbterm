@@ -88,8 +88,8 @@ const productPillars = [
   {
     marker: "04",
     title: "Backup and recovery",
-    body: "Route local or remote sources to local, mounted, or rclone storage. Verify, compress, encrypt, retain, inspect, notify, and restore through a native OS-managed agent.",
-    facts: ["All 4 local/remote routes", "Native agents", "Guarded restore"]
+    body: "Back up local or remote sources to local or OS-mounted storage. Verify, compress, encrypt, retain, inspect, notify, and restore through a native OS-managed agent.",
+    facts: ["Portable manifests", "Native agents", "Guarded restore"]
   }
 ];
 
@@ -120,7 +120,7 @@ const faqItems = [
   {
     question: "Can dbterm back up a remote or cloud database?",
     answer:
-      "Yes. A reachable PostgreSQL, MySQL, Turso, or D1 connection can back up to a local/mounted folder or a configured rclone remote. Local and remote sources can use either destination type; dbterm adds scheduling, safe publication, history, compression, age encryption, and retention."
+      "Yes. A reachable PostgreSQL, MySQL, Turso, or D1 connection can back up to an absolute local folder or OS-mounted volume. dbterm adds scheduling, create-only publication, portable manifests, history, compression, age encryption, and retention."
   }
 ];
 

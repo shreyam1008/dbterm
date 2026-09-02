@@ -28,6 +28,32 @@ func TestEmailNotificationDefaultsToGmailSubmission(t *testing.T) {
 	}
 }
 
+func TestRetentionFailureUsesFailureNotificationPolicyWithoutChangingBackupStatus(t *testing.T) {
+	notification := EmailNotification{
+		Policy: NotificationFailure, SMTPHost: "localhost", SMTPPort: 25, TLSMode: SMTPTLSNone,
+		From: "dbterm@example.com", Recipients: []string{"alerts@example.com"},
+	}
+	run := Run{
+		ID: "run_retention_warning", Status: RunSucceeded, Trigger: TriggerScheduled,
+		StartedAt: time.Now().Add(-time.Minute), FinishedAt: time.Now(),
+		Artifact:       Artifact{Path: "/safe/backup.dump", Size: 42, SHA256: "abc"},
+		RetentionError: "retention refused a changed artifact",
+	}
+	if !notification.ShouldNotifyRun(run) {
+		t.Fatal("failure-only policy ignored a retention failure")
+	}
+	_, _, message, err := buildRunNotification(Job{Name: "nightly"}, run, notification)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(message)
+	for _, want := range []string{"Subject: [dbterm] Backup warning: nightly", "Retention warning: retention refused a changed artifact", "newly created backup remains valid"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("retention warning email missing %q:\n%s", want, text)
+		}
+	}
+}
+
 func TestEmailNotificationRejectsUnsafePlaintextAuthenticationAndHeaders(t *testing.T) {
 	tests := []struct {
 		name         string

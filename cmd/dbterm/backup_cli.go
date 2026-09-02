@@ -100,7 +100,7 @@ func backupListCommand(args []string) error {
 func backupCreateCommand(args []string) error {
 	fs := flag.NewFlagSet("backup create", flag.ContinueOnError)
 	connection := fs.String("connection", "", "saved connection ID or unique name")
-	destination := fs.String("destination", "", "absolute folder or rclone://remote/path")
+	destination := fs.String("destination", "", "absolute local folder or OS-mounted volume")
 	name := fs.String("name", "instant", "artifact label")
 	template := fs.String("filename", backupcore.DefaultFilenameTemplate, "filename template")
 	compression := fs.String("compression", "zstd", "none, gzip, zip, or zstd")
@@ -129,10 +129,8 @@ func backupCreateCommand(args []string) error {
 	if err != nil {
 		return err
 	}
-	if !backupcore.IsRemoteBackupDestination(output) {
-		if err := os.MkdirAll(output, 0o700); err != nil {
-			return fmt.Errorf("create backup destination: %w", err)
-		}
+	if err := os.MkdirAll(output, 0o700); err != nil {
+		return fmt.Errorf("create backup destination: %w", err)
 	}
 	job := backupcore.Job{
 		Name: *name, ConnectionID: cfg.ID, Destination: output,
@@ -158,9 +156,12 @@ func backupCreateCommand(args []string) error {
 		fmt.Fprintf(os.Stderr, "[%s] %s\n", event.Phase, event.Message)
 	}}).Run(ctx, job, cfg, runID)
 	if err != nil {
+		if strings.TrimSpace(artifact.Path) != "" {
+			fmt.Fprintf(os.Stderr, "Candidate artifact: %s\nPublication: %s\nWarning: this is not a successful recovery point; inspect it and its sidecar, then reconcile or remove it manually.\n", artifact.Path, nonEmptyBackupStatusValue(string(artifact.PublicationState), "uncertain"))
+		}
 		return err
 	}
-	fmt.Printf("Backup created\nPath: %s\nSize: %d bytes\nSHA-256: %s\n", artifact.Path, artifact.Size, artifact.SHA256)
+	fmt.Printf("Backup created\nPath: %s\nManifest: %s\nSize: %d bytes\nSHA-256: %s\nVerification: %s\nPublication: %s\n", artifact.Path, artifact.ManifestPath, artifact.Size, artifact.SHA256, artifact.VerificationLevel, artifact.PublicationState)
 	return nil
 }
 
@@ -174,10 +175,19 @@ func backupRunCommand(args []string) error {
 	}
 	defer store.Close()
 	run, err := backupcore.RunJobNow(context.Background(), store, args[0], func(line string) { fmt.Println(line) })
-	if err != nil {
+	if err != nil && strings.TrimSpace(run.ID) == "" {
 		return err
 	}
 	fmt.Printf("Run %s: %s\n", run.ID, run.Status)
+	if strings.TrimSpace(run.Artifact.Path) != "" {
+		fmt.Printf("Path: %s\nManifest: %s\nSize: %d bytes\nSHA-256: %s\nVerification: %s\nPublication: %s\n", run.Artifact.Path, nonEmptyBackupStatusValue(run.Artifact.ManifestPath, "not recorded"), run.Artifact.Size, nonEmptyBackupStatusValue(run.Artifact.SHA256, "not recorded"), nonEmptyBackupStatusValue(run.Artifact.VerificationLevel, "legacy level not recorded"), nonEmptyBackupStatusValue(string(run.Artifact.PublicationState), "legacy state not recorded"))
+		if run.Status != backupcore.RunSucceeded {
+			fmt.Println("Warning: this candidate artifact is not a successful recovery point; inspect it and reconcile or remove it manually.")
+		}
+	}
+	if strings.TrimSpace(run.RetentionError) != "" {
+		fmt.Printf("Retention warning: %s\n", run.RetentionError)
+	}
 	if run.NotificationAttempted {
 		notification := "attempted"
 		switch {
@@ -187,6 +197,9 @@ func backupRunCommand(args []string) error {
 			notification = "failed: " + run.NotificationError
 		}
 		fmt.Printf("Notification: %s\n", notification)
+	}
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -393,6 +406,9 @@ func backupInspectCommand(args []string) error {
 		return printJSON(inspection)
 	}
 	fmt.Printf("Path: %s\nSize: %d bytes\nSHA-256: %s\nFormat: %s\nEngine: %s\nConfidence: %s\n", inspection.Path, inspection.Size, inspection.SHA256, inspection.Format, inspection.Engine, inspection.Confidence)
+	if inspection.Manifest != nil {
+		fmt.Printf("Completion manifest: schema %d, artifact %s, producer %s, verification %s\n", inspection.Manifest.SchemaVersion, inspection.Manifest.ArtifactID, inspection.Manifest.ProducerID, inspection.Manifest.VerificationLevel)
+	}
 	if len(inspection.Wrappers) > 0 {
 		fmt.Printf("Wrappers: %v\n", inspection.Wrappers)
 	}
@@ -998,7 +1014,7 @@ func parseCompression(value string) (backupcore.Compression, error) {
 func resolveBackupCLIPath(value string) (string, error) {
 	value = strings.TrimSpace(value)
 	if backupcore.IsRemoteBackupDestination(value) {
-		return backupcore.NormalizeBackupDestination(value)
+		return "", backupcore.ErrRcloneBackupPublicationDisabled
 	}
 	if value == "~" || strings.HasPrefix(value, "~/") || strings.HasPrefix(value, `~\`) {
 		home, err := os.UserHomeDir()
@@ -1076,8 +1092,9 @@ func printBackupHelp() {
   Scheduled jobs are configured in the TUI: Dashboard → Ctrl+B on a saved
   connection, or Dashboard → B → N.
   Sources may be local or remote PostgreSQL/MySQL plus SQLite, Turso, and D1.
-  Destinations may be absolute local/mounted folders or rclone://remote/path.
-  Configure remote storage with "rclone config"; credentials remain in rclone.
+  Generation destinations must be absolute local folders or OS-mounted volumes.
+  New rclone publication fails closed until an atomic create-only finalization is available;
+  existing rclone history remains readable and future copy jobs may use safe backends.
   Encryption uses age X25519.
   Restore always inspects content first and requires --yes. Clean mode also requires
   --confirm-clean with the exact target database name (or absolute SQLite path).

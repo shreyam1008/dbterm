@@ -126,6 +126,20 @@ func (notification EmailNotification) ShouldNotify(status RunStatus) bool {
 	}
 }
 
+func (notification EmailNotification) ShouldNotifyRun(run Run) bool {
+	policy := NotificationPolicy(strings.ToLower(strings.TrimSpace(string(notification.Policy))))
+	switch policy {
+	case NotificationSuccess:
+		return run.Status == RunSucceeded
+	case NotificationFailure:
+		return run.Status == RunFailed || run.Status == RunCanceled || strings.TrimSpace(run.RetentionError) != ""
+	case NotificationBoth:
+		return run.Status == RunSucceeded || run.Status == RunFailed || run.Status == RunCanceled || strings.TrimSpace(run.RetentionError) != ""
+	default:
+		return false
+	}
+}
+
 // SendRunNotification sends a terminal run result according to the job policy.
 // It never includes SMTP credentials in the message and redacts them from all
 // returned errors, including errors returned by the remote SMTP server.
@@ -136,7 +150,7 @@ func SendRunNotification(ctx context.Context, job Job, run Run) (err error) {
 	if err := notification.Validate(); err != nil {
 		return err
 	}
-	if !notification.ShouldNotify(run.Status) {
+	if !notification.ShouldNotifyRun(run) {
 		return nil
 	}
 	if run.Status == RunRunning || run.FinishedAt.IsZero() {
@@ -219,7 +233,11 @@ func buildRunNotification(job Job, run Run, notification EmailNotification) (str
 		recipientHeaders[index] = recipient.String()
 	}
 	status := strings.ToUpper(string(run.Status))
-	subject := fmt.Sprintf("[dbterm] Backup %s: %s", strings.ToLower(status), sanitizeMailHeader(job.Name))
+	subjectStatus := strings.ToLower(status)
+	if strings.TrimSpace(run.RetentionError) != "" {
+		subjectStatus = "warning"
+	}
+	subject := fmt.Sprintf("[dbterm] Backup %s: %s", subjectStatus, sanitizeMailHeader(job.Name))
 	finishedAt := run.FinishedAt.UTC()
 	duration := run.FinishedAt.Sub(run.StartedAt)
 	if duration < 0 {
@@ -239,6 +257,11 @@ func buildRunNotification(job Job, run Run, notification EmailNotification) (str
 		failure = strings.ReplaceAll(strings.ReplaceAll(failure, "\r\n", "\n"), "\r", "\n")
 		failure = strings.ReplaceAll(failure, "\n", "\r\n")
 		fmt.Fprintf(&body, "Error: %s\r\n", failure)
+	}
+	if retentionError := strings.TrimSpace(run.RetentionError); retentionError != "" {
+		retentionError = strings.ReplaceAll(strings.ReplaceAll(retentionError, "\r\n", "\n"), "\r", "\n")
+		retentionError = strings.ReplaceAll(retentionError, "\n", "\r\n")
+		fmt.Fprintf(&body, "Retention warning: %s\r\nThe newly created backup remains valid; storage cleanup needs attention.\r\n", retentionError)
 	}
 	message := strings.Join([]string{
 		"Date: " + finishedAt.Format(time.RFC1123Z),

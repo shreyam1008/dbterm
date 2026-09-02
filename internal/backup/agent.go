@@ -13,6 +13,7 @@ import (
 
 	"github.com/shreyam1008/dbterm/internal/appdirs"
 	"github.com/shreyam1008/dbterm/internal/config"
+	"github.com/shreyam1008/dbterm/internal/privatefile"
 )
 
 const (
@@ -56,7 +57,41 @@ func OpenDefaultStore() (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	return OpenStore(path)
+	directory := filepath.Dir(path)
+	if err := privatefile.EnsurePrivateDirectory(directory); err != nil {
+		return nil, fmt.Errorf("protect default backup state directory: %w", err)
+	}
+	if err := protectDefaultStoreFiles(path); err != nil {
+		return nil, err
+	}
+	store, err := OpenStore(path)
+	if err != nil {
+		return nil, err
+	}
+	if err := protectDefaultStoreFiles(path); err != nil {
+		_ = store.Close()
+		return nil, err
+	}
+	return store, nil
+}
+
+func protectDefaultStoreFiles(path string) error {
+	for _, candidate := range []string{path, path + "-wal", path + "-shm"} {
+		info, err := os.Lstat(candidate)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return fmt.Errorf("inspect default backup store file %s: %w", candidate, err)
+		}
+		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+			return fmt.Errorf("default backup store file must be a regular file, not a symlink: %s", candidate)
+		}
+		if err := privatefile.Protect(candidate); err != nil {
+			return fmt.Errorf("protect default backup store file %s: %w", candidate, err)
+		}
+	}
+	return nil
 }
 
 func AgentHealth(ctx context.Context, store *Store, now time.Time) (AgentStatus, error) {
@@ -298,6 +333,12 @@ func executeClaimedJobWithProgressAndNotifier(parent context.Context, store *Sto
 		cancel()
 	}
 	run.FinishedAt = time.Now().UTC()
+	// A runner can cross the immutable artifact boundary and then fail while
+	// publishing the sidecar completion signal. Keep that orphan artifact in
+	// durable failed-run history so operators can find and reconcile it.
+	if strings.TrimSpace(artifact.Path) != "" {
+		run.Artifact = artifact
+	}
 	if runErr != nil {
 		run.Error = runErr.Error()
 		if errors.Is(runErr, context.Canceled) || errors.Is(runErr, context.DeadlineExceeded) || errors.Is(parent.Err(), context.Canceled) {
@@ -307,7 +348,6 @@ func executeClaimedJobWithProgressAndNotifier(parent context.Context, store *Sto
 		}
 	} else {
 		run.Status = RunSucceeded
-		run.Artifact = artifact
 	}
 	if finishErr := store.FinishRun(context.Background(), &run, owner); finishErr != nil {
 		_ = store.ReleaseJob(context.Background(), job.ID, owner)
@@ -318,11 +358,29 @@ func executeClaimedJobWithProgressAndNotifier(parent context.Context, store *Sto
 	}
 	if runErr == nil {
 		reportEvent(ProgressEvent{Phase: "publish", Message: fmt.Sprintf("backup complete: %s (%d bytes, sha256 %s)", artifact.Path, artifact.Size, artifact.SHA256), CurrentBytes: artifact.Size, TotalBytes: artifact.Size})
+		reportEvent(ProgressEvent{Phase: "retention", Message: "applying retention policy"})
+		if removed, retentionErr := ApplyRetention(context.Background(), store, job, run.FinishedAt); retentionErr != nil {
+			run.RetentionError = retentionErr.Error()
+			reportEvent(ProgressEvent{Phase: "retention", Message: "backup succeeded, but retention cleanup failed: " + retentionErr.Error()})
+		} else if len(removed) > 0 {
+			reportEvent(ProgressEvent{Phase: "retention", Message: fmt.Sprintf("retention removed %d expired backup(s)", len(removed))})
+		} else {
+			reportEvent(ProgressEvent{Phase: "retention", Message: "retention policy complete; no backups removed"})
+		}
+		retentionContext, cancelRetentionRecord := context.WithTimeout(context.Background(), 5*time.Second)
+		retentionRecordErr := store.recordRunRetentionOutcome(retentionContext, run.ID, run.RetentionError)
+		cancelRetentionRecord()
+		if retentionRecordErr != nil {
+			if run.RetentionError == "" {
+				run.RetentionError = "retention outcome could not be added to backup history: " + retentionRecordErr.Error()
+			}
+			reportEvent(ProgressEvent{Phase: "retention", Message: "retention finished, but its outcome could not be added to backup history: " + retentionRecordErr.Error()})
+		}
 	}
 	// FinishRun commits the terminal run and releases/advances the durable job
 	// lease before any external email is attempted. Notification availability
 	// can therefore never decide whether a backup itself succeeded.
-	if notify != nil && job.Notification.ShouldNotify(run.Status) {
+	if notify != nil && job.Notification.ShouldNotifyRun(run) {
 		reportEvent(ProgressEvent{Phase: "notification", Message: "sending email notification"})
 		run.NotificationAttempted = true
 		attemptContext, cancelAttempt := context.WithTimeout(context.Background(), 5*time.Second)
@@ -351,14 +409,6 @@ func executeClaimedJobWithProgressAndNotifier(parent context.Context, store *Sto
 	}
 	if runErr != nil {
 		return run, runErr
-	}
-	reportEvent(ProgressEvent{Phase: "retention", Message: "applying retention policy"})
-	if removed, retentionErr := ApplyRetention(context.Background(), store, job, run.FinishedAt); retentionErr != nil {
-		reportEvent(ProgressEvent{Phase: "retention", Message: "backup succeeded, but retention cleanup failed: " + retentionErr.Error()})
-	} else if len(removed) > 0 {
-		reportEvent(ProgressEvent{Phase: "retention", Message: fmt.Sprintf("retention removed %d expired backup(s)", len(removed))})
-	} else {
-		reportEvent(ProgressEvent{Phase: "retention", Message: "retention policy complete; no backups removed"})
 	}
 	return run, nil
 }

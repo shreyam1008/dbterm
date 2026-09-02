@@ -1,9 +1,11 @@
 package appdirs
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"testing"
 )
 
@@ -12,6 +14,40 @@ func clearDirectoryOverrides(t *testing.T) {
 	t.Setenv(configDirEnvName, "")
 	t.Setenv(stateDirEnvName, "")
 	t.Setenv(logDirEnvName, "")
+}
+
+func TestStateDirectoryConcurrentFirstInitialization(t *testing.T) {
+	override := filepath.Join(t.TempDir(), "concurrent-state")
+	t.Setenv(stateDirEnvName, override)
+
+	const callers = 32
+	start := make(chan struct{})
+	errorsFound := make(chan error, callers)
+	var wait sync.WaitGroup
+	for index := 0; index < callers; index++ {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			<-start
+			path, err := StateDir()
+			if err == nil && path != override {
+				err = fmt.Errorf("StateDir() = %q, want %q", path, override)
+			}
+			errorsFound <- err
+		}()
+	}
+	close(start)
+	wait.Wait()
+	close(errorsFound)
+	for err := range errorsFound {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	owned, err := IsOwnedDirectory(override)
+	if err != nil || !owned {
+		t.Fatalf("concurrently initialized state directory ownership = %t, %v", owned, err)
+	}
 }
 
 func TestDirectoryOverridesTakePrecedence(t *testing.T) {

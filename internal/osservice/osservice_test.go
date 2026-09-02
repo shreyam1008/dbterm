@@ -44,6 +44,10 @@ func TestNormalizeSystemOptionsRequiresExplicitSafePaths(t *testing.T) {
 
 func TestNormalizeOptionsRejectsUnsafeValues(t *testing.T) {
 	root := t.TempDir()
+	filesystemRoot := string(filepath.Separator)
+	if volume := filepath.VolumeName(root); volume != "" {
+		filesystemRoot = volume + string(filepath.Separator)
+	}
 	tests := []struct {
 		name    string
 		options Options
@@ -58,7 +62,7 @@ func TestNormalizeOptionsRejectsUnsafeValues(t *testing.T) {
 		{name: "carriage return in log directory", options: Options{Executable: filepath.Join(root, "dbterm"), LogDir: root + "\rlogs"}, want: "unsupported control character"},
 		{name: "unsupported scope", options: Options{Executable: filepath.Join(root, "dbterm"), LogDir: root, Scope: "global"}, want: "unsupported backup service scope"},
 		{name: "system paths required", options: Options{Executable: filepath.Join(root, "dbterm"), LogDir: root, Scope: ScopeSystem}, want: "is required for system scope"},
-		{name: "system root path rejected", options: Options{Executable: filepath.Join(root, "dbterm"), ConfigDir: string(filepath.Separator), StateDir: filepath.Join(root, "state"), LogDir: filepath.Join(root, "logs"), Scope: ScopeSystem}, want: "cannot be a filesystem root"},
+		{name: "system root path rejected", options: Options{Executable: filepath.Join(root, "dbterm"), ConfigDir: filesystemRoot, StateDir: filepath.Join(root, "state"), LogDir: filepath.Join(root, "logs"), Scope: ScopeSystem}, want: "cannot be a filesystem root"},
 		{name: "run as user only for system", options: Options{Executable: filepath.Join(root, "dbterm"), LogDir: root, RunAsUser: "operator"}, want: "only valid in system scope"},
 		{name: "unsafe run as user", options: Options{Executable: filepath.Join(root, "dbterm"), ConfigDir: filepath.Join(root, "config"), StateDir: filepath.Join(root, "state"), LogDir: filepath.Join(root, "logs"), Scope: ScopeSystem, RunAsUser: "bad user"}, want: "unsafe characters"},
 		{name: "root run as user", options: Options{Executable: filepath.Join(root, "dbterm"), ConfigDir: filepath.Join(root, "config"), StateDir: filepath.Join(root, "state"), LogDir: filepath.Join(root, "logs"), Scope: ScopeSystem, RunAsUser: "root"}, want: "must not run as root"},

@@ -13,6 +13,7 @@ import (
 	"path"
 	"runtime"
 	"strings"
+	"time"
 )
 
 var findRcloneTool = exec.LookPath
@@ -80,6 +81,58 @@ func ensureRcloneDestination(ctx context.Context, destination destinationSpec) e
 	return nil
 }
 
+func cleanupStaleRclonePublicationPartials(ctx context.Context, destination destinationSpec, olderThan time.Time) (int, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if destination.kind != destinationRclone {
+		return 0, fmt.Errorf("rclone destination is required")
+	}
+	var output bytes.Buffer
+	if err := runRclone(ctx, &output, "lsjson", destination.rclonePath(), "--max-depth", "1", "--files-only", "--no-mimetype"); err != nil {
+		return 0, fmt.Errorf("list remote backup staging objects: %w", err)
+	}
+	var items []rcloneObject
+	if err := json.Unmarshal(output.Bytes(), &items); err != nil {
+		return 0, fmt.Errorf("decode remote backup staging listing: %w", err)
+	}
+	removed := 0
+	for _, item := range items {
+		name := item.Name
+		if name == "" {
+			name = item.Path
+		}
+		if !isRcloneUploadPartialName(name) {
+			continue
+		}
+		modified, err := time.Parse(time.RFC3339Nano, item.ModTime)
+		if err != nil || !modified.Before(olderThan) {
+			continue
+		}
+		partial := destination
+		partial.remotePath = path.Join(destination.remotePath, name)
+		if err := deleteRcloneArtifact(ctx, partial); err != nil {
+			return removed, err
+		}
+		removed++
+	}
+	return removed, nil
+}
+
+func isRcloneUploadPartialName(name string) bool {
+	const prefix = ".dbterm-upload_"
+	const suffix = ".partial"
+	if path.Base(name) != name || !strings.HasPrefix(name, prefix) || !strings.HasSuffix(name, suffix) {
+		return false
+	}
+	identifier := strings.TrimSuffix(strings.TrimPrefix(name, prefix), suffix)
+	if len(identifier) != 24 {
+		return false
+	}
+	decoded, err := hex.DecodeString(identifier)
+	return err == nil && len(decoded) == 12
+}
+
 func inspectRcloneObject(ctx context.Context, object destinationSpec) (rcloneObject, bool, error) {
 	if object.kind != destinationRclone || object.remotePath == "" {
 		return rcloneObject{}, false, fmt.Errorf("remote backup artifact path is required")
@@ -125,34 +178,10 @@ func inspectRcloneObject(ctx context.Context, object destinationSpec) (rcloneObj
 }
 
 func publishRcloneNoReplace(ctx context.Context, stagedPath string, object destinationSpec, size int64, progress ProgressFunc) error {
-	if object.kind != destinationRclone || object.remotePath == "" {
-		return fmt.Errorf("remote backup artifact path is required")
-	}
-	if _, exists, err := inspectRcloneObject(ctx, object); err != nil {
-		return fmt.Errorf("check remote backup output %s: %w", object.String(), err)
-	} else if exists {
-		return fmt.Errorf("backup file already exists: %s", object.String())
-	}
-	if progress != nil {
-		progress(ProgressEvent{Phase: "publish", Message: "uploading completed artifact to rclone remote", TotalBytes: size})
-	}
-	if err := runRclone(ctx, io.Discard, "copyto", stagedPath, object.rclonePath(), "--immutable", "--no-traverse"); err != nil {
-		return fmt.Errorf("upload backup to %s: %w", object.String(), err)
-	}
-	info, exists, err := inspectRcloneObject(ctx, object)
-	if err != nil {
-		return fmt.Errorf("verify uploaded backup %s: %w", object.String(), err)
-	}
-	if !exists {
-		return fmt.Errorf("verify uploaded backup %s: rclone did not report the completed object", object.String())
-	}
-	if size >= 0 && info.Size != size {
-		return fmt.Errorf("verify uploaded backup %s: remote size is %d, expected %d", object.String(), info.Size, size)
-	}
-	if progress != nil {
-		progress(ProgressEvent{Phase: "publish", Message: "remote backup upload verified", CurrentBytes: size, TotalBytes: size})
-	}
-	return nil
+	// Keep this low-level guard even though Job.Validate rejects rclone backup
+	// destinations. Future callers must not accidentally re-enable a weaker
+	// check-then-move protocol and label it immutable.
+	return ErrRcloneBackupPublicationDisabled
 }
 
 func verifyRcloneArtifactForPrune(ctx context.Context, object destinationSpec, artifact Artifact) (bool, error) {

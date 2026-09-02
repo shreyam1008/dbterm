@@ -2,6 +2,7 @@ package ui
 
 import (
 	"database/sql"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+	backupcore "github.com/shreyam1008/dbterm/internal/backup"
 	"github.com/shreyam1008/dbterm/internal/config"
 )
 
@@ -132,16 +134,10 @@ func TestPrepareInstantBackupOutputExpandsHomeAndDefaultsFilename(t *testing.T) 
 	}
 }
 
-func TestPrepareInstantBackupOutputSupportsRcloneDestination(t *testing.T) {
+func TestPrepareInstantBackupOutputRejectsRcloneDestination(t *testing.T) {
 	output, err := prepareInstantBackupOutput("rclone://offsite/team/backups", "orders", "fallback.dump", ".dump")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if output.directory != "rclone://offsite/team/backups" || output.filename != "orders.dump" {
-		t.Fatalf("remote output = %#v", output)
-	}
-	if output.path != "rclone://offsite/team/backups/orders.dump" {
-		t.Fatalf("remote output path = %q", output.path)
+	if err == nil || !errors.Is(err, backupcore.ErrRcloneBackupPublicationDisabled) {
+		t.Fatalf("prepareInstantBackupOutput() = %#v, %v; want fail-closed rclone error", output, err)
 	}
 }
 

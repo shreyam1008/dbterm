@@ -22,7 +22,7 @@ const backupTimestampLayout = "20060102_150405"
 
 const (
 	instantBackupPage             = "backupModal"
-	instantBackupDestinationLabel = "Destination (folder or rclone://remote/path)"
+	instantBackupDestinationLabel = "Destination (absolute/mounted folder)"
 	instantBackupFilenameLabel    = "File Name"
 )
 
@@ -87,7 +87,7 @@ func (a *App) showBackupModal() {
 	addBackupFormSection(form, "SOURCE", "Current workspace; no connection details are changed")
 	form.AddTextView("Connection", tview.Escape(backupTargetLabel(cfg)), 0, 1, true, false)
 	form.AddTextView("Format", fmt.Sprintf("[green]%s[-]  [#a6adc8]%s[-]", tview.Escape(plan.formatLabel), tview.Escape(plan.toolLabel)), 0, 1, true, false)
-	addBackupFormSection(form, "DESTINATION", "Use a folder, mounted volume, or configured rclone remote")
+	addBackupFormSection(form, "DESTINATION", "Use an absolute folder or an OS-mounted volume")
 	form.AddInputField(instantBackupDestinationLabel, defaultDir, 72, nil, nil)
 	form.AddInputField(instantBackupFilenameLabel, defaultFile, 56, nil, nil)
 	form.AddTextView("Storage", backupDestinationStorageText(defaultDir), 0, 2, true, false)
@@ -185,7 +185,7 @@ func (a *App) showBackupModal() {
 			return
 		}
 		a.pages.RemovePage(instantBackupPage)
-		a.runDatabaseBackup(cfg, output.path, returnPage)
+		a.runDatabaseBackup(cfg, output, returnPage)
 	})
 	form.AddButton("Cancel", closeForm)
 
@@ -236,7 +236,7 @@ func instantBackupFooterText(width int) string {
 		" [yellow]Esc[-] Cancel ",
 	)
 	note := footerTextThatFits(width,
-		" [#a6adc8]Use an absolute path or rclone://remote/path; canceling never creates a folder or backup.[-] ",
+		" [#a6adc8]Use an absolute or mounted-local path; canceling never creates a folder or backup.[-] ",
 		" [#a6adc8]Nothing is written until Create Backup.[-] ",
 	)
 	return actions + "\n" + note
@@ -256,25 +256,24 @@ func prepareInstantBackupOutput(rawDirectory, rawFilename, defaultFilename, exte
 	if directory == "" {
 		return instantBackupOutput{}, fmt.Errorf("backup destination is required")
 	}
-	if !backupcore.IsRemoteBackupDestination(directory) {
-		expanded, err := expandHomePath(directory)
-		if err != nil {
-			return instantBackupOutput{}, fmt.Errorf("invalid destination folder: %w", err)
-		}
-		directory = expanded
+	if backupcore.IsRemoteBackupDestination(directory) {
+		return instantBackupOutput{}, backupcore.ErrRcloneBackupPublicationDisabled
 	}
-	directory, err := backupcore.NormalizeBackupDestination(directory)
+	expanded, err := expandHomePath(directory)
+	if err != nil {
+		return instantBackupOutput{}, fmt.Errorf("invalid destination folder: %w", err)
+	}
+	directory = expanded
+	directory, err = backupcore.NormalizeBackupDestination(directory)
 	if err != nil {
 		return instantBackupOutput{}, fmt.Errorf("resolve backup destination: %w", err)
 	}
-	if !backupcore.IsRemoteBackupDestination(directory) {
-		if info, statErr := os.Stat(directory); statErr == nil {
-			if !info.IsDir() {
-				return instantBackupOutput{}, fmt.Errorf("destination is not a folder: %s", directory)
-			}
-		} else if !os.IsNotExist(statErr) {
-			return instantBackupOutput{}, fmt.Errorf("inspect destination folder: %w", statErr)
+	if info, statErr := os.Stat(directory); statErr == nil {
+		if !info.IsDir() {
+			return instantBackupOutput{}, fmt.Errorf("destination is not a folder: %s", directory)
 		}
+	} else if !os.IsNotExist(statErr) {
+		return instantBackupOutput{}, fmt.Errorf("inspect destination folder: %w", statErr)
 	}
 
 	filename := strings.TrimSpace(rawFilename)
@@ -294,17 +293,15 @@ func prepareInstantBackupOutput(rawDirectory, rawFilename, defaultFilename, exte
 	if err != nil {
 		return instantBackupOutput{}, err
 	}
-	if !backupcore.IsRemoteBackupDestination(outputPath) {
-		if _, statErr := os.Lstat(outputPath); statErr == nil {
-			return instantBackupOutput{}, fmt.Errorf("backup file already exists; choose another name: %s", outputPath)
-		} else if !os.IsNotExist(statErr) {
-			return instantBackupOutput{}, fmt.Errorf("inspect backup output: %w", statErr)
-		}
+	if _, statErr := os.Lstat(outputPath); statErr == nil {
+		return instantBackupOutput{}, fmt.Errorf("backup file already exists; choose another name: %s", outputPath)
+	} else if !os.IsNotExist(statErr) {
+		return instantBackupOutput{}, fmt.Errorf("inspect backup output: %w", statErr)
 	}
 	return instantBackupOutput{directory: directory, filename: filename, path: outputPath}, nil
 }
 
-func (a *App) runDatabaseBackup(cfg *config.ConnectionConfig, outputPath, returnPage string) {
+func (a *App) runDatabaseBackup(cfg *config.ConnectionConfig, output instantBackupOutput, returnPage string) {
 	plan, err := backupPlanFor(cfg)
 	if err != nil {
 		a.ShowAlert(fmt.Sprintf("%s %v", iconWarn, err), returnPage)
@@ -328,20 +325,30 @@ func (a *App) runDatabaseBackup(cfg *config.ConnectionConfig, outputPath, return
 		started := time.Now()
 		var lastProgress atomic.Value
 		lastProgress.Store(backupcore.ProgressEvent{Phase: "preflight", Message: "preparing the instant backup"})
-		dumpErr := runDatabaseDumpWithProgress(ctx, cfg, outputPath, func(event backupcore.ProgressEvent) {
-			if event.Elapsed <= 0 {
-				event.Elapsed = time.Since(started)
-			}
-			lastProgress.Store(event)
-			a.updateBackupProgress(loadingToken, loadingTitle, event, cancelText)
-		})
-		var infoErr error
-		var fileSize string
-		if dumpErr == nil && !canceled.Load() && !backupcore.IsRemoteBackupDestination(outputPath) {
-			var stat os.FileInfo
-			stat, infoErr = os.Stat(outputPath)
-			if infoErr == nil {
-				fileSize = format.FormatBytes(uint64(stat.Size()))
+		job := backupcore.Job{
+			Name:             "Instant backup",
+			ConnectionID:     nonEmptyOr(cfg.ID, "instant"),
+			Destination:      output.directory,
+			FilenameTemplate: backupcore.DefaultFilenameTemplate,
+			Compression:      backupcore.CompressionNone,
+			Encryption:       backupcore.EncryptionNone,
+			Schedule:         backupcore.Schedule{Kind: backupcore.ScheduleManual},
+			Retention:        backupcore.Retention{KeepLast: 1},
+			TimeoutMinutes:   backupcore.DefaultTimeoutMinutes,
+		}
+		dumpErr := job.ApplyDefaults(time.Now())
+		var artifact backupcore.Artifact
+		if dumpErr == nil {
+			var runID string
+			runID, dumpErr = backupcore.NewID("run")
+			if dumpErr == nil {
+				artifact, dumpErr = (backupcore.Runner{OutputFilename: output.filename, Progress: func(event backupcore.ProgressEvent) {
+					if event.Elapsed <= 0 {
+						event.Elapsed = time.Since(started)
+					}
+					lastProgress.Store(event)
+					a.updateBackupProgress(loadingToken, loadingTitle, event, cancelText)
+				}}).Run(ctx, job, cfg, runID)
 			}
 		}
 
@@ -350,26 +357,27 @@ func (a *App) runDatabaseBackup(cfg *config.ConnectionConfig, outputPath, return
 				return
 			}
 
-			if canceled.Load() && (dumpErr == nil || errors.Is(dumpErr, context.Canceled)) {
-				message := fmt.Sprintf("%s Backup canceled. No partial artifact was published.", iconWarn)
-				if dumpErr == nil {
-					message = fmt.Sprintf("%s Cancellation arrived after the complete backup was atomically published. The verified artifact was preserved at:\n\n%s", iconWarn, tview.Escape(outputPath))
-				}
+			if canceled.Load() && dumpErr == nil && artifact.PublicationState == backupcore.ArtifactPublicationComplete {
+				message := fmt.Sprintf("%s Cancellation arrived after the artifact and completion manifest were published. The successful backup was preserved at:\n\n%s", iconWarn, tview.Escape(artifact.Path))
 				a.ShowAlert(message, returnPage)
+				return
+			}
+			if canceled.Load() && strings.TrimSpace(artifact.Path) == "" && errors.Is(dumpErr, context.Canceled) {
+				a.ShowAlert(fmt.Sprintf("%s Backup canceled. No partial artifact was published.", iconWarn), returnPage)
 				return
 			}
 
 			if dumpErr != nil {
 				last := lastProgress.Load().(backupcore.ProgressEvent)
-				a.ShowAlert(fmt.Sprintf("%s Backup failed:\n\n%s\n\nLast phase: %s — %s", iconFail, tview.Escape(dumpErr.Error()), tview.Escape(nonEmptyOr(last.Phase, "unknown")), tview.Escape(nonEmptyOr(last.Message, "no progress detail"))), returnPage)
+				preserved := ""
+				if strings.TrimSpace(artifact.Path) != "" {
+					preserved = fmt.Sprintf("\n\nCandidate path: %s\nPublication: %s\nThis is not recorded as a successful backup. Inspect it and its sidecar, then manually remove or reconcile it.", tview.Escape(artifact.Path), tview.Escape(backupArtifactPublicationLabel(artifact)))
+				}
+				a.ShowAlert(fmt.Sprintf("%s Backup failed:\n\n%s%s\n\nLast phase: %s — %s", iconFail, tview.Escape(dumpErr.Error()), preserved, tview.Escape(nonEmptyOr(last.Phase, "unknown")), tview.Escape(nonEmptyOr(last.Message, "no progress detail"))), returnPage)
 				return
 			}
 
-			sizeLine := ""
-			if infoErr == nil {
-				sizeLine = fmt.Sprintf("\nSize: %s", fileSize)
-			}
-			a.ShowAlert(fmt.Sprintf("%s Backup created\n\nType: %s\nFormat: %s\nPath: %s%s", iconSuccess, cfg.TypeLabel(), plan.formatLabel, tview.Escape(outputPath), sizeLine), returnPage)
+			a.ShowAlert(fmt.Sprintf("%s Backup created\n\nType: %s\nFormat: %s\nPath: %s\nManifest: %s\nSize: %s\nSHA-256: %s\nPublication: %s", iconSuccess, cfg.TypeLabel(), plan.formatLabel, tview.Escape(artifact.Path), tview.Escape(artifact.ManifestPath), format.FormatBytes(uint64(artifact.Size)), artifact.SHA256, tview.Escape(backupArtifactPublicationLabel(artifact))), returnPage)
 		})
 	}()
 }

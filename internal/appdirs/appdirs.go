@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 )
 
 const (
@@ -221,12 +222,18 @@ func writeOwnershipMarker(dir string) error {
 	file, err := os.OpenFile(markerPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		if os.IsExist(err) {
-			owned, inspectErr := IsOwnedDirectory(dir)
-			if inspectErr != nil {
-				return inspectErr
-			}
-			if owned {
-				return nil
+			// Another goroutine/process can win the exclusive create while its
+			// small marker is still empty or being synced. Give that writer a
+			// bounded commit window before treating the marker as foreign.
+			for attempts := 0; attempts < 25; attempts++ {
+				owned, inspectErr := IsOwnedDirectory(dir)
+				if inspectErr != nil {
+					return inspectErr
+				}
+				if owned {
+					return nil
+				}
+				time.Sleep(10 * time.Millisecond)
 			}
 		}
 		return fmt.Errorf("create ownership marker %s: %w", markerPath, err)

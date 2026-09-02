@@ -19,6 +19,7 @@ import (
 	"filippo.io/age"
 	"github.com/klauspost/compress/zstd"
 	"github.com/shreyam1008/dbterm/internal/config"
+	"github.com/shreyam1008/dbterm/internal/privatefile"
 )
 
 // ProgressEvent describes a bounded, low-overhead backup status update. A zero
@@ -35,8 +36,13 @@ type ProgressEvent struct {
 type ProgressFunc func(ProgressEvent)
 
 type Runner struct {
-	Now      func() time.Time
-	Progress ProgressFunc
+	Now           func() time.Time
+	Progress      ProgressFunc
+	ProducerID    string
+	DBTermVersion string
+	// OutputFilename is an optional exact basename for an on-demand backup.
+	// Durable jobs normally leave this empty and use FilenameTemplate.
+	OutputFilename string
 }
 
 func (r Runner) Run(ctx context.Context, job Job, cfg *config.ConnectionConfig, runID string) (artifact Artifact, err error) {
@@ -73,6 +79,18 @@ func (r Runner) Run(ctx context.Context, job Job, cfg *config.ConnectionConfig, 
 	if err != nil {
 		return Artifact{}, err
 	}
+	producerID, err := resolveProducerID(r.ProducerID)
+	if err != nil {
+		return Artifact{}, err
+	}
+	artifactID, err := NewID("artifact")
+	if err != nil {
+		return Artifact{}, err
+	}
+	dbtermVersion := strings.TrimSpace(r.DBTermVersion)
+	if dbtermVersion == "" {
+		dbtermVersion = currentDBTermVersion()
+	}
 	destination, err := parseDestination(job.Destination)
 	if err != nil {
 		return Artifact{}, err
@@ -86,12 +104,26 @@ func (r Runner) Run(ctx context.Context, job Job, cfg *config.ConnectionConfig, 
 		} else if removed > 0 {
 			progress(ProgressEvent{Phase: "preflight", Message: fmt.Sprintf("removed %d stale dbterm partial artifact(s)", removed)})
 		}
+	} else if removed, cleanupErr := cleanupStaleRclonePublicationPartials(ctx, destination, now.Add(-48*time.Hour)); cleanupErr != nil {
+		progress(ProgressEvent{Phase: "preflight", Message: "stale remote partial cleanup warning: " + cleanupErr.Error()})
+	} else if removed > 0 {
+		progress(ProgressEvent{Phase: "preflight", Message: fmt.Sprintf("removed %d stale remote dbterm staging object(s)", removed)})
 	}
-	fileName, err := buildArtifactFilename(job, cfg, plan, runID, now)
+	fileName := strings.TrimSpace(r.OutputFilename)
+	if fileName == "" {
+		fileName, err = buildArtifactFilename(job, cfg, plan, runID, now)
+	}
+	if err == nil {
+		err = validateExactArtifactFilename(fileName)
+	}
 	if err != nil {
 		return Artifact{}, err
 	}
 	finalPath, err := destination.join(fileName)
+	if err != nil {
+		return Artifact{}, err
+	}
+	manifestPath, err := destination.join(fileName + ArtifactManifestSuffix)
 	if err != nil {
 		return Artifact{}, err
 	}
@@ -100,6 +132,11 @@ func (r Runner) Run(ctx context.Context, job Job, cfg *config.ConnectionConfig, 
 			return Artifact{}, fmt.Errorf("backup file already exists: %s", finalPath)
 		} else if !os.IsNotExist(err) {
 			return Artifact{}, fmt.Errorf("check backup destination: %w", err)
+		}
+		if _, err := os.Lstat(manifestPath); err == nil {
+			return Artifact{}, fmt.Errorf("backup manifest already exists: %s", manifestPath)
+		} else if !os.IsNotExist(err) {
+			return Artifact{}, fmt.Errorf("check backup manifest destination: %w", err)
 		}
 	} else {
 		remoteObject, parseErr := parseDestination(finalPath)
@@ -110,6 +147,15 @@ func (r Runner) Run(ctx context.Context, job Job, cfg *config.ConnectionConfig, 
 			return Artifact{}, fmt.Errorf("check remote backup destination: %w", inspectErr)
 		} else if exists {
 			return Artifact{}, fmt.Errorf("backup file already exists: %s", finalPath)
+		}
+		remoteManifest, parseErr := parseDestination(manifestPath)
+		if parseErr != nil {
+			return Artifact{}, parseErr
+		}
+		if _, exists, inspectErr := inspectRcloneObject(ctx, remoteManifest); inspectErr != nil {
+			return Artifact{}, fmt.Errorf("check remote backup manifest destination: %w", inspectErr)
+		} else if exists {
+			return Artifact{}, fmt.Errorf("backup manifest already exists: %s", manifestPath)
 		}
 	}
 
@@ -128,7 +174,7 @@ func (r Runner) Run(ctx context.Context, job Job, cfg *config.ConnectionConfig, 
 		return Artifact{}, fmt.Errorf("native dump phase: %w", err)
 	}
 	progress(ProgressEvent{Phase: "verify", Message: "validating engine-native backup"})
-	if err := verifyNativeBackup(cfg, rawPath); err != nil {
+	if err := verifyNativeBackup(ctx, cfg, rawPath); err != nil {
 		return Artifact{}, fmt.Errorf("verification phase: %w", err)
 	}
 	progress(ProgressEvent{Phase: "verify", Message: "engine-native backup passed basic validation"})
@@ -137,7 +183,7 @@ func (r Runner) Run(ctx context.Context, job Job, cfg *config.ConnectionConfig, 
 	if destination.kind == destinationLocal {
 		artifactDirectory = destination.localPath
 	}
-	artifactOutput, err := os.CreateTemp(artifactDirectory, ".dbterm-artifact-*.partial")
+	artifactOutput, err := privatefile.CreateTemp(artifactDirectory, ".dbterm-artifact-", ".partial")
 	if err != nil {
 		return Artifact{}, fmt.Errorf("create private artifact staging file: %w", err)
 	}
@@ -154,6 +200,21 @@ func (r Runner) Run(ctx context.Context, job Job, cfg *config.ConnectionConfig, 
 	if err != nil {
 		return Artifact{}, fmt.Errorf("compression/encryption phase: %w", err)
 	}
+	manifest, err := buildArtifactManifest(job, cfg, runID, artifactID, producerID, dbtermVersion, now, plan.Format, size, checksum)
+	if err != nil {
+		return Artifact{}, fmt.Errorf("build artifact manifest: %w", err)
+	}
+	manifestStage, manifestSize, manifestChecksum, err := writeArtifactManifestStage(artifactDirectory, manifest)
+	if err != nil {
+		return Artifact{}, err
+	}
+	defer os.Remove(manifestStage)
+	artifact = Artifact{
+		ID: artifactID, Path: finalPath, Size: size, SHA256: checksum,
+		Format: plan.Format, Verified: true, VerificationLevel: ArtifactVerificationBasic, CreatedAt: now, BackupName: job.Name,
+		PublicationState: ArtifactPublicationUncertain,
+		ManifestPath:     manifestPath, ManifestSize: manifestSize, ManifestSHA256: manifestChecksum,
+	}
 	// Compression finalization and fsync can complete after the last streaming
 	// context check. Cancellation remains authoritative until atomic publication
 	// starts; after that boundary the complete artifact is preserved.
@@ -167,24 +228,65 @@ func (r Runner) Run(ctx context.Context, job Job, cfg *config.ConnectionConfig, 
 			return Artifact{}, parseErr
 		}
 		if err := publishRcloneNoReplace(ctx, artifactStage, remoteObject, size, progress); err != nil {
+			if publicationCrossed(err) {
+				return artifact, fmt.Errorf("backup publication at %s crossed or may have crossed its immutable boundary, but final verification failed and its completion manifest was not published; inspect the failed run and manually reconcile the candidate artifact before use: %w", finalPath, err)
+			}
 			return Artifact{}, err
+		}
+		artifact.PublicationState = ArtifactPublicationArtifactOnly
+		progress(ProgressEvent{Phase: "publish", Message: "artifact final name present and remote size checked; publishing completion manifest last"})
+		remoteManifest, parseErr := parseDestination(manifestPath)
+		if parseErr != nil {
+			return artifact, parseErr
+		}
+		completionCtx, cancelCompletion := publicationCompletionContext(ctx)
+		err := publishRcloneNoReplace(completionCtx, manifestStage, remoteManifest, manifestSize, nil)
+		cancelCompletion()
+		if err != nil {
+			if markManifestPublicationUncertain(&artifact, err) {
+				return artifact, fmt.Errorf("backup artifact is complete at %s and its manifest reached the final name, but manifest verification could not be confirmed; treat this run as failed until reconciled: %w", finalPath, err)
+			}
+			return artifact, fmt.Errorf("backup artifact is complete at %s, but its completion manifest could not be published; copy scanners will ignore the orphan artifact: %w", finalPath, err)
 		}
 	} else {
 		progress(ProgressEvent{Phase: "publish", Message: "publishing completed artifact without replacing existing files"})
 		if err := publishNoReplace(ctx, artifactStage, finalPath, progress); err != nil {
+			if publicationCrossed(err) {
+				return artifact, fmt.Errorf("backup artifact reached its immutable final name at %s, but durability could not be confirmed and its completion manifest was not published; inspect the failed run and manually reconcile the candidate artifact before use: %w", finalPath, err)
+			}
 			return Artifact{}, err
 		}
+		artifact.PublicationState = ArtifactPublicationArtifactOnly
+		progress(ProgressEvent{Phase: "publish", Message: "artifact durable; publishing completion manifest last"})
+		completionCtx, cancelCompletion := publicationCompletionContext(ctx)
+		err := publishNoReplace(completionCtx, manifestStage, manifestPath, nil)
+		cancelCompletion()
+		if err != nil {
+			if markManifestPublicationUncertain(&artifact, err) {
+				return artifact, fmt.Errorf("backup artifact is complete at %s and its manifest reached the final name, but manifest durability could not be confirmed; treat this run as failed until reconciled: %w", finalPath, err)
+			}
+			return artifact, fmt.Errorf("backup artifact is complete at %s, but its completion manifest could not be published; copy scanners will ignore the orphan artifact: %w", finalPath, err)
+		}
 	}
-	progress(ProgressEvent{Phase: "publish", Message: "backup artifact published", CurrentBytes: size, TotalBytes: size})
-	return Artifact{
-		Path:       finalPath,
-		Size:       size,
-		SHA256:     checksum,
-		Format:     plan.Format,
-		Verified:   true,
-		CreatedAt:  now,
-		BackupName: job.Name,
-	}, nil
+	artifact.PublicationState = ArtifactPublicationComplete
+	progress(ProgressEvent{Phase: "publish", Message: "backup artifact and completion manifest published", CurrentBytes: size, TotalBytes: size})
+	return artifact, nil
+}
+
+func markManifestPublicationUncertain(artifact *Artifact, err error) bool {
+	if artifact == nil || !publicationCrossed(err) {
+		return false
+	}
+	artifact.PublicationState = ArtifactPublicationUncertain
+	return true
+}
+
+func publicationCompletionContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	// Publication has crossed the irreversible artifact boundary. Give the tiny
+	// completion manifest a fresh bounded commit window even when cancellation
+	// or the job deadline arrived concurrently; otherwise a valid artifact is
+	// guaranteed to become an invisible orphan.
+	return context.WithTimeout(context.WithoutCancel(ctx), 2*time.Minute)
 }
 
 func wrapArtifact(ctx context.Context, rawPath string, output *os.File, entryName string, job Job, progress ProgressFunc) (string, int64, error) {
@@ -381,6 +483,19 @@ func buildArtifactFilename(job Job, cfg *config.ConnectionConfig, plan NativePla
 	return name, nil
 }
 
+func validateExactArtifactFilename(name string) error {
+	if name == "" || name == "." || name == ".." || filepath.IsAbs(name) || filepath.VolumeName(name) != "" || filepath.Base(name) != name || strings.ContainsAny(name, `/\\`) {
+		return fmt.Errorf("backup output filename must be one basename without folders")
+	}
+	if strings.HasPrefix(name, ".dbterm-") && strings.HasSuffix(name, ".partial") {
+		return fmt.Errorf("backup output filename uses dbterm's reserved private-partial namespace")
+	}
+	if len([]byte(name)) > 240 {
+		return fmt.Errorf("backup filename is too long (%d bytes; maximum 240)", len([]byte(name)))
+	}
+	return nil
+}
+
 func sanitizeFilename(value string) string {
 	value = strings.TrimSpace(value)
 	var out strings.Builder
@@ -485,7 +600,7 @@ func cleanupStalePartials(directory string, olderThan time.Time) (int, error) {
 	removed := 0
 	for _, entry := range entries {
 		name := entry.Name()
-		if entry.Type()&os.ModeSymlink != 0 || !strings.HasPrefix(name, ".dbterm-") || !strings.HasSuffix(name, ".partial") {
+		if entry.Type()&os.ModeSymlink != 0 || !isDBTermPartialName(name) {
 			continue
 		}
 		info, err := entry.Info()
@@ -498,4 +613,19 @@ func cleanupStalePartials(directory string, olderThan time.Time) (int, error) {
 		removed++
 	}
 	return removed, nil
+}
+
+func isDBTermPartialName(name string) bool {
+	if !strings.HasSuffix(name, ".partial") {
+		return false
+	}
+	for _, prefix := range []string{".dbterm-artifact-", ".dbterm-manifest-", ".dbterm-publish-"} {
+		if !strings.HasPrefix(name, prefix) {
+			continue
+		}
+		identifier := strings.TrimSuffix(strings.TrimPrefix(name, prefix), ".partial")
+		decoded, err := hex.DecodeString(identifier)
+		return err == nil && len(identifier) == 24 && len(decoded) == 12
+	}
+	return false
 }

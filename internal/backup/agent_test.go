@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -12,6 +13,125 @@ import (
 
 	"github.com/shreyam1008/dbterm/internal/config"
 )
+
+func TestExecuteClaimedJobDurablyRecordsArtifactWhenManifestPublicationFails(t *testing.T) {
+	isolateBackupState(t)
+	destination := t.TempDir()
+	source := createRunnerSQLiteFixture(t, t.TempDir(), "orphan-source.sqlite3")
+	store, err := OpenStore(filepath.Join(t.TempDir(), "backups.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	job := runnerSQLiteJob(destination, "tracked_orphan", "job_tracked_orphan")
+	if err := store.UpsertJob(context.Background(), &job); err != nil {
+		t.Fatal(err)
+	}
+	connections := &config.Store{Connections: []config.ConnectionConfig{{
+		ID: job.ConnectionID, Name: "orphan source", Type: config.SQLite, FilePath: source,
+	}}}
+	const owner = "orphan-test-owner"
+	claimed, err := store.ClaimJob(context.Background(), job.ID, owner, time.Now().UTC())
+	if err != nil || claimed.ID != job.ID {
+		t.Fatalf("claim job = %#v, %v", claimed, err)
+	}
+	manifestPath := filepath.Join(destination, "tracked_orphan.sqlite3"+ArtifactManifestSuffix)
+	run, err := executeClaimedJobWithProgressAndNotifier(
+		context.Background(), store, connections, job, owner, TriggerManual,
+		func(event ProgressEvent) {
+			if event.Phase == "publish" && event.Message == "artifact durable; publishing completion manifest last" {
+				if writeErr := os.WriteFile(manifestPath, []byte("competitor"), 0o600); writeErr != nil {
+					t.Errorf("create competing manifest: %v", writeErr)
+				}
+			}
+		}, nil,
+	)
+	if err == nil || run.Status != RunFailed {
+		t.Fatalf("executeClaimedJob() = %#v, %v; want failed run", run, err)
+	}
+	if !run.Artifact.Verified || strings.TrimSpace(run.Artifact.Path) == "" {
+		t.Fatalf("failed run lost published artifact metadata: %#v", run)
+	}
+	stored, listErr := store.ListRuns(context.Background(), job.ID, 10)
+	if listErr != nil {
+		t.Fatal(listErr)
+	}
+	if len(stored) != 1 || stored[0].Artifact.Path != run.Artifact.Path || !stored[0].Artifact.Verified {
+		t.Fatalf("durable failed run lost orphan artifact: %#v", stored)
+	}
+}
+
+func TestExecuteClaimedJobPersistsAndNotifiesRetentionFailureSeparately(t *testing.T) {
+	isolateBackupState(t)
+	destination := t.TempDir()
+	source := createRunnerSQLiteFixture(t, t.TempDir(), "retention-source.sqlite3")
+	store, err := OpenStore(filepath.Join(t.TempDir(), "backups.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	now := time.Now().UTC()
+	job := runnerSQLiteJob(destination, "retention_{run}", "job_retention_warning")
+	job.Retention.KeepLast = 1
+	job.Notification = EmailNotification{
+		Policy: NotificationFailure, SMTPHost: "localhost", SMTPPort: 25, TLSMode: SMTPTLSNone,
+		From: "dbterm@example.com", Recipients: []string{"alerts@example.com"},
+	}
+	if err := store.UpsertJob(context.Background(), &job); err != nil {
+		t.Fatal(err)
+	}
+
+	const oldOwner = "retention-old-owner"
+	if _, err := store.ClaimJob(context.Background(), job.ID, oldOwner, now.Add(-2*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	oldRun, err := store.StartRun(context.Background(), job.ID, TriggerManual, now.Add(-2*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldPath := filepath.Join(destination, "old.sqlite3")
+	oldPayload := []byte("old-but-changed")
+	if err := os.WriteFile(oldPath, oldPayload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	oldRun.Status = RunSucceeded
+	oldRun.FinishedAt = now.Add(-2*time.Hour + time.Minute)
+	oldRun.Artifact = Artifact{
+		Path: oldPath, Size: int64(len(oldPayload)), SHA256: strings.Repeat("0", 64),
+		Verified: true, PublicationState: ArtifactPublicationComplete, CreatedAt: oldRun.StartedAt,
+	}
+	if err := store.FinishRun(context.Background(), &oldRun, oldOwner); err != nil {
+		t.Fatal(err)
+	}
+
+	const owner = "retention-current-owner"
+	if _, err := store.ClaimJob(context.Background(), job.ID, owner, now); err != nil {
+		t.Fatal(err)
+	}
+	connections := &config.Store{Connections: []config.ConnectionConfig{{
+		ID: job.ConnectionID, Name: "retention source", Type: config.SQLite, FilePath: source,
+	}}}
+	notified := false
+	run, runErr := executeClaimedJobWithNotifier(context.Background(), store, connections, job, owner, TriggerScheduled, nil,
+		func(ctx context.Context, _ Job, notifiedRun Run) error {
+			notified = strings.Contains(notifiedRun.RetentionError, "SHA-256")
+			history, listErr := store.ListRuns(ctx, job.ID, 1)
+			if listErr != nil || len(history) != 1 || history[0].RetentionError == "" || !history[0].NotificationAttempted {
+				t.Errorf("retention warning was not durable before notification: %#v, %v", history, listErr)
+			}
+			return nil
+		})
+	if runErr != nil || run.Status != RunSucceeded {
+		t.Fatalf("executeClaimedJobWithNotifier() = %#v, %v; backup itself should succeed", run, runErr)
+	}
+	if run.RetentionError == "" || !notified {
+		t.Fatalf("retention warning/notifier = %q/%t", run.RetentionError, notified)
+	}
+	history, err := store.ListRuns(context.Background(), job.ID, 1)
+	if err != nil || len(history) != 1 || history[0].RetentionError == "" || !history[0].NotificationSent {
+		t.Fatalf("stored retention notification outcome = %#v, %v", history, err)
+	}
+}
 
 func TestRunAgentReconcilesStaleRunsOnStartup(t *testing.T) {
 	store, err := OpenStore(filepath.Join(t.TempDir(), "backups.db"))

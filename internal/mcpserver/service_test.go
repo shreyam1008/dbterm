@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -96,6 +97,24 @@ func TestSQLiteDriverReadOnlyTransactionBlocksWrites(t *testing.T) {
 	defer tx.Rollback()
 	if _, err := tx.Exec(`INSERT INTO guarded(id) VALUES (1)`); err == nil {
 		t.Fatal("MCP SQLite connection accepted a write")
+	}
+}
+
+func TestSQLiteReadOnlyDSNUsesPortableFileURL(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "folder with spaces", "db.sqlite3")
+	dsn, err := sqliteReadOnlyDSN(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := url.Parse(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed.Scheme != "file" || parsed.Query().Get("mode") != "ro" {
+		t.Fatalf("sqliteReadOnlyDSN() = %q", dsn)
+	}
+	if strings.Contains(parsed.Path, `\`) {
+		t.Fatalf("SQLite file URL contains Windows separators: %q", dsn)
 	}
 }
 

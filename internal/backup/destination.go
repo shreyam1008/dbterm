@@ -125,8 +125,9 @@ func (destination destinationSpec) parentAndName() (destinationSpec, string, err
 	return destinationSpec{kind: destinationLocal, localPath: filepath.Dir(destination.localPath)}, name, nil
 }
 
-// NormalizeBackupDestination validates a local folder or an rclone remote and
-// returns the stable value suitable for a durable backup job.
+// NormalizeBackupDestination returns a stable local or legacy-rclone storage
+// value. Job.Validate separately rejects rclone for new backup generation;
+// parsing remains available for historical records and the future copy layer.
 func NormalizeBackupDestination(raw string) (string, error) {
 	destination, err := parseDestination(raw)
 	if err != nil {
@@ -142,8 +143,8 @@ func IsRemoteBackupDestination(value string) bool {
 	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(value)), RcloneDestinationPrefix)
 }
 
-// JoinBackupDestination appends one generated artifact name to either kind of
-// destination without converting a remote URI into a local path.
+// JoinBackupDestination appends one artifact name without converting a legacy
+// rclone URI into a local path. Generation policy is enforced by Job.Validate.
 func JoinBackupDestination(raw, filename string) (string, error) {
 	destination, err := parseDestination(raw)
 	if err != nil {

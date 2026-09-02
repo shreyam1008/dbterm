@@ -225,10 +225,11 @@ func TestPublishNoReplaceCleansOnlyStalePublicationPartials(t *testing.T) {
 	if err := os.WriteFile(staged, []byte("complete"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	oldPartial := filepath.Join(directory, ".dbterm-publish-crashed.partial")
-	freshPartial := filepath.Join(directory, ".dbterm-publish-active.partial")
+	oldPartial := filepath.Join(directory, ".dbterm-publish-00112233445566778899aabb.partial")
+	freshPartial := filepath.Join(directory, ".dbterm-publish-00112233445566778899aabc.partial")
+	malformedPartial := filepath.Join(directory, ".dbterm-publish-crashed.partial")
 	unrelated := filepath.Join(directory, ".dbterm-other.partial")
-	for _, path := range []string{oldPartial, freshPartial, unrelated} {
+	for _, path := range []string{oldPartial, freshPartial, malformedPartial, unrelated} {
 		if err := os.WriteFile(path, []byte("partial"), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -243,7 +244,7 @@ func TestPublishNoReplaceCleansOnlyStalePublicationPartials(t *testing.T) {
 	if _, err := os.Lstat(oldPartial); !os.IsNotExist(err) {
 		t.Fatalf("stale publication partial remains: %v", err)
 	}
-	for _, path := range []string{freshPartial, unrelated} {
+	for _, path := range []string{freshPartial, malformedPartial, unrelated} {
 		if _, err := os.Stat(path); err != nil {
 			t.Fatalf("publication cleanup removed %s: %v", filepath.Base(path), err)
 		}

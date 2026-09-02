@@ -20,6 +20,7 @@ import (
 	"github.com/peterheb/cfd1"
 	"github.com/shreyam1008/dbterm/internal/config"
 	"github.com/shreyam1008/dbterm/internal/database"
+	"github.com/shreyam1008/dbterm/internal/privatefile"
 )
 
 type NativePlan struct {
@@ -66,8 +67,9 @@ func PlanFor(cfg *config.ConnectionConfig) (NativePlan, error) {
 	}
 }
 
-// CreateNativeBackup writes the engine-native format and refuses to replace an
-// existing destination. It is shared by the instant-backup UI and scheduler.
+// CreateNativeBackup is the low-level engine-native export primitive. It
+// refuses to replace an existing destination; user-facing backups normally go
+// through Runner so they also receive a checksum and completion manifest.
 func CreateNativeBackup(ctx context.Context, cfg *config.ConnectionConfig, outputPath string, options NativeOptions) (err error) {
 	defer func() { err = redactConnectionError(err, cfg) }()
 	if options.Progress != nil {
@@ -90,6 +92,9 @@ func CreateNativeBackup(ctx context.Context, cfg *config.ConnectionConfig, outpu
 	if err != nil {
 		return err
 	}
+	if output.kind == destinationRclone {
+		return ErrRcloneBackupPublicationDisabled
+	}
 	outputDirectory, _, err := output.parentAndName()
 	if err != nil {
 		return err
@@ -98,6 +103,13 @@ func CreateNativeBackup(ctx context.Context, cfg *config.ConnectionConfig, outpu
 	if output.kind == destinationRclone {
 		if err := ensureRcloneDestination(ctx, outputDirectory); err != nil {
 			return err
+		}
+		if removed, cleanupErr := cleanupStaleRclonePublicationPartials(ctx, outputDirectory, time.Now().Add(-48*time.Hour)); cleanupErr != nil {
+			if options.Progress != nil {
+				options.Progress(ProgressEvent{Phase: "preflight", Message: "stale remote partial cleanup warning: " + cleanupErr.Error()})
+			}
+		} else if removed > 0 && options.Progress != nil {
+			options.Progress(ProgressEvent{Phase: "preflight", Message: fmt.Sprintf("removed %d stale remote dbterm staging object(s)", removed)})
 		}
 		if _, exists, err := inspectRcloneObject(ctx, output); err != nil {
 			return fmt.Errorf("check remote backup output %s: %w", outputPath, err)
@@ -124,7 +136,7 @@ func CreateNativeBackup(ctx context.Context, cfg *config.ConnectionConfig, outpu
 	if err := createNativeAtPath(ctx, cfg, tempPath, options); err != nil {
 		return err
 	}
-	if err := verifyNativeBackup(cfg, tempPath); err != nil {
+	if err := verifyNativeBackup(ctx, cfg, tempPath); err != nil {
 		return err
 	}
 	if err := syncRegularFile(tempPath); err != nil {
@@ -283,7 +295,7 @@ func runMySQLDump(ctx context.Context, cfg *config.ConnectionConfig, outputPath 
 }
 
 func runNativeCommandToFile(ctx context.Context, label string, cmd *exec.Cmd, outputPath string) error {
-	output, err := os.OpenFile(outputPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	output, err := privatefile.Create(outputPath)
 	if err != nil {
 		return fmt.Errorf("create private %s output: %w", label, err)
 	}
@@ -336,7 +348,7 @@ func runSQLiteSnapshot(ctx context.Context, cfg *config.ConnectionConfig, output
 	// SQLite creates the VACUUM target itself, so its initial mode follows the
 	// process umask. Tighten it before a no-compression instant backup can be
 	// hard-linked into the user-selected destination.
-	if err := os.Chmod(outputPath, 0o600); err != nil {
+	if err := privatefile.Protect(outputPath); err != nil {
 		return fmt.Errorf("protect SQLite snapshot: %w", err)
 	}
 	return nil
@@ -452,7 +464,7 @@ func runCloudflareD1Export(ctx context.Context, cfg *config.ConnectionConfig, ou
 		return err
 	}
 
-	output, err := os.OpenFile(outputPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	output, err := privatefile.Create(outputPath)
 	if err != nil {
 		return fmt.Errorf("create private Cloudflare D1 export staging file: %w", err)
 	}
@@ -596,7 +608,7 @@ type logicalDumpQueryer interface {
 }
 
 func writeSQLiteCompatibleDump(ctx context.Context, db logicalDumpQueryer, dbType config.DBType, outputPath string) error {
-	file, err := os.OpenFile(outputPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	file, err := privatefile.Create(outputPath)
 	if err != nil {
 		return fmt.Errorf("create logical backup staging file: %w", err)
 	}

@@ -1,12 +1,11 @@
-//go:build !windows
-
 package backup
 
 import (
 	"context"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
+	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,7 +15,17 @@ import (
 	"github.com/shreyam1008/dbterm/internal/config"
 )
 
-func TestRclonePublishVerifyAndDelete(t *testing.T) {
+func TestMain(testingMain *testing.M) {
+	if os.Getenv("DBTERM_TEST_RCLONE_HELPER") == "1" {
+		os.Exit(runFakeRclone(os.Args[1:], os.Stdout))
+	}
+	if os.Getenv("DBTERM_TEST_PG_DUMP_HELPER") == "1" {
+		os.Exit(runFakePostgresDump(os.Args[1:], os.Stdout))
+	}
+	os.Exit(testingMain.Run())
+}
+
+func TestRcloneLegacyArtifactCanStillBeVerifiedReadOnly(t *testing.T) {
 	remoteRoot := t.TempDir()
 	tool := writeFakeRclone(t)
 	originalFinder := findRcloneTool
@@ -40,15 +49,9 @@ func TestRclonePublishVerifyAndDelete(t *testing.T) {
 		t.Fatal(err)
 	}
 	payload := []byte("verified remote backup")
-	stage := filepath.Join(t.TempDir(), "artifact")
-	if err := os.WriteFile(stage, payload, 0o600); err != nil {
+	stored := filepath.Join(remoteRoot, "team", "backups", "orders.dump")
+	if err := os.WriteFile(stored, payload, 0o600); err != nil {
 		t.Fatal(err)
-	}
-	if err := publishRcloneNoReplace(context.Background(), stage, object, int64(len(payload)), nil); err != nil {
-		t.Fatal(err)
-	}
-	if err := publishRcloneNoReplace(context.Background(), stage, object, int64(len(payload)), nil); err == nil {
-		t.Fatal("second remote publication replaced an existing artifact")
 	}
 	digest := sha256.Sum256(payload)
 	exists, err := verifyRcloneArtifactForPrune(context.Background(), object, Artifact{
@@ -57,34 +60,125 @@ func TestRclonePublishVerifyAndDelete(t *testing.T) {
 	if err != nil || !exists {
 		t.Fatalf("verify remote artifact = %t, %v", exists, err)
 	}
-	if err := deleteRcloneArtifact(context.Background(), object); err != nil {
-		t.Fatal(err)
-	}
-	if _, exists, err := inspectRcloneObject(context.Background(), object); err != nil || exists {
-		t.Fatalf("deleted remote artifact = exists %t, error %v", exists, err)
+	if got, readErr := os.ReadFile(stored); readErr != nil || string(got) != string(payload) {
+		t.Fatalf("read-only verification changed remote object = %q, %v", got, readErr)
 	}
 }
 
-func TestRunnerPublishesLocalSQLiteSourceToRcloneDestination(t *testing.T) {
-	isolateBackupState(t)
+func TestRclonePublicationFailsClosedBeforeToolLookupOrMutation(t *testing.T) {
+	remoteRoot := t.TempDir()
+	finalPath := filepath.Join(remoteRoot, "team", "backups", "orders.dump")
+	if err := os.MkdirAll(filepath.Dir(finalPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	const existing = "independently published object"
+	if err := os.WriteFile(finalPath, []byte(existing), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	object, err := parseDestination("rclone://archive/team/backups/orders.dump")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stage := filepath.Join(t.TempDir(), "artifact")
+	if err := os.WriteFile(stage, []byte("new backup"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	toolLookedUp := false
+	originalFinder := findRcloneTool
+	findRcloneTool = func(string) (string, error) {
+		toolLookedUp = true
+		return "", os.ErrNotExist
+	}
+	t.Cleanup(func() { findRcloneTool = originalFinder })
+	t.Setenv("DBTERM_TEST_RCLONE_ROOT", remoteRoot)
+
+	err = publishRcloneNoReplace(context.Background(), stage, object, int64(len("new backup")), nil)
+	if err == nil || !strings.Contains(err.Error(), "rclone backup publication is disabled") {
+		t.Fatalf("publishRcloneNoReplace() error = %v, want explicit fail-closed error", err)
+	}
+	if toolLookedUp {
+		t.Fatal("fail-closed rclone publication looked up or invoked rclone")
+	}
+	got, readErr := os.ReadFile(finalPath)
+	if readErr != nil || string(got) != existing {
+		t.Fatalf("existing remote object = %q, %v; want untouched sentinel", got, readErr)
+	}
+	entries, readErr := os.ReadDir(filepath.Dir(finalPath))
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if len(entries) != 1 || entries[0].Name() != filepath.Base(finalPath) {
+		t.Fatalf("disabled publication created remote objects: %v", entryNames(entries))
+	}
+}
+
+func TestCleanupStaleRclonePublicationPartialsIsAgeAndNamespaceScoped(t *testing.T) {
 	remoteRoot := t.TempDir()
 	tool := writeFakeRclone(t)
 	originalFinder := findRcloneTool
 	findRcloneTool = func(string) (string, error) { return tool, nil }
 	t.Cleanup(func() { findRcloneTool = originalFinder })
 	t.Setenv("DBTERM_TEST_RCLONE_ROOT", remoteRoot)
-
-	source := filepath.Join(t.TempDir(), "orders.sqlite3")
-	database, err := sql.Open("sqlite", source)
+	destination, err := parseDestination("rclone://archive/team/backups")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := database.Exec(`CREATE TABLE orders(id INTEGER PRIMARY KEY, total INTEGER); INSERT INTO orders(total) VALUES (42);`); err != nil {
+	if err := ensureRcloneDestination(context.Background(), destination); err != nil {
 		t.Fatal(err)
 	}
-	if err := database.Close(); err != nil {
+	directory := filepath.Join(remoteRoot, "team", "backups")
+	old := ".dbterm-upload_aaaaaaaaaaaaaaaaaaaaaaaa.partial"
+	fresh := ".dbterm-upload_bbbbbbbbbbbbbbbbbbbbbbbb.partial"
+	unrelated := ".dbterm-upload_not-an-id.partial"
+	for _, name := range []string{old, fresh, unrelated} {
+		if err := os.WriteFile(filepath.Join(directory, name), []byte(name), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cutoff := time.Now().UTC().Add(-48 * time.Hour)
+	if err := os.Chtimes(filepath.Join(directory, old), cutoff.Add(-time.Hour), cutoff.Add(-time.Hour)); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Chtimes(filepath.Join(directory, fresh), cutoff.Add(time.Hour), cutoff.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(filepath.Join(directory, unrelated), cutoff.Add(-time.Hour), cutoff.Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	removed, err := cleanupStaleRclonePublicationPartials(context.Background(), destination, cutoff)
+	if err != nil || removed != 1 {
+		t.Fatalf("cleanupStaleRclonePublicationPartials() = %d, %v; want 1, nil", removed, err)
+	}
+	if _, err := os.Stat(filepath.Join(directory, old)); !os.IsNotExist(err) {
+		t.Fatalf("old private upload remains: %v", err)
+	}
+	for _, name := range []string{fresh, unrelated} {
+		if _, err := os.Stat(filepath.Join(directory, name)); err != nil {
+			t.Fatalf("scoped cleanup removed %s: %v", name, err)
+		}
+	}
+}
+
+func entryNames(entries []os.DirEntry) []string {
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		names = append(names, entry.Name())
+	}
+	return names
+}
+
+func TestRunnerRejectsRcloneDestinationBeforeBackupOrToolLookup(t *testing.T) {
+	isolateBackupState(t)
+	toolLookedUp := false
+	originalFinder := findRcloneTool
+	findRcloneTool = func(string) (string, error) {
+		toolLookedUp = true
+		return "", os.ErrNotExist
+	}
+	t.Cleanup(func() { findRcloneTool = originalFinder })
+
+	source := filepath.Join(t.TempDir(), "missing.sqlite3")
 	job := Job{
 		ID: "job_remote", Name: "offsite", ConnectionID: "conn_local", Destination: "rclone://archive/team/backups",
 		FilenameTemplate: "orders_{run}", Compression: CompressionNone, Encryption: EncryptionNone,
@@ -92,41 +186,44 @@ func TestRunnerPublishesLocalSQLiteSourceToRcloneDestination(t *testing.T) {
 		CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 	connection := &config.ConnectionConfig{ID: "conn_local", Name: "orders", Type: config.SQLite, FilePath: source}
-	artifact, err := (Runner{}).Run(context.Background(), job, connection, "run_1234567890abcdef")
-	if err != nil {
-		t.Fatal(err)
+	_, err := (Runner{}).Run(context.Background(), job, connection, "run_1234567890abcdef")
+	if err == nil || !strings.Contains(err.Error(), "rclone backup publication is disabled") {
+		t.Fatalf("Runner.Run() error = %v, want explicit fail-closed error", err)
 	}
-	if artifact.Path != "rclone://archive/team/backups/orders_1234567890.sqlite3" || !artifact.Verified {
-		t.Fatalf("remote artifact = %#v", artifact)
+	if toolLookedUp {
+		t.Fatal("rejected rclone job looked up or invoked rclone")
 	}
-	stored := filepath.Join(remoteRoot, "team", "backups", "orders_1234567890.sqlite3")
-	prefix := make([]byte, 16)
-	file, err := os.Open(stored)
-	if err != nil {
-		t.Fatal(err)
+	if _, statErr := os.Lstat(source); !os.IsNotExist(statErr) {
+		t.Fatalf("rejected rclone job touched database source: %v", statErr)
 	}
-	if _, err := file.Read(prefix); err != nil {
-		_ = file.Close()
-		t.Fatal(err)
+}
+
+func TestCreateNativeBackupRejectsRcloneBeforeToolLookup(t *testing.T) {
+	toolLookedUp := false
+	originalFinder := findRcloneTool
+	findRcloneTool = func(string) (string, error) {
+		toolLookedUp = true
+		return "", os.ErrNotExist
 	}
-	_ = file.Close()
-	if string(prefix) != "SQLite format 3\x00" {
-		t.Fatalf("remote SQLite header = %q", prefix)
+	t.Cleanup(func() { findRcloneTool = originalFinder })
+
+	connection := &config.ConnectionConfig{Type: config.SQLite, FilePath: filepath.Join(t.TempDir(), "missing.sqlite3")}
+	err := CreateNativeBackup(context.Background(), connection, "rclone://archive/team/backups/orders.sqlite3", NativeOptions{})
+	if err == nil || !strings.Contains(err.Error(), "rclone backup publication is disabled") {
+		t.Fatalf("CreateNativeBackup() error = %v, want explicit fail-closed error", err)
+	}
+	if toolLookedUp {
+		t.Fatal("rejected native rclone backup looked up or invoked rclone")
 	}
 }
 
 func TestPostgresBackupUsesConfiguredRemoteSourceHost(t *testing.T) {
-	toolDirectory := t.TempDir()
-	tool := filepath.Join(toolDirectory, "pg_dump")
-	argumentsPath := filepath.Join(toolDirectory, "arguments")
-	script := `#!/bin/sh
-set -eu
-printf '%s\n' "$@" > "$DBTERM_TEST_DATABASE_ARGUMENTS"
-printf 'PGDMPremote-source-fixture'
-`
-	if err := os.WriteFile(tool, []byte(script), 0o700); err != nil {
+	tool, err := os.Executable()
+	if err != nil {
 		t.Fatal(err)
 	}
+	argumentsPath := filepath.Join(t.TempDir(), "arguments")
+	t.Setenv("DBTERM_TEST_PG_DUMP_HELPER", "1")
 	originalFinder := findRestoreTool
 	findRestoreTool = func(string) (string, error) { return tool, nil }
 	t.Cleanup(func() { findRestoreTool = originalFinder })
@@ -152,62 +249,125 @@ printf 'PGDMPremote-source-fixture'
 	}
 }
 
+func runFakePostgresDump(arguments []string, stdout io.Writer) int {
+	argumentsPath := os.Getenv("DBTERM_TEST_DATABASE_ARGUMENTS")
+	if argumentsPath == "" {
+		return 2
+	}
+	data := []byte(strings.Join(arguments, "\n") + "\n")
+	if err := os.WriteFile(argumentsPath, data, 0o600); err != nil {
+		return 2
+	}
+	if _, err := io.WriteString(stdout, "PGDMPremote-source-fixture"); err != nil {
+		return 2
+	}
+	return 0
+}
+
 func writeFakeRclone(t *testing.T) string {
 	t.Helper()
-	tool := filepath.Join(t.TempDir(), "rclone")
-	script := `#!/bin/sh
-set -eu
-if [ "${1:-}" = "--ask-password=false" ]; then shift; fi
-command_name="${1:-}"
-shift
-to_local() {
-  remote_value="$1"
-  object_path="${remote_value#*:}"
-  printf '%s/%s' "$DBTERM_TEST_RCLONE_ROOT" "$object_path"
-}
-case "$command_name" in
-  mkdir)
-    target="$(to_local "$1")"
-    mkdir -p "$target"
-    ;;
-  lsjson)
-    target="$(to_local "$1")"
-    stat_mode=false
-    for argument in "$@"; do
-      if [ "$argument" = "--stat" ]; then stat_mode=true; fi
-    done
-    if [ -f "$target" ]; then
-      size="$(wc -c < "$target" | tr -d ' ')"
-      name="$(basename "$target")"
-      printf '{"Path":"%s","Name":"%s","Size":%s,"ModTime":"2026-08-14T00:00:00Z","IsDir":false}\n' "$name" "$name" "$size"
-    elif [ "$stat_mode" = true ]; then
-      exit 3
-    else
-      printf '[]\n'
-    fi
-    ;;
-  copyto)
-    source_path="$1"
-    target="$(to_local "$2")"
-    if [ -e "$target" ]; then exit 4; fi
-    mkdir -p "$(dirname "$target")"
-    cp "$source_path" "$target"
-    ;;
-  cat)
-    target="$(to_local "$1")"
-    cat "$target"
-    ;;
-  deletefile)
-    target="$(to_local "$1")"
-    rm -f "$target"
-    ;;
-  *)
-    exit 9
-    ;;
-esac
-`
-	if err := os.WriteFile(tool, []byte(script), 0o700); err != nil {
+	tool, err := os.Executable()
+	if err != nil {
 		t.Fatal(err)
 	}
+	t.Setenv("DBTERM_TEST_RCLONE_HELPER", "1")
 	return tool
+}
+
+func runFakeRclone(arguments []string, stdout io.Writer) int {
+	if len(arguments) > 0 && arguments[0] == "--ask-password=false" {
+		arguments = arguments[1:]
+	}
+	if len(arguments) == 0 {
+		return 9
+	}
+
+	command := arguments[0]
+	arguments = arguments[1:]
+	remotePath := func(index int) (string, bool) {
+		if index >= len(arguments) {
+			return "", false
+		}
+		_, objectPath, ok := strings.Cut(arguments[index], ":")
+		root := os.Getenv("DBTERM_TEST_RCLONE_ROOT")
+		if !ok || root == "" {
+			return "", false
+		}
+		return filepath.Join(root, filepath.FromSlash(objectPath)), true
+	}
+
+	switch command {
+	case "mkdir":
+		target, ok := remotePath(0)
+		if !ok || os.MkdirAll(target, 0o700) != nil {
+			return 2
+		}
+		return 0
+	case "lsjson":
+		target, ok := remotePath(0)
+		if !ok {
+			return 2
+		}
+		info, err := os.Stat(target)
+		if err == nil && info.Mode().IsRegular() {
+			item := rcloneObject{Path: filepath.Base(target), Name: filepath.Base(target), Size: info.Size(), ModTime: info.ModTime().UTC().Format(time.RFC3339Nano)}
+			if json.NewEncoder(stdout).Encode(item) != nil {
+				return 2
+			}
+			return 0
+		}
+		if containsArgument(arguments, "--stat") {
+			return 3
+		}
+		items := []rcloneObject{}
+		entries, readErr := os.ReadDir(target)
+		if readErr != nil && !os.IsNotExist(readErr) {
+			return 2
+		}
+		for _, entry := range entries {
+			entryInfo, infoErr := entry.Info()
+			if infoErr == nil && entryInfo.Mode().IsRegular() {
+				items = append(items, rcloneObject{Path: entry.Name(), Name: entry.Name(), Size: entryInfo.Size(), ModTime: entryInfo.ModTime().UTC().Format(time.RFC3339Nano)})
+			}
+		}
+		if json.NewEncoder(stdout).Encode(items) != nil {
+			return 2
+		}
+		return 0
+	case "cat":
+		target, ok := remotePath(0)
+		if !ok {
+			return 2
+		}
+		file, err := os.Open(target)
+		if err != nil {
+			return 3
+		}
+		_, copyErr := io.Copy(stdout, file)
+		closeErr := file.Close()
+		if copyErr != nil || closeErr != nil {
+			return 2
+		}
+		return 0
+	case "deletefile":
+		target, ok := remotePath(0)
+		if !ok {
+			return 2
+		}
+		if err := os.Remove(target); err != nil && !os.IsNotExist(err) {
+			return 2
+		}
+		return 0
+	default:
+		return 9
+	}
+}
+
+func containsArgument(arguments []string, expected string) bool {
+	for _, argument := range arguments {
+		if argument == expected {
+			return true
+		}
+	}
+	return false
 }

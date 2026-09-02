@@ -17,6 +17,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+	"github.com/shreyam1008/dbterm/internal/privatefile"
 )
 
 const (
@@ -607,7 +608,7 @@ func writeResultExportCSVAtomic(ctx context.Context, path string, producer resul
 	}
 
 	directory := filepath.Dir(path)
-	temporary, err := os.CreateTemp(directory, "."+filepath.Base(path)+".tmp-*")
+	temporary, err := privatefile.CreateTemp(directory, "."+filepath.Base(path)+".tmp-", ".partial")
 	if err != nil {
 		return 0, fmt.Errorf("create temporary CSV in %s: %w", directory, err)
 	}
@@ -694,7 +695,7 @@ func copyResultExportNoReplace(ctx context.Context, sourcePath, destinationPath 
 	}
 	defer source.Close()
 
-	destination, err := os.OpenFile(destinationPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	destination, err := privatefile.Create(destinationPath)
 	if err != nil {
 		return fmt.Errorf("create CSV destination without replacing it: %w", err)
 	}

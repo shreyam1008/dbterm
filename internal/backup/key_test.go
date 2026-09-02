@@ -3,6 +3,7 @@ package backup
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -27,5 +28,27 @@ func TestGenerateAgeIdentity(t *testing.T) {
 	}
 	if _, err := GenerateAgeIdentity(path); err == nil {
 		t.Fatal("expected no-clobber error")
+	}
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := info.Mode().Perm(); got != 0o600 {
+			t.Fatalf("identity mode = %04o, want 0600", got)
+		}
+		directoryInfo, err := os.Stat(filepath.Dir(path))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := directoryInfo.Mode().Perm(); got != 0o700 {
+			t.Fatalf("identity directory mode = %04o, want 0700", got)
+		}
+	}
+}
+
+func TestGenerateAgeIdentityRejectsEmptyPath(t *testing.T) {
+	if _, err := GenerateAgeIdentity(" \t\r\n"); err == nil || !strings.Contains(err.Error(), "path is required") {
+		t.Fatalf("GenerateAgeIdentity() error = %v, want required-path error", err)
 	}
 }

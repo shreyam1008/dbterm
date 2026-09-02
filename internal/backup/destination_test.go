@@ -52,15 +52,15 @@ func TestNormalizeBackupDestinationRejectsUnsafeRcloneValues(t *testing.T) {
 	}
 }
 
-func TestJobValidateAcceptsNormalizedRcloneDestination(t *testing.T) {
+func TestJobValidateRejectsRcloneBackupPublication(t *testing.T) {
 	job := Job{
 		Name: "offsite", ConnectionID: "connection", Destination: "rclone://archive/dbterm",
 		FilenameTemplate: DefaultFilenameTemplate,
 		Compression:      CompressionZstd, CompressionLevel: 3,
 		Encryption: EncryptionNone, Schedule: Schedule{Kind: ScheduleManual}, TimeoutMinutes: 5,
 	}
-	if err := job.Validate(); err != nil {
-		t.Fatalf("Validate() remote destination: %v", err)
+	if err := job.Validate(); err == nil || !strings.Contains(err.Error(), "rclone backup publication is disabled") {
+		t.Fatalf("Validate() error = %v, want explicit fail-closed error", err)
 	}
 }
 

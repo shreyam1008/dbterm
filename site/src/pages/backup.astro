@@ -19,8 +19,8 @@ const safeguards = [
   },
   {
     marker: "02",
-    title: "Local or remote storage",
-    body: "Use an absolute folder, mounted volume, or rclone://remote/path. Local capacity remains visible; one configured rclone remote opens S3, SFTP, Drive, Azure and other backends."
+    title: "Local or mounted storage",
+    body: "Use an absolute local folder or an OS-mounted volume. dbterm checks local capacity and keeps publication on a filesystem where create-only finalization can be enforced."
   },
   {
     marker: "03",
@@ -48,21 +48,21 @@ const pipeline = [
   ["01", "Stage", "Create the engine-native dump inside dbterm's private state, never directly in the destination."],
   ["02", "Verify", "Check that the dump is non-empty and structurally consistent with the expected engine format."],
   ["03", "Wrap", "Apply gzip, ZIP, or single-worker zstd compression and optional age X25519 encryption."],
-  ["04", "Publish", "Calculate SHA-256, sync, and publish locally or through rclone without replacing an existing artifact."],
+  ["04", "Publish", "Calculate SHA-256, sync, and publish the artifact plus portable manifest without replacing an existing file."],
   ["05", "Retain", "Record history, apply count/age/size ceilings conservatively, and deliver the configured notification."]
 ];
 
 const routes = [
-  ["Local database", "Local / mounted folder", "Local → local"],
-  ["Local database", "rclone remote", "Local → remote"],
-  ["Remote / cloud database", "Local / mounted folder", "Remote → local"],
-  ["Remote / cloud database", "rclone remote", "Remote → remote"]
+  ["Local database", "Local folder", "Local → local"],
+  ["Local database", "OS-mounted volume", "Local → mounted"],
+  ["Remote / cloud database", "Local folder", "Remote → local"],
+  ["Remote / cloud database", "OS-mounted volume", "Remote → mounted"]
 ];
 
 const faq = [
   {
     q: "Can I back up an AWS or other remote database to my machine?",
-    a: "Yes. Save a reachable PostgreSQL, MySQL, Turso, or Cloudflare D1 connection, then choose a local/mounted folder or a configured rclone destination. Local-to-local, local-to-remote, remote-to-local and remote-to-remote combinations are supported."
+    a: "Yes. Save a reachable PostgreSQL, MySQL, Turso, or Cloudflare D1 connection, then choose an absolute local folder or OS-mounted volume. New rclone generation is disabled until the independent copy layer can meet dbterm's no-overwrite contract."
   },
   {
     q: "Does the TUI have to stay open?",
@@ -141,9 +141,9 @@ const jsonLd = [
     <div class="site-container grid gap-12 lg:grid-cols-[.8fr_1.2fr] lg:gap-16">
       <div>
         <p class="mb-3 font-mono text-[.68rem] font-semibold tracking-[.14em] text-[var(--brand-strong)] uppercase">Source and destination are independent</p>
-        <h2 id="routing-title" class="text-[clamp(2.3rem,5vw,4.2rem)] leading-none tracking-[-.055em]">All four routes work.</h2>
-        <p class="mt-5 leading-relaxed text-[var(--ink-soft)]">The database may be on this machine or across the network. The completed artifact may stay local, land on a mounted volume, or move through a configured rclone remote.</p>
-        <p class="mt-5 text-sm leading-relaxed text-[var(--ink-soft)]">rclone keeps its own credentials. dbterm stores the destination as <code>rclone://remote/path</code> and uses the backup agent's OS account when the job runs unattended.</p>
+        <h2 id="routing-title" class="text-[clamp(2.3rem,5vw,4.2rem)] leading-none tracking-[-.055em]">Local and remote sources, safely published.</h2>
+        <p class="mt-5 leading-relaxed text-[var(--ink-soft)]">The database may be on this machine or across the network. The completed artifact and portable manifest publish to an absolute local folder or OS-mounted volume.</p>
+        <p class="mt-5 text-sm leading-relaxed text-[var(--ink-soft)]">New <code>rclone://</code> generation jobs fail closed: generic rclone finalization cannot enforce atomic create-only publication across every backend. Existing remote history remains visible for migration.</p>
       </div>
       <div class="grid overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)] sm:grid-cols-2">
         {routes.map(([source, destination, label]) => (

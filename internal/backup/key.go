@@ -4,23 +4,29 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"filippo.io/age"
+	"github.com/shreyam1008/dbterm/internal/privatefile"
 )
 
 // GenerateAgeIdentity creates a private age X25519 identity with no-clobber
 // semantics. Jobs store only the returned public recipient.
 func GenerateAgeIdentity(path string) (string, error) {
+	if strings.TrimSpace(path) == "" {
+		return "", fmt.Errorf("age identity output path is required")
+	}
 	identity, err := age.GenerateX25519Identity()
 	if err != nil {
 		return "", fmt.Errorf("generate age identity: %w", err)
 	}
 	path = filepath.Clean(path)
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+	directory := filepath.Dir(path)
+	if err := os.MkdirAll(directory, 0o700); err != nil {
 		return "", fmt.Errorf("create age key directory: %w", err)
 	}
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	file, err := privatefile.Create(path)
 	if err != nil {
 		if os.IsExist(err) {
 			return "", fmt.Errorf("age identity already exists: %s", path)
@@ -44,6 +50,9 @@ func GenerateAgeIdentity(path string) (string, error) {
 	}
 	if err := file.Close(); err != nil {
 		return "", fmt.Errorf("close age identity: %w", err)
+	}
+	if err := syncDirectory(directory); err != nil {
+		return "", fmt.Errorf("sync age identity directory: %w", err)
 	}
 	cleanup = false
 	return recipient, nil
