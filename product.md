@@ -19,7 +19,7 @@ Access defaults to the active connection. Database mutation is not exposed. Crea
 
 ## Verified backup routes
 
-dbterm separates the database source from the artifact destination. It supports local-to-local, local-to-remote, remote-to-local and remote-to-remote backups. Destinations may be absolute local folders, mounted volumes or configured `rclone://remote/path` locations.
+dbterm separates the database source from the artifact destination. A local or reachable remote database can publish to an absolute local folder or OS-mounted volume. New `rclone://...` generation jobs fail closed because generic rclone finalization cannot guarantee atomic create-only publication across backends; existing rclone history remains visible for migration.
 
 The backup pipeline stages an engine-native dump or snapshot, verifies it, applies optional gzip/ZIP/zstd compression and age X25519 encryption, calculates SHA-256 and publishes without overwriting an existing artifact. Jobs can run through systemd, launchd or Windows Task Scheduler.
 

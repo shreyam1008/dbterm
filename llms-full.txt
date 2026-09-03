@@ -1,6 +1,6 @@
 # dbterm — complete product and operating documentation
 
-> Canonical full-text context for dbterm v0.10.1 “Parvati”, generated from the repository's human manuals. dbterm is a keyboard-first local database workbench and native backup agent created by Shreyam Adhikari (shreyam1008).
+> Canonical full-text context for dbterm v0.11.0 “Ganga”, generated from the repository's human manuals. dbterm is a keyboard-first local database workbench and native backup agent created by Shreyam Adhikari (shreyam1008).
 
 Canonical website: https://dbterm.shreyam1008.com.np/
 Source: https://github.com/shreyam1008/dbterm
@@ -29,14 +29,16 @@ Save a PostgreSQL or MySQL server login once—without memorizing a database nam
 | **Data workspace** | Local schema-aware SQL autocomplete, schema/object discovery, named Change Profiler anchors with row/cell/schema diffs, a command/object/recent-SQL palette, persistent table pins, query history, asynchronous cancellable execution, typed results, composable `AND` filters, sorting, first/last pagination, bidirectional related-row navigation, same-value discovery, schema inspection, and streamed CSV export. |
 | **Database operations** | PostgreSQL/MySQL SQL-dump import with progress and cancellation, plus local MySQL/PostgreSQL service status, start, stop, install guidance, saved-login connection, and server-wide database browsing. |
 | **Local agent access** | STDIO MCP server for scoped schema inspection, bounded read-only SQL, query plans, and declared relationship following; stored secrets stay hidden and profile changes require explicit opt-in. |
-| **Backup and recovery** | Instant or scheduled backups from local or remote sources to local/mounted or rclone destinations; native dumps, private staging, verification, compression, age encryption, SHA-256 history, retention, email alerts, native OS agents, content inspection, and guarded PostgreSQL/MySQL/SQLite restore. |
+| **Backup and recovery** | Instant or scheduled backups from local or remote sources to absolute local or OS-mounted destinations; native dumps, private staging, portable manifests, verification, compression, age encryption, SHA-256 history, retention, email alerts, native OS agents, content inspection, and guarded PostgreSQL/MySQL/SQLite restore. |
 
-The backup routing model covers all four combinations:
+The current backup-generation routes are:
 
-| Source | Local / mounted destination | rclone remote destination |
-| --- | --- | --- |
-| **Local database** | Supported | Supported |
-| **Remote / cloud database** | Supported | Supported |
+| Source | Absolute local / OS-mounted destination |
+| --- | --- |
+| **Local database** | Supported |
+| **Remote / cloud database** | Supported |
+
+New `rclone://...` generation jobs fail closed because generic rclone finalization cannot guarantee dbterm's atomic create-only publication rule across backends. Use independent copy jobs for verified off-machine copies: push local artifacts to local or pinned-SFTP destinations, or pull from local, pinned-SFTP, or rclone sources into a local vault. Generic rclone push remains disabled for the same immutability reason.
 
 PostgreSQL uses custom `pg_dump` archives; MySQL/MariaDB uses single-database `mysqldump` SQL; SQLite uses a consistent built-in snapshot; Turso uses a single-transaction logical export; and D1 uses Cloudflare's native export API. Restore currently targets PostgreSQL, MySQL/MariaDB, and local SQLite.
 
@@ -121,13 +123,18 @@ dbterm keeps one connection profile for the signed-in OS user. Run the TUI norma
 | `dbterm --uninstall` | Remove binary with confirmation |
 | `dbterm --uninstall --yes` | Remove binary without prompt |
 | `dbterm --uninstall --purge` | Remove binary + dbterm-owned config, state, and logs; chosen backup artifacts stay |
-| `dbterm backup --help` | Backup jobs, agent, inspection, encryption keys, and paths |
+| `dbterm backup --help` | Backup jobs, independent copies, file sets, agent, inspection, encryption keys, and paths |
 | `dbterm backup create …` | Run an instant headless backup from a saved connection |
 | `dbterm backup run <job>` | Run a configured job now |
+| `dbterm backup files add … <job>` | Add a guarded application-folder file set to future backup bundles |
+| `dbterm backup copy create …` | Define a local, producer-push, or vault-pull copy policy |
+| `dbterm backup copy test / run / status <copy>` | Test, transfer, and inspect copy health independently of backup health |
+| `dbterm backup copy inspect <copy>` | Privately stage and inspect a verified copied recovery point |
 | `dbterm backup prune --yes <job>` | Enforce count/age/size retention immediately |
 | `dbterm backup notify-test <job>` | Send a test message with a job's SMTP settings |
 | `dbterm backup inspect <file>` | Detect wrappers and database format from file contents |
 | `dbterm backup restore --connection <target> --yes <file>` | Inspect, review, and restore into a saved target |
+| `dbterm backup keycheck --identity <file> --recipient <age1…>` | Prove that a separately stored age identity matches a job recipient |
 | `dbterm backup service install` | Install and start the desktop/user backup agent |
 | `dbterm backup service status --all` | Inspect user and system registrations |
 | `dbterm backup service enable / disable` | Change startup policy without changing the current runtime |
@@ -196,18 +203,49 @@ The portable engine works across every supported database without installing tri
 
 ## Backup Center
 
-For a one-off copy, press `Alt+B` from Tables, Query, or Results; use `F2` for the native folder chooser, type a path, or enter `rclone://remote/path`. `F3` refreshes local destination and private-staging capacity. For durable jobs, press `B` on Dashboard or `Alt+K` anywhere. `N` then chooses an existing saved database or lets you add one; `Ctrl+N` adds another database from the plan form. `Ctrl+B` on a highlighted Dashboard connection starts with it preselected. A job binds one saved local or remote connection to:
+For a one-off backup, press `Alt+B` from Tables, Query, or Results; use `F2` for the native folder chooser or type an absolute local/OS-mounted path. `F3` refreshes destination and private-staging capacity. For durable jobs, press `B` on Dashboard or `Alt+K` anywhere. `N` then chooses an existing saved database or lets you add one; `Ctrl+N` adds another database from the plan form. `Ctrl+B` on a highlighted Dashboard connection starts with it preselected.
 
-- an absolute local/mounted folder or an rclone-backed remote destination, with an optional native GUI folder chooser and local volume/free-space details;
-- manual, interval, daily, or weekly timing with an IANA timezone;
+A backup job creates a full engine-native database recovery point by default. dbterm does not silently configure database-native incremental backup, WAL/binlog archiving, or point-in-time recovery. Copy jobs can transfer only the completed artifacts that a destination is missing, which saves network work but does not turn those full snapshots into incremental database backups.
+
+A backup plan binds one saved local or remote connection to:
+
+- an absolute local or OS-mounted folder, with an optional native GUI folder chooser and local volume/free-space details;
+- manual, interval, daily, or weekly timing with an IANA timezone, including multiple wall-clock times on one daily or weekly plan;
 - a safe filename template using `{job}`, `{connection}`, `{database}`, `{engine}`, `{date}`, `{time}`, `{timestamp}`, and `{run}`;
 - no compression, gzip, ZIP, or single-worker Zstandard with a chosen level;
 - optional interoperable age X25519 encryption (the job stores only the public `age1…` recipient);
 - latest-count, maximum-age, and maximum-total-size retention;
-- optional Gmail-ready or custom SMTP notifications on failure, success, or both; and
+- optional Gmail-ready or custom SMTP notifications on failure, success, or both;
+- zero or more required/optional application-folder file sets with include/exclude patterns; and
 - a timeout, enabled state, next run, live byte/phase progress, last result, SHA-256, notification outcome, and artifact history.
 
-Artifacts are staged privately, validated, synced, and published without replacing an existing file. Retention only removes successful artifacts recorded for that job and still contained by its destination; it keeps the newest success and rechecks identity, size, and checksum before deletion. Use `P` in Backup Center or `backup prune --yes` to enforce a changed policy immediately. Removing dbterm, the agent, or a job never removes unrelated or surviving backup files.
+Database-only plans keep the existing native artifact. Adding file sets creates a self-contained dbterm bundle with the native database artifact and relative file trees. Roots stay private in the producer catalog; symlinks, reparse points, path escapes, and non-regular files are refused. Live folders are captured with best-effort consistency and change detection, not as an atomic application or filesystem snapshot. A required set fails the run if a safe capture cannot be completed, while an optional set is atomically omitted with a portable warning.
+
+Artifacts are staged privately, validated, synced, and published without replacing an existing file. Each successful artifact gets an immutable `.dbterm.json` sidecar containing its stable identity, size, SHA-256, format, producer, creation time, and verification result without connection secrets. Retention only removes successful artifacts recorded for that exact job and still contained by its destination; it keeps the newest success and rechecks identity, size, and checksum before deletion. Use `P` in Backup Center or `backup prune --yes` to enforce a changed policy immediately. Removing dbterm, the agent, or a job never removes unrelated or surviving backup files.
+
+### Independent recovery copies
+
+Backup Center's **Copies** view and `dbterm backup copy` keep generation health separate from transfer health. A valid local backup remains valid when an off-machine copy fails. Every transfer is driven by a completed portable manifest, compares artifact identity and checksum rather than filenames, processes missing recovery points oldest-first, stages privately, verifies SHA-256 and format, and publishes without replacing a completed destination.
+
+- **Local copy:** copy between two absolute local or OS-mounted locations.
+- **Push:** the producer sends a local published artifact to a local destination or pinned SFTP endpoint; a job-bound push may run immediately after backup success.
+- **Pull:** the vault scans a local folder, pinned SFTP source, or `rclone://remote/path`, then stores verified copies locally. This is useful when the producer must not hold vault credentials.
+
+SFTP uses a dedicated unencrypted private identity plus an explicitly pinned `SHA256:...` host-key fingerprint. `ssh://` is accepted only as an alias for the SFTP subsystem; dbterm does not execute SCP or a remote shell. rclone is supported as a pull source, but rclone push is intentionally disabled because generic rclone finalization cannot prove create-only publication across every backend.
+
+```bash
+dbterm backup copy create --name vault-pull --mode pull \
+  --source sftp://backup@producer/archives --destination /mnt/vault \
+  --identity /etc/dbterm/vault-ed25519 --host-key SHA256:... \
+  --trigger timed --at 02:30 --at 14:30 --timezone Asia/Kolkata
+dbterm backup copy test vault-pull
+dbterm backup copy run vault-pull
+dbterm backup copy enable vault-pull
+```
+
+Copy jobs have their own retries, run history, throughput, freshness, retention, email policy, and leases. Backup Center progressively exposes Gmail-ready or custom SMTP/TLS fields and a mail-only delivery test; saved app passwords stay masked and no CLI password flag is provided. Copy jobs are disabled by default so `dbterm backup copy test <copy>` can check the endpoint first; the read-only test does not modify backup files. Automatic triggers remain blocked until a manual `copy run` has transferred and verified a real artifact under the current transport settings. Use `copy prune` without `--yes` for a dry-run, and `copy inspect` to download a remote recovery point into private temporary storage, verify it against its manifest/catalog record, inspect it, and remove the temporary stage.
+
+Local copy destinations can optionally require a volume sentinel with `--volume-mode already-mounted|os-managed`. Linux deployments may opt into `managed-linux-block-device` with an exact filesystem UUID/type and sentinel. Managed mode never formats or repairs a disk, and its mount, unmount, sync, and optional power-off operations require deployment-specific, narrowly scoped host privileges and hardware setup. `copy test` proves only the currently mounted identity; exercise the lifecycle with a supervised manual run before enabling it.
 
 “Catch up missed run” executes one overdue occurrence after sleep/restart; it does not replay every missed interval. When catch-up is off, an occurrence more than two minutes late is skipped and the cadence advances to the next future time.
 
@@ -272,15 +310,16 @@ Generate an age identity once:
 
 ```bash
 dbterm backup keygen
+dbterm backup keycheck --identity ./age-identity.txt --recipient age1...
 ```
 
-Copy the printed public recipient into a job. Keep the private identity separately from off-site backups; it is needed only to inspect or restore encrypted artifacts. dbterm does not store backup passphrases in unattended job configuration.
+Copy the printed public recipient into a job. Keep the private identity separately from off-site backups; it is needed only to inspect or restore encrypted artifacts. `keycheck` encrypts and decrypts a disposable in-memory challenge so you can test that recovery key before depending on it. dbterm does not store backup passphrases in unattended job configuration.
 
 By default, `keygen` writes the private identity under dbterm's config directory. As a recovery safeguard, `--uninstall --purge` refuses to delete a discovered private age identity or backup-like file. Move the identity somewhere safe—or explicitly remove it yourself—before retrying a purge.
 
 ### Inspect and restore
 
-Backup Center → `I` identifies gzip, Zstandard, single-entry ZIP, and age wrappers recursively, then detects PostgreSQL custom/tar/plain SQL, MySQL SQL, SQLite databases, or SQLite SQL from bytes—not the filename. Misleading extensions produce a warning. Locked age files stay “encrypted” until an identity is selected; ambiguous generic SQL is reported but deliberately blocked from restore rather than guessed.
+Backup Center → `I` identifies gzip, Zstandard, single-entry ZIP, age, and dbterm bundle layers recursively, then detects PostgreSQL custom/tar/plain SQL, MySQL SQL, SQLite databases, or SQLite SQL from bytes—not the filename. Bundle inspection also reports each included application file set. Misleading extensions produce a warning. Locked age files stay “encrypted” until an identity is selected; ambiguous generic SQL is reported but deliberately blocked from restore rather than guessed.
 
 Inspection supports at most three nested wrappers. Each decoded layer defaults to a 1 GiB safety cap and is materialized in the OS temporary directory rather than held in memory. Set **Max Decoded GiB** in the TUI or pass `--max-decoded-gib N` to `inspect` and `restore` for a larger trusted backup; ensure the temporary directory has enough free space for the decoded layers.
 
@@ -289,11 +328,14 @@ The same guarded flow is scriptable. Consent is never implied:
 ```bash
 dbterm backup inspect --identity ./age-identity.txt ./prod.dump.zst.age
 dbterm backup restore --connection production --identity ./age-identity.txt --yes ./prod.dump.zst.age
+dbterm backup copy inspect vault-copy --identity ./age-identity.txt
 ```
 
 Clean mode additionally requires `--confirm-clean` with the exact database name (or normalized SQLite path).
 
-Restore is preview-first. The detected engine must match the chosen saved connection. Merge is the default; PostgreSQL clean restore is opt-in and shown as destructive. PostgreSQL restores use transactional official clients where supported. MySQL warns that earlier statements may remain after a failure. SQLite snapshots and SQL dumps restore through a verified staging database while keeping a pre-restore copy; SQL is streamed through the `sqlite3` client after filesystem-escape checks.
+Restore is preview-first. The detected database engine must match the chosen saved connection. Merge is the default; PostgreSQL clean restore is opt-in and shown as destructive. PostgreSQL restores use transactional official clients where supported. MySQL warns that earlier statements may remain after a failure. SQLite snapshots and SQL dumps restore through a verified staging database while keeping a pre-restore copy; SQL is streamed through the `sqlite3` client after filesystem-escape checks.
+
+Bundle file trees are opt-in during restore: repeat `--restore-files LABEL=ABSOLUTE_FOLDER` for the sets you want. Database-only restore remains the default. Existing files are not replaced unless `--overwrite-files` is supplied; file count/byte limits and containment checks apply independently of the database restore.
 
 Restore only files from a source you trust. Content detection, checksum revalidation, engine matching, and client-command guards reduce accidental and client-side escape risk; the SQL itself is still allowed to change the selected database and can invoke server-side behavior permitted to that database account.
 
@@ -303,7 +345,7 @@ PostgreSQL/MySQL backup and restore use their official clients; bounded-memory S
 - macOS: `brew install libpq mysql-client sqlite`
 - Windows: install PostgreSQL/MySQL clients as needed and `sqlite3` from the [official SQLite downloads](https://sqlite.org/download.html)
 
-Remote sources work through saved connections, including reachable cloud databases. Destinations can be absolute local/OS-mounted folders or configured rclone remotes such as `rclone://offsite/dbterm`, so local→local, local→remote, remote→local, and remote→remote backups all use the same verified pipeline. Install rclone, run `rclone config` as the backup-agent OS account, and verify the remote with `rclone lsd offsite:`. Remote credentials stay in rclone rather than dbterm's catalog.
+Remote database sources work through saved connections, including reachable cloud databases. Backup generation publishes only to absolute local or OS-mounted folders, so local-to-local and remote-to-local/mounted backups use the verified pipeline. Independent copy jobs can push those completed artifacts to local or pinned-SFTP destinations, or pull them from local, pinned-SFTP, or rclone sources into a local vault. New `rclone://...` generation and rclone-push jobs remain rejected because generic rclone moves cannot provide a portable atomic create-if-absent guarantee.
 
 Turso logical exports keep schema and data reads on one source transaction. Virtual/FTS tables are rejected before publication because exporting their shadow tables independently can produce an unrestorable dump. Cloudflare D1 uses Cloudflare's native export API and streams its short-lived signed HTTPS result into dbterm's private staging area; Cloudflare can temporarily make the database unavailable while that export runs. Restore in this release targets PostgreSQL, MySQL/MariaDB, and local SQLite; Turso/D1 SQL backups remain inspectable artifacts.
 
@@ -480,7 +522,7 @@ Update to the newest release or a specific version:
 
 ```bash
 dbterm --update
-dbterm --update 0.10.1
+dbterm --update 0.11.0
 ```
 
 The Dashboard `U` action opens the same Version & Update workflow. Updates verify the release checksum and replace only the executable. Saved connections, settings, query history, backup plans and history, completed artifacts, and Change Profiler anchors remain in the invoking user's profile. If a system-owned binary needs elevation, `sudo dbterm --update` preserves the invoking user's data rather than switching to a root profile.
@@ -708,14 +750,16 @@ Install only the native tools required by the databases and destinations you use
 - MySQL/MariaDB backup requires `mysqldump`; import and restore require `mysql`.
 - SQLite snapshot backup and snapshot restore are built in. Restoring a streamed SQLite SQL dump requires `sqlite3`.
 - Turso/LibSQL logical export and Cloudflare D1 native export do not require those database command-line clients.
-- An `rclone://...` destination requires `rclone`, configured for the same OS account that runs the interactive app or backup agent.
+- New backup-generation jobs require an absolute local or OS-mounted destination. Legacy `rclone://...` records remain visible, but new rclone generation and remote retention fail closed.
+- SFTP push/pull is built into dbterm; it requires a dedicated unencrypted private key and a pinned SHA-256 server host-key fingerprint, not an external `scp` command.
+- A `rclone://remote/path` copy source requires `rclone` in the backup agent account's `PATH`. rclone push is not supported.
 
 Install the matching packages:
 
-- Ubuntu: `sudo apt install postgresql-client mysql-client sqlite3 rclone`
-- Debian: `sudo apt install postgresql-client default-mysql-client sqlite3 rclone`
-- macOS with Homebrew: `brew install libpq mysql-client sqlite rclone`
-- Windows: install the PostgreSQL and MySQL command-line clients when those engines are used, install `sqlite3` from the [official SQLite tools downloads](https://sqlite.org/download.html), and install `rclone` from the [official rclone downloads](https://rclone.org/downloads/). Add their executable directories to the PATH of the user or system account that runs the backup agent.
+- Ubuntu: `sudo apt install postgresql-client mysql-client sqlite3`
+- Debian: `sudo apt install postgresql-client default-mysql-client sqlite3`
+- macOS with Homebrew: `brew install libpq mysql-client sqlite`
+- Windows: install the PostgreSQL and MySQL command-line clients when those engines are used, and install `sqlite3` from the [official SQLite tools downloads](https://sqlite.org/download.html). Add their executable directories to the PATH of the user or system account that runs the backup agent.
 
 Verify the relevant tools from that same account:
 
@@ -726,14 +770,15 @@ psql --version
 mysqldump --version
 mysql --version
 sqlite3 --version
-rclone version
 ```
 
-Homebrew's `libpq` and `mysql-client` formulae may be keg-only, so make their `bin` directories available to the agent rather than relying only on an interactive shell profile. For remote storage, run `rclone config` and a read check such as `rclone lsd offsite:` as the agent account before saving `rclone://offsite/...`. A Windows system task cannot use a per-user mapped-drive letter; use a local path, UNC/mounted path available to that account, or rclone.
+Homebrew's `libpq` and `mysql-client` formulae may be keg-only, so make their `bin` directories available to the agent rather than relying only on an interactive shell profile. A Windows system task cannot use a per-user mapped-drive letter; use a local path or UNC/mounted path available to that account.
 
 ### Instant backup
 
-Press `Alt+B` from Tables, Query, or Results. Choose an absolute local/mounted folder or `rclone://remote/path`; `F2` opens the native folder chooser and `F3` refreshes destination and private-staging capacity. dbterm chooses the engine-appropriate format, refuses to overwrite an existing file, cancels safely, and publishes only a finished artifact. The default folder is `~/dbterm-backups`.
+Press `Alt+B` from Tables, Query, or Results. Choose an absolute local or OS-mounted folder; `F2` opens the native folder chooser and `F3` refreshes destination and private-staging capacity. dbterm creates a full engine-native database recovery point, refuses to overwrite an existing file, cancels safely, and publishes only a finished artifact with an adjacent portable manifest. The default folder is `~/dbterm-backups`.
+
+The portable `.dbterm.json` sidecar is the completion signal for independent copy jobs. It records a stable artifact/run/job identity, producer, UTC creation time, engine and format, exact byte size, SHA-256, verification state, file-set summary, and warnings. It excludes credentials and connection strings. A filename or modification time alone is never proof that a recovery point is complete.
 
 ### Durable plans
 
@@ -741,23 +786,54 @@ Open Backup Center with `Alt+K` or Dashboard `B`. Press `N` to select a saved da
 
 A plan configures:
 
-- Manual, interval, daily, or weekly scheduling with timezone, weekdays, catch-up behavior, and enabled state.
-- Absolute local/mounted or rclone destinations.
+- Manual, interval, daily, or weekly scheduling with timezone, weekdays, catch-up behavior, enabled state, and multiple wall-clock times on one daily or weekly plan.
+- Absolute local or OS-mounted destinations.
 - Filename tokens: `{job}`, `{connection}`, `{database}`, `{engine}`, `{date}`, `{time}`, `{timestamp}`, and `{run}`.
 - Count, maximum-age, and total-size retention ceilings. The newest verified artifact is always preserved.
 - Timeout and compression: none, gzip, ZIP, or Zstandard with a chosen level.
 - Optional age X25519 public recipient.
+- Zero or more required/optional application-folder file sets with include/exclude patterns.
 - Email policy: never, failure, success, or both; Gmail STARTTLS defaults or custom SMTP/TLS, recipients, sender, username, and app password.
 
-Backup Center actions include run now, enable/disable schedule, apply retention, history, inspect/restore, desktop/server agent status and controls, age key generation, edit, and delete. Deleting a job keeps its history and files.
+Backup Center actions include run now, enable/disable schedule, add/edit/remove included folders, apply retention, history, inspect/restore, independent copy policies, desktop/server agent status and controls, age key generation, edit, and delete. Deleting a job keeps its history and files.
+
+Database-only plans retain their engine-native artifact. When file sets are configured, dbterm creates a self-contained bundle with that native database artifact plus relative file trees. Producer roots are not written into the bundle. Symlinks, reparse points, path escapes, and non-regular files are refused; files are rechecked after capture. Live folders are recorded as `best-effort` consistency with change detection, not as an atomic application or filesystem snapshot. A required file set fails the backup if a safe capture cannot be completed. An optional set is omitted atomically and leaves a visible warning in the manifest and run.
+
+These are full database snapshots by default. Copying only artifacts absent at a vault is incremental transfer work, not database-native incremental backup, WAL/binlog retention, or point-in-time recovery.
+
+### Local, push, and pull copies
+
+Backup generation and artifact copying are separate jobs with separate histories, leases, retries, retention, and health. A verified local backup remains successful if its extra copy fails; Backup Center reports the degraded protection state without relabeling the database artifact as corrupt.
+
+Choose one transfer owner for each artifact stream:
+
+| Topology | Agent that initiates it | Implemented endpoints |
+| --- | --- | --- |
+| Local copy | Producer or vault | Absolute local/OS-mounted source to local destination |
+| Push | Producer | Local published source to local or pinned SFTP destination |
+| Pull | Vault | Local, pinned SFTP, or `rclone://` source to a local destination |
+
+Push can run after a bound backup succeeds, manually, or on its own schedule. Pull is normally timed so a vault or DMZ-facing collector owns credentials and destination retention. The scanner accepts only complete manifests, discovers every missing artifact, transfers oldest-first into a private partial, verifies exact size, SHA-256, and format, then publishes artifact and manifest without replacement. A matching filename is never used as deduplication proof.
+
+SFTP locations use `sftp://user@host/absolute/path`; `ssh://` is an alias for the same SFTP subsystem. Supply an absolute dedicated unencrypted key with `--identity` and a pre-verified `SHA256:...` host fingerprint with `--host-key`. Password authentication, trust-on-first-use, SCP, and remote shell commands are not used. rclone is read-only in this layer and can be a pull source; rclone push remains disabled because create-only publication cannot be guaranteed uniformly across backends.
+
+New copy jobs are disabled by default. Run `dbterm backup copy test <copy>`, then a supervised `dbterm backup copy run <copy>`, before enabling an automatic trigger. The endpoint test is read-only and reports transport timing or local capacity where supported; only a successful manual run that transfers and verifies a real artifact proves the current transport settings and unlocks timed or after-success enablement. `copy inspect` privately stages the newest completed, unpruned recovery copy (or an exact `--artifact`), rechecks its manifest binding and checksum, inspects content, then removes the temporary stage. In Backup Center, `I` shows every retained recovery point owned by the selected copy job so an older exact artifact can enter the same guarded restore flow.
+
+Copy retention belongs to the destination copy job. Preview it with `dbterm backup copy prune --dry-run <copy>` and apply exactly that plan with `--yes`. It does not prune producer history or unrelated destination files.
+
+The copy add/edit wizard can send failure, success, or both kinds of email through Gmail defaults or custom SMTP/TLS settings. SMTP fields stay hidden while delivery is set to **Never**. Use **Send Test Email** before depending on unattended delivery; testing sends mail only and does not run a backup or copy. Existing app passwords remain masked and are preserved unless deliberately replaced. There is intentionally no CLI password flag.
+
+For a local copy destination, volume checks are an explicit opt-in. `already-mounted` and `os-managed` require a sentinel identity at the configured mount root but never mount it. `managed-linux-block-device` additionally verifies the filesystem UUID/type, mounts only for the owned run, syncs, unmounts, and can request power-off. It never formats or repairs a disk. Linux device behavior and narrow mount/unmount/sync/power privileges are deployment- and hardware-specific; configure and test them outside dbterm before enabling a schedule. `copy test` performs only a read-only identity proof and does not claim to exercise mount, unmount, sync, or power-off.
 
 ### Agents, inspection, and restore
 
 Desktop/user mode requires no administrator access and starts at login. Server/system mode is an explicit elevated installation that starts at machine boot and requires existing config/state/log paths plus a chosen runtime user. Start/stop changes runtime; enable/disable changes startup policy independently. The status screen separates registration, startup, manager runtime, process lock, heartbeat, PID, uptime, memory, and current phase. Logs can be refreshed and copied.
 
-Inspection unwraps at most three gzip, Zstandard, single-entry ZIP, or age layers in private OS temporary files, with a 1 GiB decoded limit per layer by default. It identifies the database format from content, checks SHA-256 history when available, and warns about misleading extensions. Increase **Max Decoded GiB** only for a trusted larger artifact and provide enough temporary disk space.
+Inspection unwraps at most three gzip, Zstandard, single-entry ZIP, or age layers in private OS temporary files, with a 1 GiB decoded limit per layer by default. It recognizes a dbterm bundle, validates its internal manifest and database payload, lists included file sets, identifies the database format from content, checks SHA-256 history when available, and warns about misleading extensions. Increase **Max Decoded GiB** only for a trusted larger artifact and provide enough temporary disk space.
 
-Restore is preview-first and always requires explicit consent. The detected engine must match the saved target. Merge is the default; clean restore is a separate destructive choice and requires the exact database name or normalized SQLite path. Valid SQL can still perform any server-side action allowed to the selected database account, so restore only trusted files.
+Restore is preview-first and always requires explicit consent. The detected engine must match the saved target. Merge is the default; clean restore is a separate destructive choice and requires the exact database name or normalized SQLite path. Bundle file sets are restored only when each label is explicitly mapped to an absolute target; database-only restore is the default, existing files are preserved unless overwrite is selected, and independent count/byte limits apply. Valid SQL can still perform any server-side action allowed to the selected database account, so restore only trusted files.
+
+Generate one age X25519 identity with `dbterm backup keygen`, store it separately from encrypted backups, and place only the public recipient in unattended jobs. Before relying on it, run `dbterm backup keycheck --identity <identity.txt> --recipient <age1...>`; the command proves the pair with a disposable in-memory encrypt/decrypt challenge and does not create or modify a backup.
 
 ## Configure Settings and shortcuts
 
@@ -906,16 +982,43 @@ Common `help`, `version`, `info`, `update`, and `remove` aliases are accepted, b
 
 ```text
 dbterm backup list|jobs [--json]
-dbterm backup create --connection <id|name> --destination <folder|rclone://remote/path>
+dbterm backup create --connection <id|name> --destination <absolute-local-or-mounted-folder>
   [--name LABEL] [--filename TEMPLATE]
   [--compression none|gzip|zip|zstd] [--level N]
   [--age-recipient AGE1...] [--timeout MINUTES]
 dbterm backup run <job-id|name>
+dbterm backup files list [--json] <job-id|name>
+dbterm backup files add --label NAME --root ABSOLUTE_FOLDER
+  [--include GLOB]... [--exclude GLOB]... [--optional] [--replace] <job-id|name>
+dbterm backup files remove --yes <job-id|name> <label>
+dbterm backup copy list [--json]
+dbterm backup copy create --name NAME --mode push|pull
+  (--source LOCATION | --source-job <job-id|name>) --destination LOCATION
+  [--identity ABSOLUTE_KEY_PATH] [--host-key SHA256:FINGERPRINT]
+  [--trigger manual|after-success|timed] [--every DURATION]
+  [--at HH:MM]... [--timezone IANA_NAME] [--expected-freshness DURATION]
+  [--format FORMAT]... [--keep-last N] [--max-age-days N] [--max-total-gib N]
+  [--timeout MINUTES] [--attempts N] [--retry-initial DURATION]
+  [--retry-max DURATION] [--enable]
+  [--volume-mode already-mounted|os-managed|managed-linux-block-device]
+  [--volume-mount-point ABSOLUTE_PATH] [--volume-id SENTINEL_VALUE]
+  [--volume-sentinel-file NAME] [--volume-uuid UUID]
+  [--volume-filesystem TYPE] [--volume-label LABEL]
+  [--volume-mount-option OPTION]... [--volume-warmup DURATION]
+  [--volume-cooldown DURATION] [--volume-spindown]
+dbterm backup copy test|run|enable|disable <copy-id|name>
+dbterm backup copy status [--json] [copy-id|name]
+dbterm backup copy inspect <copy-id|name> [--artifact ARTIFACT_ID]
+  [--identity PATH] [--max-decoded-gib N] [--json]
+dbterm backup copy prune [--dry-run|--yes] <copy-id|name>
+dbterm backup copy delete --yes <copy-id|name>
 dbterm backup prune --yes <job-id|name>
 dbterm backup inspect [--identity key.txt] [--max-decoded-gib N] [--json] <file>
 dbterm backup restore --connection <id|name> [--identity key.txt]
   [--mode merge|clean] [--stop-on-error=true|false]
   [--single-transaction=true|false] [--max-decoded-gib N]
+  [--restore-files LABEL=ABSOLUTE_FOLDER]... [--overwrite-files]
+  [--max-file-set-files N] [--max-file-set-gib N]
   [--timeout DURATION] [--confirm-clean EXACT_TARGET] --yes <file>
 dbterm backup status [--json]
 dbterm backup service <install|uninstall|start|stop|restart|enable|disable|status>
@@ -923,6 +1026,7 @@ dbterm backup service <install|uninstall|start|stop|restart|enable|disable|statu
   [--run-as USER] [--config-dir PATH] [--state-dir PATH] [--log-dir PATH]
 dbterm backup service status --all
 dbterm backup keygen [--output identity.txt]
+dbterm backup keycheck --identity identity.txt --recipient age1...
 dbterm backup notify-test <job-id|name>
 dbterm backup paths [--json]
 dbterm backup logs|log [--lines 1..5000] [--previous]
@@ -930,7 +1034,9 @@ dbterm backup agent [--poll 30s]
 dbterm backup run-due
 ```
 
-`backup create --timeout` is measured in minutes; restore `--timeout` accepts a Go duration such as `45m` and `0` disables that optional timeout. Clean mode requires `--confirm-clean` with the exact target database name or normalized absolute SQLite path. `--run-as` applies only to system service installation, which also requires explicit config, state, and log directories. `service status --all` is the only action that accepts `--all`. `backup agent` and `backup run-due` are headless/internal execution paths for containers and the native scheduler.
+`backup create --timeout` and copy `--timeout` are measured in minutes; restore `--timeout` accepts a Go duration such as `45m` and `0` disables that optional timeout. A copy `LOCATION` is an absolute local path, `sftp://user@host/absolute/path` (`ssh://` is its SFTP alias), or—for a pull source only—`rclone://remote/path`. Use either `--every` or repeated `--at`, never both. Destination-volume flags apply only to local destinations; every volume mode requires `--volume-mount-point` and `--volume-id`, while managed Linux mode also requires `--volume-uuid` and `--volume-filesystem`.
+
+Clean restore requires `--confirm-clean` with the exact target database name or normalized absolute SQLite path. Repeat `--restore-files LABEL=ABSOLUTE_FOLDER` only for bundle trees you intend to publish; without it, restore changes only the database. `--run-as` applies only to system service installation, which also requires explicit config, state, and log directories. `service status --all` is the only action that accepts `--all`. `backup agent` and `backup run-due` are headless/internal execution paths for containers and the native scheduler.
 
 Run `dbterm backup --help` for the exact flags accepted by the installed version.
 
@@ -999,7 +1105,7 @@ dbterm backup status
 dbterm backup logs --lines 200
 ```
 
-Confirm registration, startup policy, manager runtime, heartbeat, job enabled state, next run, destination capacity, and that the native clients required by that job are in the agent account's `PATH`. SQLite snapshot jobs need no `sqlite3`; local destinations need no `rclone`.
+Confirm registration, startup policy, manager runtime, heartbeat, job/copy enabled state, next run, destination capacity, and that the native clients or `rclone` required by that policy are in the agent account's `PATH`. SQLite snapshot jobs need no `sqlite3`. For a copy failure, use `dbterm backup copy status <copy>` and rerun its read-only endpoint test.
 
 ### Server agent installation fails
 
@@ -1007,7 +1113,11 @@ Run `dbterm backup paths` as the intended user, create and verify the exact dire
 
 ### An encrypted backup is locked
 
-Select the matching age identity during inspection or pass `--identity`. Jobs store the public recipient, not the private key. Without that identity the encrypted contents cannot be restored.
+Select the matching age identity during inspection or pass `--identity`. Jobs store the public recipient, not the private key. Verify a suspected pair with `dbterm backup keycheck --identity <identity.txt> --recipient <age1...>`. Without the matching identity the encrypted contents cannot be restored.
+
+### A managed copy volume is refused
+
+Do not bypass the check or write into the bare mount-point directory. Confirm the exact sentinel value, filesystem UUID/type, label when configured, and the narrow privileges assigned to the agent account. Mount and power-off behavior differs by Linux host and disk hardware; test `dbterm backup copy test <copy>` and one manual run before enabling the schedule.
 
 ### Restore reports the wrong or ambiguous engine
 
@@ -1035,7 +1145,7 @@ Report vulnerabilities privately through the repository's [security advisory flo
 
 ## Current release and change history
 
-This manual targets dbterm **v0.10.1 “Parvati”**. It adds a mouse-resizable Tables sidebar and object-only sidebar type-ahead with direct Up/Down match navigation, while keeping collapsed-column discovery in the command palette.
+This manual targets dbterm **v0.11.0 “Ganga”**. It adds portable backup manifests, guarded database-and-file bundles, verified local and pinned-SFTP push/pull copies, rclone-to-local pull, multiple daily schedule times, managed vault volumes, copy alerts, and guarded inspection or restore from copied recovery points.
 
 Run `dbterm --version` for the installed build and open Dashboard `U` for its release notes and checksum-verified updater. The repository's [release manifest](https://github.com/shreyam1008/dbterm/blob/main/cmd/dbterm/releases.txt) is the version source used by builds, while [GitHub Releases](https://github.com/shreyam1008/dbterm/releases) provides immutable artifacts, checksums, and historical notes. When an installed version differs from this page, prefer that binary's `--help`, `backup --help`, and offline Guide for exact accepted flags.
 
@@ -1070,137 +1180,207 @@ For architecture and module ownership, read [the project reference](https://gith
 
 # dbterm Backup Center
 
-This document is the operating and maintenance guide for dbterm backups. It
-covers one-off backups, durable schedules, native background services,
-retention, notifications, inspection, and restore.
+This is the operator and maintenance guide for dbterm backup generation,
+independent copies, encryption, scheduling, retention, inspection, and restore.
 
-## What the Backup Center protects
+dbterm uses one binary and one lightweight backup agent per local catalog. A
+producer creates a database recovery artifact. A copy job then moves an already
+completed artifact to another local directory, an SFTP vault, or from an rclone
+source into a local vault. Backup and copy runs have separate history and health.
 
-| Database | Backup format | Restore support |
+## Protection boundary
+
+dbterm currently creates a **full database backup on every backup run**. It does
+not claim incremental database backup, point-in-time recovery, WAL/binlog
+archiving, block deduplication, or replication.
+
+Copy jobs are incremental only at artifact granularity: each run scans portable
+completion manifests, skips exact artifact IDs already present with the same
+size and SHA-256, and transfers every missing artifact oldest-first. This saves
+network work without changing the full-backup recovery model.
+
+Application folders can be included in the same recovery point. They are copied
+into a self-contained dbterm bundle; they are not maintained as an incremental
+file mirror.
+
+The practical protection states are:
+
+| State | Meaning |
+| --- | --- |
+| Backup failed | No new verified recovery point was published |
+| Local backup complete | The producer has one verified artifact and completion manifest |
+| Copy failed | The local backup may still be valid, but the independent copy is unhealthy |
+| Copy complete | The destination has a separately verified artifact and manifest |
+| Agent healthy | Automation is running; this alone does not prove that any recovery point exists |
+| Restore tested | A backup was actually restored and checked; basic artifact verification is not the same fact |
+
+## Supported database backups
+
+| Database | Generation format | Restore boundary |
 | --- | --- | --- |
-| PostgreSQL | Native custom archive from `pg_dump` | Previewed restore through official PostgreSQL clients |
-| MySQL / MariaDB | Single-database SQL from `mysqldump` | Previewed SQL restore through official MySQL clients |
-| SQLite | Consistent database snapshot | Guarded, staged snapshot or SQL restore |
-| Turso / LibSQL | Single-transaction logical SQL export | Inspectable; virtual/FTS schemas fail closed; automatic restore is not enabled yet |
-| Cloudflare D1 | Cloudflare native SQL export API | Inspectable; automatic restore is not enabled yet |
+| PostgreSQL | One-database `pg_dump` custom archive | Guarded restore through PostgreSQL client tools |
+| MySQL / MariaDB | One-database SQL from `mysqldump` | Guarded SQL restore through MySQL client tools |
+| SQLite | Consistent database snapshot | Guarded staged snapshot or SQL restore |
+| Turso / LibSQL | Single-transaction SQLite-compatible SQL | Inspectable and restorable into an isolated SQLite target; dbterm does not orchestrate a write back to the hosted service |
+| Cloudflare D1 | Cloudflare native SQL export API | Inspectable and restorable into an isolated SQLite target; dbterm does not orchestrate a write back to D1 |
 
-The source can be local or remote. For example, a saved PostgreSQL connection
-to an AWS-hosted database can write backups to a local disk, an OS-mounted
-volume, or any configured rclone remote. The four source/destination pairings
-are supported: local-to-local, local-to-remote, remote-to-local, and
-remote-to-remote.
+The saved database connection may point to another machine or cloud service.
+The machine running dbterm owns generation and initially publishes to an
+absolute local path or an OS-mounted path visible to that agent identity.
+Direct rclone backup generation is disabled; use a copy job after local
+publication.
 
-Turso schema and data reads stay on one source transaction. dbterm rejects
-virtual/FTS tables before publication because separately exporting their shadow
-tables can create an unrestorable artifact. D1 backups use Cloudflare's own
-export API instead of reconstructing rows through the SQL driver, then stream
-the short-lived signed HTTPS download into private staging. Cloudflare may make
-the D1 database temporarily unavailable while its native export runs.
+### Engine consistency details
 
-## The normal workflow
+- PostgreSQL uses `pg_dump` custom format with UTF-8, no ownership, and no
+  privileges. Passwords use a private temporary password file rather than a
+  command-line argument.
+- MySQL uses `--single-transaction --quick --routines --events --triggers` and a
+  private temporary defaults file. `--single-transaction` gives a consistent
+  InnoDB snapshot while normal writes continue, but schema-changing statements
+  such as `ALTER`, `DROP`, or `TRUNCATE` should not run during the dump.
+- SQLite uses `VACUUM INTO` for a consistent snapshot.
+- Turso/LibSQL reads schema and rows in one transaction. Virtual/FTS tables are
+  refused because exporting their shadow tables independently can produce an
+  unrestorable artifact.
+- D1 uses Cloudflare's export API and streams the returned download into private
+  staging. Cloudflare may temporarily make the database unavailable while its
+  native export runs.
+
+## Normal setup
 
 1. Save and test the database connection in the dbterm Dashboard.
-2. Open Backup Center with `Alt+K`, press `N`, then choose an existing saved
-   database or add one. Alternatively, press `Ctrl+B` on the selected Dashboard
-   connection to start with it preselected.
-3. Choose a destination, schedule, and whether the policy is enabled.
-4. Keep the storage, security, and notification defaults unless the backup has
-   a specific operational requirement.
-5. Save the job and install either the desktop or server backup agent.
-6. Run the job once manually. Confirm its path, checksum, duration, and history
-   entry before relying on the schedule.
-7. Periodically test inspection and restore with a non-production target.
+2. Open Backup Center with `Alt+K`, or press `Ctrl+B` on the selected Dashboard
+   connection.
+3. Create a backup plan with an absolute local or mounted destination.
+4. Add any application folders from the plan's **Included folders** action.
+5. Choose one or more daily times, an interval, or a weekly schedule.
+6. Generate and separately store an age recovery identity if the backups should
+   be encrypted.
+7. Run the backup once manually and inspect its artifact, adjacent
+   `.dbterm.json` manifest, checksum, and history.
+8. Open **Copies** and add a local, SFTP, or rclone-pull copy if one machine is
+   not sufficient protection.
+9. Keep timed and after-success copies disabled. Use the read-only endpoint test
+   for diagnostics, then run one real copy manually; enable automation only
+   after that run transfers and verifies a real artifact successfully.
+10. Install the user or system backup agent and periodically perform a restore
+    drill into an isolated target.
 
-Instant backup remains available with `Alt+B` from any active workspace panel.
-It uses the same engine-aware native dump and verification pipeline but does not
-create a durable schedule. Press `F2` to choose a folder, type an absolute path,
-or enter `rclone://remote/path`; `F3` refreshes local destination and
-private-staging capacity.
+Instant backup remains available with `Alt+B` from an active workspace. The CLI
+equivalent is:
 
-### Backup Center controls
+```bash
+dbterm backup create --connection production --destination /srv/dbterm-backups
+```
+
+Instant backups use the same native dump, basic structural verification,
+bounded streaming wrappers, final-byte SHA-256, immutable publication, and
+portable sidecar pipeline. They do not create a durable schedule or run-history
+row, and the instant CLI does not accept application file sets.
+
+## Backup Center controls
+
+Main Backup Center:
 
 | Key | Action |
 | --- | --- |
-| `Ctrl+B` on Dashboard | Start a new job with the highlighted saved connection selected |
-| `B` on Dashboard / `Alt+K` | Open Backup Center |
-| `Alt+B` in a workspace | Create an instant backup of the active database |
-| `N` | Choose a saved database or add a connection for a new job |
-| `Enter` | Edit the highlighted job |
-| `Ctrl+N` in the plan form | Add and select another saved database |
-| `Space` | Enable or disable a timed schedule; manual plans stay on demand |
-| `R` | Run the highlighted job now with live progress |
-| `P` | Review and apply retention now |
-| `H` | Open run, artifact, and notification history |
-| `I` | Inspect a backup and enter the guarded restore flow |
-| `A` | Inspect and manage desktop/server agent scopes and logs |
-| `G` | Generate an age X25519 identity |
-| `D` | Delete the job definition; completed artifacts remain |
-| `F2` / `F3` in instant and plan forms | Choose a folder / refresh destination and staging capacity |
+| `N` | Create a backup plan |
+| `C` | Open independent copy jobs |
+| `Enter` | Open actions for the selected plan |
+| `R` | Run the selected backup now |
+| `I` | Inspect a local backup and enter guarded restore |
+| `H` | Open backup activity/history |
+| `A` | Inspect or manage the native agent/service |
+| `Space` | Pause or resume a timed backup plan |
 
-## Job form and defaults
+Selected-plan actions include editing the plan, running it, viewing activity,
+managing copies, managing included folders, applying retention, and deleting
+only the plan definition. Deleting a plan does not delete completed artifacts.
 
-The form is ordered by operational importance and uses progressive disclosure.
+Copies view:
 
-### Essential
+| Key | Action |
+| --- | --- |
+| `N` | Add a supported copy topology |
+| `Enter` / `E` | Edit a topology supported by the wizard |
+| `T` | Run a non-destructive endpoint test |
+| `R` | Run the copy and measure real end-to-end throughput |
+| `I` | Choose a recorded recovery point, then stage, verify, inspect, or restore it |
+| `H` | View copy runs and artifact results |
+| `P` | Preview, then optionally apply, copy retention |
+| `Space` | Pause or resume a timed copy |
+| `D` | Delete the copy-job definition; copied files remain |
 
-- **Saved connection:** stable connection identity; renaming or reordering the
-  Dashboard cannot silently redirect a job.
-- **Job name:** used in history, logs, notifications, and optional filenames.
-- **Destination:** an absolute local/mounted path, or a configured rclone path
-  such as `rclone://offsite/dbterm`. Local paths can be typed or chosen with the
-  native folder dialog when a desktop session is available.
-- **Schedule and enabled state:** manual, interval, daily, or weekly.
+Included folders view uses `N` to add, `Enter`/`E` to edit, and `D` to remove a
+folder from future backup policy. Existing bundles are never rewritten.
 
-The default policy uses Zstandard compression, a daily 02:00 local schedule,
-missed-run catch-up, a 30-minute timeout, and conservative retention. Required
-fields are at the top; naming, compression, encryption, retention, and email
-are advanced sections.
+The current TUI copy wizard handles local-to-local, local-to-SFTP push,
+backup-plan-to-SFTP after-success push, SFTP-to-local pull, and
+rclone-to-local pull. For a local destination it exposes normal-folder,
+already-mounted, OS-managed, and managed Linux block-device volume modes. The
+volume fields include mount point, sentinel filename and identity, plus the
+managed-Linux UUID, filesystem type, optional label and mount options,
+warmup/cooldown, and spindown controls. The same wizard progressively exposes
+copy-specific SMTP policy, TLS, sender, recipients, and credentials only when
+email delivery is enabled, and can send a test message without running a copy.
 
-### Timing
+## Backup plan defaults and schedules
 
-- **Manual:** runs only when requested from Backup Center or the CLI.
-- **Interval:** every N minutes.
-- **Daily:** once at an `HH:MM` time.
-- **Weekly:** at `HH:MM` on selected weekdays.
-- **Timezone:** `Local` or an IANA timezone such as `Asia/Kolkata`.
-- **Catch up missed run:** after sleep, reboot, or downtime, run one overdue
-  occurrence. It never replays every missed interval.
+The normal default is Zstandard compression, a daily 02:00 local-time schedule,
+missed-run catch-up, a 30-minute timeout, and retention of the latest 14
+successful artifacts.
 
-With catch-up disabled, an occurrence more than two minutes late is skipped and
-the schedule advances to its next future time.
+Schedules support:
 
-### Destination and capacity
+- manual execution;
+- an interval from 5 minutes through 365 days;
+- daily execution at one or more wall-clock times;
+- weekly execution on selected weekdays at one or more wall-clock times; and
+- `Local` or an IANA timezone such as `Asia/Kolkata`.
 
-Backup Center shows local volume capacity when the OS exposes it. Remote quota
-is provider-specific; use `rclone about remote:` when that backend supports
-quota reporting. The progress view reports the destination and bytes written.
-dbterm still needs private temporary space for the native dump and, for a
-remote destination, the completed wrapped artifact before upload.
+For example, one plan can run at both `01:00` and `13:00`; duplicate times are
+normalized instead of creating duplicate jobs. The bundled timezone database is
+used for deterministic service operation. A nonexistent local time in a DST
+spring-forward gap is skipped, and an ambiguous fall-back time runs once.
 
-Configure a remote once under the same OS account that runs the backup agent:
+After sleep, reboot, or downtime, catch-up runs at most one overdue occurrence.
+It does not replay every missed tick. With catch-up disabled, an occurrence more
+than two minutes late is skipped and the next future occurrence is persisted.
+Manual and scheduled runs use the same job lease and cannot overlap.
 
-```bash
-rclone config
-rclone lsd offsite:
-dbterm backup create --connection production \
-  --destination rclone://offsite/dbterm --name offsite
-```
+The durable backup-plan schedule is configured in the TUI. Copy schedules can
+also be created from the CLI with repeatable `--at` values.
 
-The text before the first slash is the rclone remote name; the remainder is its
-folder/object prefix. dbterm does not store remote credentials. It invokes
-rclone non-interactively, creates the prefix when needed, uploads with immutable
-semantics, verifies the reported remote size, and records the canonical
-`rclone://...` artifact path. Make the rclone config available to a desktop or
-server agent exactly as it is to an interactive `rclone` command.
+## Backup artifact pipeline
 
-The folder chooser is a convenience, not a requirement. On a headless server,
-over SSH, or when no supported desktop chooser is installed, type or paste the
-absolute path or rclone URI. dbterm creates local folders when the job is saved;
-the first run validates rclone and prepares its remote prefix.
+A normal run performs these boundaries:
+
+1. Resolve the saved connection by stable ID and validate the plan.
+2. Verify the destination and private staging context.
+3. Generate the full engine-native database payload without exposing its
+   password on the command line.
+4. Run engine-specific basic structural verification and reject empty or
+   suspicious payloads.
+5. If file sets exist, capture them into private staging and build a dbterm
+   bundle around the verified database payload.
+6. Stream compression and optional age encryption through bounded buffers.
+7. Compute SHA-256 over the final bytes that will be copied or restored.
+8. Sync and publish the artifact without replacing an existing final name.
+9. Publish the strict sidecar manifest last as the completion signal.
+10. Durably finish the backup run.
+11. Run enabled `after_success` copy jobs with independent copy runs.
+12. Apply producer-local retention.
+13. Attempt notification after durable state exists.
+
+Cancellation before immutable publication removes private staging. If
+cancellation or an I/O error races with publication, history records whether
+the result is complete, artifact-only, or uncertain and preserves possible
+recovery bytes for review.
 
 ### File names
 
-The default filename is unique per run. Templates support:
+The default filename contains a unique run suffix. Templates support:
 
 - `{job}`
 - `{connection}`
@@ -1211,157 +1391,568 @@ The default filename is unique per run. Templates support:
 - `{timestamp}`
 - `{run}`
 
-Path separators and unknown tokens are rejected. Existing files are never
-silently replaced.
+Path separators and unknown tokens are rejected. A completed final name is
+never silently replaced.
 
-### Compression
+## Application file sets and dbterm bundles
 
-- **Zstandard:** default; single worker and lower-memory mode.
-- **gzip:** interoperable stream compression.
-- **ZIP:** a single named backup entry.
-- **None:** useful when an external system handles compression.
+A database-only job keeps its engine-native payload and existing restore
+compatibility. Adding one or more file sets changes future output to a
+self-contained deterministic tar-based `dbterm_bundle` before the configured
+compression and encryption wrappers are applied.
 
-Compression and encryption stream through bounded buffers. The entire dump is
-not loaded into memory.
-
-### Encryption
-
-Jobs can encrypt artifacts with an age X25519 public recipient. Generate an
-identity with:
+Manage file sets from Backup Center's **Included folders** view or the CLI:
 
 ```bash
-dbterm backup keygen
+dbterm backup files list production
+
+dbterm backup files add \
+  --label profile-photos \
+  --root /srv/registration/profile_pics \
+  --include "**" \
+  --exclude "*.tmp" \
+  --exclude "thumbs.db" \
+  production
+
+dbterm backup files remove --yes production profile-photos
 ```
 
-Only the public `age1...` recipient belongs in a job. Keep the private identity
-separately from the backup destination and include it in the disaster-recovery
-plan. Losing it makes encrypted artifacts unrecoverable.
+`--include` and `--exclude` are repeatable slash-separated globs. `**` is
+supported only as a complete path segment. Exclusions win after inclusion. A
+file set is required by default; `--optional` changes failure into omission of
+the whole set with a visible portable warning. `--replace` updates an existing
+same-label policy. Changes apply only to future runs.
 
-### Retention
+Safety rules are deliberately strict:
 
-Retention can combine three ceilings:
+- the root is normalized to an exact absolute path and stays only in the local
+  producer catalog;
+- roots, directories, and files that are symlinks or Windows reparse points are
+  refused;
+- path traversal, non-portable paths, and non-regular files are refused;
+- only relative paths are written to the bundle;
+- each selected file is copied and hashed in private staging, then rechecked;
+- the complete selected membership and metadata are scanned again after
+  capture; and
+- a changing required set fails the backup, while a changing optional set is
+  atomically omitted with a warning.
 
-- keep the latest N successful artifacts;
-- remove artifacts older than N days; and
-- cap the total recorded artifact size, pruning oldest successful artifacts
-  first.
+This detects common live-folder changes but is not an application transaction,
+VSS snapshot, or filesystem snapshot. The database and application folders are
+not one cross-resource point-in-time transaction. Quiesce the application
+outside dbterm when that stronger consistency is required.
+Successful live-folder summaries therefore use the portable consistency value
+`best-effort`; dbterm never describes this capture as a stable snapshot.
 
-The newest successful artifact is always retained. Cleanup only considers
-successful artifacts recorded for that exact job and still contained by that
-job's destination. Before deletion, dbterm verifies size and the recorded
-SHA-256 when available. Remote checksum verification streams the object back
-through `rclone cat`, which can incur provider download/egress usage. A changed
-file, symlink, remote name, or path outside the destination is refused rather
-than deleted.
+Current bundle limits include 64 file sets per job, 256 combined include and
+exclude patterns per set, 100,000 files across all sets, 64-byte portable
+labels, 4096-byte portable paths/patterns, and a 32 MiB internal bundle
+manifest. Arbitrary pre/post shell hooks are not supported.
 
-Deleting a job, stopping the service, updating dbterm, or uninstalling dbterm
-does not delete chosen backup artifacts.
+The internal bundle manifest records the embedded database format plus each
+file's relative path, size, and SHA-256. It never records the original absolute
+application roots.
 
-Changing a retention policy affects later successful runs. To enforce it now,
-review the ceilings and use Backup Center's prune action or explicit CLI
-consent:
+## Compression and encryption
+
+Compression options are:
+
+- **Zstandard**: default, single worker, lower-memory encoder;
+- **gzip**: interoperable stream compression;
+- **ZIP**: one named backup entry; and
+- **none**: useful when another controlled layer handles compression.
+
+The encryption choice is deliberately **Off** or **age X25519**. There is no
+cipher, KDF, password-encryption, or custom cryptography menu. dbterm compresses
+first and then encrypts in the age v1 format, and the artifact SHA-256 covers
+the final ciphertext.
+
+Generate a no-clobber recovery identity and record its public recipient:
 
 ```bash
-dbterm backup prune --yes <job-id-or-name>
+dbterm backup keygen --output /secure/recovery/dbterm-age-identity.txt
 ```
 
-## Progress and history
+Put only the printed `age1...` public recipient in the backup plan. The
+producer does not need the private identity to create encrypted backups. Store
+at least one private-identity copy separately from the encrypted artifact
+storage; losing every identity makes those backups unrecoverable.
 
-The live view uses determinate progress where a byte total is known and an
-indeterminate activity bar otherwise. It shows:
-
-- current phase: preflight, native dump, verification, wrapping, publication,
-  retention, or notification;
-- bytes produced and total bytes when known;
-- elapsed time, current transfer rate, and estimated remaining time when those
-  values are meaningful; and
-- the last diagnostic message.
-
-Native PostgreSQL/MySQL clients do not expose a reliable row-level percentage.
-For those engines, dbterm reports live dump-file growth and elapsed time rather
-than inventing a percentage. Wrapping can use the completed raw dump size for
-an exact byte percentage.
-
-Every durable run records status, timestamps, trigger, error, artifact path,
-size, format, checksum, and verification state. Interrupted runs are reconciled
-as failed after their lease expires so they do not stay “running” forever.
-
-## Email notifications
-
-Each job can notify:
-
-- never;
-- on failure only;
-- on success only; or
-- on both success and failure.
-
-Gmail defaults are `smtp.gmail.com`, port `587`, with STARTTLS. Port `465` uses
-implicit TLS. Custom SMTP servers, ports, senders, recipients, and TLS mode are
-supported. Gmail normally requires 2-Step Verification and a dedicated app
-password; use the full Gmail address as the username.
-
-Notification delivery happens only after the run result is durably recorded.
-An email failure is logged and shown in diagnostics but never changes a valid
-backup into a failed backup. Passwords are redacted from errors and logs.
-
-The SMTP app password is stored locally in the private backup catalog so the
-headless agent can authenticate. It is not protected by the backup artifact's
-age recipient and is not an OS-keyring secret. Protect the OS account and
-dbterm state directory, use a dedicated/revocable app password, and rotate it
-if the machine or account is compromised. Plain SMTP should only be used for a
-trusted local relay; encrypted transport is the default.
-
-Send a test without running a backup or changing the saved job:
+Prove that a stored identity matches the configured recipient without creating
+or changing a backup:
 
 ```bash
-dbterm backup notify-test <job-id-or-name>
+dbterm backup keycheck \
+  --identity /secure/recovery/dbterm-age-identity.txt \
+  --recipient age1...
 ```
 
-## Background-agent modes
+`keycheck` encrypts and decrypts only a disposable in-memory challenge. It is a
+key-recovery check, not an artifact restore drill.
 
-The agent is serialized and low-overhead. A global process lock prevents two
-schedulers from executing the same catalog concurrently, while per-job leases
-prevent manual and scheduled overlap.
+On POSIX, identities must be regular, non-symlink files with mode `0600` or
+stricter. On Windows, generated identities use a protected DACL. Identity
+contents and the public recipient are not written to portable manifests.
 
-### Desktop/user mode
+Inspect or restore an encrypted artifact by supplying the private identity:
 
-This is the default and requires no administrator access.
+```bash
+dbterm backup inspect --identity /secure/recovery/dbterm-age-identity.txt backup.sql.zst.age
+```
+
+## Portable completion manifests
+
+Every successful dbterm backup publishes a strict sidecar beside the artifact:
+
+```text
+orders_mysql_20260903_010000_run-abc.sql.zst
+orders_mysql_20260903_010000_run-abc.sql.zst.dbterm.json
+```
+
+The schema-v1 JSON records:
+
+- artifact, run, job, and stable producer IDs;
+- creation time and dbterm version;
+- database engine and payload format;
+- compression and encryption scheme;
+- final byte count and SHA-256;
+- `passed` / `basic-structural` verification state;
+- portable file-set summaries; and
+- warnings such as an omitted optional set.
+
+It excludes database host/user/name, passwords, connection strings, SMTP
+secrets, SSH keys, age recipients, age identities, and original file-set roots.
+The decoder rejects unknown or duplicate fields, missing required arrays,
+trailing JSON, unsupported schema versions, malformed checksums, symlinks, and
+manifests larger than 1 MiB.
+
+The artifact is synced and published first. The manifest is synced and
+published last. Copy scanners consider the sidecar—not filename age or an
+existing same-named file—the completion signal.
+
+Publication history distinguishes:
+
+| State | Meaning |
+| --- | --- |
+| `complete` | Artifact and manifest reached immutable final names and publication checks completed |
+| `artifact-only` | Artifact is final but the completion manifest is absent; scanners ignore it |
+| `uncertain` | Publication may have crossed an irreversible boundary, but final presence or durability could not be proved |
+
+The sidecar is not digitally signed. A pinned SSH connection protects the
+transport endpoint and SHA-256 protects exact bytes, but neither authenticates
+a manifest that a compromised producer intentionally forged. For an encrypted
+artifact without the private identity, copy verification can prove the
+ciphertext size/SHA-256 and age envelope, not the claimed inner database. A
+real restore drill remains the strongest recovery test.
+
+Legacy artifacts without a sidecar can still be inspected locally. Copy jobs
+ignore them; legacy `.sha256` files are not automatically converted into
+dbterm manifests.
+
+## Copy jobs
+
+A copy job owns transfer only. It never reconnects to the database or recreates
+the dump.
+
+| Source | Destination | Mode / owner | Current support |
+| --- | --- | --- | --- |
+| Local directory or local backup plan | Local directory | push or pull semantics | Yes |
+| Local directory or local backup plan | SFTP directory | producer-owned push | Yes |
+| SFTP directory | Local directory | vault-owned pull | Yes |
+| rclone prefix | Local directory | vault-owned pull | Yes |
+| Local directory | rclone prefix | producer-owned push | No |
+| SFTP | SFTP | either | No |
+| SCP shell command | any | either | No; `ssh://` is only an alias for the SFTP subsystem |
+
+Backup generation itself also cannot publish directly to rclone. Generic
+rclone finalization can overwrite a destination object after a preflight race,
+so dbterm refuses to claim portable create-only publication where the backend
+cannot prove it.
+
+### Copy CLI
+
+List and inspect definitions and history:
+
+```bash
+dbterm backup copy list
+dbterm backup copy status
+dbterm backup copy status vrindavan-to-ct400
+```
+
+Create an after-success local copy bound to a backup plan:
+
+```bash
+dbterm backup copy create \
+  --name "Producer local vault" \
+  --mode push \
+  --source-job production \
+  --destination /srv/dbterm-vault \
+  --trigger after-success \
+  --keep-last 14
+```
+
+Create a producer-owned SFTP push:
+
+```bash
+dbterm backup copy create \
+  --name "Production to vault" \
+  --mode push \
+  --source-job production \
+  --destination sftp://dbterm_copy@vault.example/srv/dbterm-vault \
+  --identity /etc/dbterm/ssh/vault_ed25519 \
+  --host-key SHA256:PINNED_FINGERPRINT \
+  --trigger after-success
+```
+
+Create a vault-owned SFTP pull at two daily times:
+
+```bash
+dbterm backup copy create \
+  --name "Producer to CT400" \
+  --mode pull \
+  --source sftp://dbterm_read@producer.example/srv/dbterm-published \
+  --destination /mnt/backup_hdd/registration_backups \
+  --identity /etc/dbterm/ssh/producer_ed25519 \
+  --host-key SHA256:PINNED_FINGERPRINT \
+  --trigger timed \
+  --at 02:30 --at 14:30 \
+  --timezone Asia/Kolkata
+```
+
+Create a pull from an existing rclone remote:
+
+```bash
+dbterm backup copy create \
+  --name "Object storage to local vault" \
+  --mode pull \
+  --source rclone://offsite/dbterm/production \
+  --destination /srv/dbterm-vault \
+  --trigger timed --every 12h
+```
+
+Jobs are disabled by default. Every timed or after-success copy must remain
+disabled until a successful manual `copy run` transfers and verifies at least
+one real artifact. `copy test` is a read-only diagnostic; it does not prove the
+transfer or publication path and is not sufficient reason to enable automation.
+Do not use `--enable` at creation for an unproved route. Use this sequence:
+
+```bash
+dbterm backup copy test vrindavan-to-ct400
+dbterm backup copy run vrindavan-to-ct400
+dbterm backup copy enable vrindavan-to-ct400
+```
+
+Use `disable`, `prune`, and `delete --yes` for the corresponding lifecycle
+operations. Deleting a copy job never deletes source or destination files.
+
+Copy creation also supports repeatable `--format` manifest filters,
+`--expected-freshness`, count/age/byte retention ceilings, timeouts, and bounded
+retry settings. The TUI exposes producer-ID and source-job-ID filters. An
+enabled reverse or duplicate route with overlapping filters is rejected so the
+same artifact stream cannot have both push and pull owners.
+
+### Copy execution and verification
+
+A copy run:
+
+1. scans direct children for strict `.dbterm.json` completion manifests;
+2. validates optional producer, source-job, and format filters;
+3. sorts every missing artifact oldest-first;
+4. matches existing recovery points by artifact ID plus size and SHA-256, never
+   by filename alone;
+5. reserves artifact size plus a 64 MiB safety margin for local destinations;
+6. streams through bounded buffers and hashes the bytes;
+7. runs the requested lightweight format check;
+8. syncs local staging where applicable;
+9. publishes artifact first and manifest last without replacing final names;
+10. durably records each destination copy; and
+11. applies only that copy job's retention policy.
+
+The public CLI creates jobs with `sha256+format`. The TUI can explicitly choose
+`sha256+format` or `sha256`; it does not offer size-only verification. Format
+verification means a lightweight outer-envelope or native-header check. An
+uncompressed dbterm bundle receives a full internal size/SHA-256 layout check;
+a compressed or encrypted artifact needs full inspection/decryption for deeper
+payload verification.
+
+Local and pull transfers use private destination-local partial files. SFTP push
+uses exclusive final artifact creation, but publishes no completion manifest
+until upload and remote reread verification succeed, so an interrupted orphan
+is not recovery-ready. A later run can reconcile an exact artifact-only orphan.
+Completed names are never overwritten.
+
+Transient network failures use bounded exponential backoff with jitter. The
+defaults are three attempts, a two-second initial delay, and a one-minute cap.
+There is no byte-range or chunk-resume protocol in the current implementation;
+a retry repeats or safely reconciles its own artifact.
+
+When no new artifacts are missing, the scan is a successful no-op. If
+`--expected-freshness` is configured, the run records a warning when no producer
+artifact exists or the newest one is too old.
+
+### SSH/SFTP security
+
+SFTP endpoints use:
+
+```text
+sftp://service-user@host/absolute/path
+```
+
+An explicit port may be included. `ssh://` is accepted as a spelling alias but
+still starts the SFTP subsystem; dbterm never invokes a remote shell or SCP.
+
+Every SFTP endpoint requires:
+
+- an explicit service username;
+- an absolute path to a dedicated private identity file;
+- a canonical pinned host key in `SHA256:<base64>` form; and
+- a remote path below the SFTP root, with no parent traversal.
+
+Password authentication, passwords in URLs, trust-on-first-use, and
+`InsecureIgnoreHostKey` are refused. A changed host key blocks the connection
+before transfer. The private key must be a regular non-symlink file, no larger
+than 1 MiB, and mode `0600` or stricter on POSIX. Encrypted/passphrase-protected
+SSH identities are not supported by the unattended copy agent; use a dedicated
+unencrypted key protected by OS permissions and narrowly scoped remote access.
+
+For pull, give the vault identity read/list permission only where practical.
+For push, scope the producer identity to its destination directory and
+create/read/delete rights needed by publication and configured retention. The
+current client dials TCP directly; OpenSSH config and `ProxyCommand` integration
+are not implemented.
+
+### rclone pull
+
+rclone is supported only as a read-only copy source. dbterm lists one prefix
+level, reads strict sidecars, snapshots source size and modification time,
+streams the artifact with `rclone cat`, hashes it locally, and rechecks both
+artifact and sidecar source versions before publication.
+
+dbterm does not modify or retain the rclone source. Retention belongs to the
+local pull destination. rclone must already be installed and configured for the
+agent's OS identity.
+
+### Endpoint tests and speed
+
+`dbterm backup copy test` is intentionally non-destructive:
+
+- local tests validate real directories and report destination capacity;
+- SFTP tests verify the pinned host key, authenticate, start SFTP, list the
+  configured root, and report connect/list latency; and
+- rclone tests list the source and count objects and completed manifests.
+
+The test does not upload and remove a probe object. In particular, an SFTP push
+test does not prove remote create-only permission, and no endpoint test claims
+transfer throughput. The first real `copy run` proves the write path and reports
+actual copied bytes divided by total run duration as B/s, KiB/s, or MiB/s. Keep
+automatic copies disabled until such a manual run succeeds with a real artifact.
+
+## Destination volume safety
+
+An optional destination-volume policy can bind a local copy destination to a
+positive sentinel identity. Configure it with CLI flags or in the TUI copy form
+for a route with a local destination.
+
+All three modes require:
+
+- `--volume-mount-point`: an absolute, non-root mount point containing the
+  destination;
+- `--volume-id`: an exact non-secret 8-256 character token without whitespace;
+  and
+- a regular sentinel file at the mount root containing exactly that token.
+
+The default sentinel filename is `.dbterm-volume-id`; override it with
+`--volume-sentinel-file`. dbterm never creates the sentinel, initializes the
+volume, or creates an identity token automatically.
+
+### Already mounted and OS managed
+
+```bash
+dbterm backup copy create \
+  --name "Verified mounted vault" \
+  --mode pull \
+  --source /srv/dbterm-published \
+  --destination /mnt/backup_hdd/dbterm \
+  --volume-mode already-mounted \
+  --volume-mount-point /mnt/backup_hdd \
+  --volume-id ct400-registration-vault
+```
+
+`already-mounted` and `os-managed` are verify-only modes. dbterm never mounts,
+unmounts, syncs, or powers off the volume. Before transfer it verifies a real
+non-symlink mount-point directory, a real destination directory contained under
+it, and the exact small regular sentinel. It repeats the identity check after
+transfer. Use `os-managed` to communicate that systemd automount, Windows,
+SMB/NFS, or another OS facility owns lifecycle.
+
+### Managed Linux block device
+
+```bash
+dbterm backup copy create \
+  --name "Sleeping USB vault" \
+  --mode pull \
+  --source /srv/dbterm-published \
+  --destination /mnt/backup_hdd/dbterm \
+  --volume-mode managed-linux-block-device \
+  --volume-mount-point /mnt/backup_hdd \
+  --volume-id ct400-registration-vault \
+  --volume-uuid 1111-2222 \
+  --volume-filesystem ext4 \
+  --volume-label DBTERM_VAULT \
+  --volume-mount-option errors=remount-ro \
+  --volume-warmup 5s \
+  --volume-cooldown 5s \
+  --volume-spindown
+```
+
+Managed mode is Linux-only. It resolves the configured filesystem UUID with
+`blkid`, verifies UUID/type and optional label, checks existing mount state with
+`findmnt`, and mounts only the exact block device at the exact configured mount
+point. Safe options `rw,nodev,nosuid,noexec` are added automatically; options
+that re-enable `dev`, `suid`, or `exec`, or appear to contain credentials, are
+rejected.
+
+A durable destination-volume lease prevents two dbterm copy jobs from
+unmounting the same identified volume underneath one another. dbterm tracks
+whether this run performed the mount. It only runs `sync -f`, `umount`, and
+optional `udisksctl power-off` when it mounted the volume itself and still owns
+the lease. A pre-existing mount is verified but left mounted. An unmount or
+spindown failure becomes a warning and never invalidates a verified copy.
+
+The destination directory and sentinel must already exist on the intended
+filesystem. A missing or wrong mount, UUID, filesystem, label, destination
+directory, or sentinel fails closed before transfer so dbterm does not fill an
+ordinary directory on the system disk.
+
+Provision `blkid`, `findmnt`, `mount`, `sync`, `umount`, and, when requested,
+`udisksctl` plus narrowly scoped host privileges outside dbterm. The agent is
+not automatically elevated and dbterm never formats, partitions, initializes,
+repairs, or fscks a disk. Managed Windows disk lifecycle is not implemented.
+
+`backup copy test` remains a non-destructive endpoint test; the real
+`backup copy run` is what claims the volume lease and exercises managed mount,
+identity recheck, retention, and release.
+
+## Independent retention
+
+Backup generation and every copy job own separate retention policies. One side
+never broadly cleans the other side's history.
+
+Each policy can combine:
+
+- keep the latest N successful recovery points;
+- remove recovery points older than N days; and
+- cap recorded bytes, pruning the oldest successful recovery points first.
+
+The newest verified recovery point is always retained. Retention runs only
+after successful publication, or through explicit preview/apply. The CLI copy
+preview is the default:
+
+```bash
+dbterm backup copy prune vrindavan-to-ct400
+dbterm backup copy prune --yes vrindavan-to-ct400
+```
+
+Producer-local retention considers only successful artifacts recorded for that
+exact backup job and contained by its destination. It validates regular-file
+identity, size, SHA-256, manifest identity, and containment. The completion
+manifest is removed first so scanners stop seeing the pair as published. Files
+are captured to deterministic same-directory quarantine names and reverified
+before deletion; changed captures are preserved for investigation.
+
+Copy retention applies to local destinations and exact SFTP push destinations.
+It considers only complete, unpruned artifacts durably recorded for that copy
+job. SFTP retention re-reads and hashes the exact remote artifact and sidecar,
+renames each to a contained quarantine name, re-verifies, then removes it. It
+does not run a broad remote `find -delete`. An rclone pull never deletes its
+source; its local destination uses local retention.
+
+A missing, replaced, changed, symlinked, or out-of-scope file is refused rather
+than deleted. Retention failure is a warning separate from the validity of the
+new artifact or copy. Grandfather-father-son monthly/yearly retention is not
+implemented.
+
+## Notifications and health warnings
+
+Backup plans can notify never, on failure, on success, or on both. Gmail
+defaults to `smtp.gmail.com:587` with STARTTLS; port 465 uses implicit TLS.
+Plain SMTP is permitted only for a deliberately selected trusted local relay.
+
+Notification is attempted after terminal run state is durable. SMTP failure is
+recorded separately and never changes a valid backup into a failed backup.
+Passwords and connection secrets are redacted from diagnostic errors.
+
+The SMTP app password must remain available to the headless agent, so it is
+stored in the private local backup catalog as part of the job—not in an OS
+keyring and not protected by the backup artifact's age encryption. Protect the
+OS account and dbterm state directory, use a dedicated revocable app password,
+and rotate it if the host is compromised.
+
+Test a backup plan's mail settings without running a backup:
+
+```bash
+dbterm backup notify-test production
+```
+
+Copy runs have independent notification state in the durable model and SMTP
+delivery never rewrites copy validity. Expected-freshness and retention
+warnings are recorded in copy history. Configure a copy's policy and SMTP
+settings in Backup Center's copy add/edit wizard, then use **Send Test Email**
+before relying on unattended alerts. The app password is masked in the form,
+preserved when an existing copy is edited without changing it, stored only in
+the private local catalog, and redacted from diagnostics. The CLI intentionally
+has no SMTP password flag. Reusable SMTP profiles, recovery-after-failure mail,
+daily summaries, and an external no-heartbeat alert are deferred.
+
+## Agent, concurrency, and services
+
+One `dbterm backup agent` owns one local backup catalog and schedules both
+backup and copy jobs. Closing the TUI does not stop the native service.
+
+The protections are independent:
+
+1. A kernel-backed process lock permits one agent for the catalog and reports
+   the owning PID.
+2. Per-job leases prevent manual and scheduled runs of the same backup or copy
+   job from overlapping. Expired interrupted runs are reconciled as failed.
+3. A destination-volume lease protects a configured removable volume across
+   copy jobs.
+4. Database snapshot semantics such as MySQL `--single-transaction` protect
+   database consistency; they are not process locks.
+
+The agent executes I/O-heavy jobs serially. It checks the catalog every 30
+seconds by default, writes a bounded heartbeat, and opens database, SSH, SMTP,
+and rclone connections only while work requires them. The interval can be
+changed for a foreground supervisor with `dbterm backup agent --poll`, with a
+minimum of one second.
+
+### Desktop/user service
 
 | OS | Registration | Lifetime |
 | --- | --- | --- |
-| Linux | `systemd --user` | User manager; enable lingering for post-logout operation |
-| macOS | `launchd` LaunchAgent | Logged-in user session |
+| Linux | `systemd --user` | User manager; enable lingering for operation after logout |
+| macOS | LaunchAgent | Logged-in user session |
 | Windows | Task Scheduler logon task | Logged-in user session |
 
-On Linux, `loginctl enable-linger <user>` lets the user manager start at boot
-and remain after logout. That is often the cleanest server setup when permitted
-by the administrator.
+### Server/system service
 
-### Server/system mode
-
-Server mode is an explicit elevated install. It registers at system boot and
-uses the selected dbterm config, state, and log paths rather than silently
-switching to an administrator's profile.
-
-| OS | Registration | Elevation |
+| OS | Registration | Runtime identity |
 | --- | --- | --- |
-| Linux | system `systemd` unit, configured to run as the invoking user | root/sudo required |
-| macOS | `/Library/LaunchDaemons` LaunchDaemon with an explicit user | administrator required |
-| Windows | boot-triggered Task Scheduler registration | Administrator required |
+| Linux | system systemd unit | Explicit restricted user |
+| macOS | LaunchDaemon | Explicit user |
+| Windows | boot-triggered Task Scheduler task | LocalSystem |
 
-Permission failures explain the exact manager, definition path, and elevation
-needed. There is no automatic fallback from server mode to desktop mode.
-
-Install from Backup Center's **Agent** view, or use the CLI:
+Server installation is an explicit elevated action and uses the exact config,
+state, and log paths supplied by the operator. It does not silently switch to
+the administrator/root profile.
 
 ```bash
+dbterm backup paths
 dbterm backup service install
 dbterm backup service status --all
 ```
 
-For server scope, first run `dbterm backup paths`, create and permission the
-three directories for the intended runtime user, then execute the exact
-elevated command shown by Backup Center. On Linux, for example:
+Example Linux system scope:
 
 ```bash
 sudo dbterm backup service install --system --run-as backupuser \
@@ -1370,107 +1961,175 @@ sudo dbterm backup service install --system --run-as backupuser \
   --log-dir /home/backupuser/.local/state/dbterm/logs
 ```
 
-macOS server mode also requires `--run-as`. Windows server mode runs as
-LocalSystem, so it omits `--run-as` and its three paths must be local and
-accessible to SYSTEM. A mapped drive in an interactive Windows account is not
-a machine-service destination.
+Windows LocalSystem cannot use an interactive user's mapped drive. Use a local
+machine-visible volume, UNC path exposed to that runtime identity, or a copy
+transport configured for the service account. Build/install dbterm at a stable
+path before service registration; disposable `go run` executables are refused.
 
-The manager records the exact executable path. Build or install a stable binary
-first; disposable `go run` executables are rejected.
+Service status separates registration, startup enablement, manager-reported
+running state, heartbeat, and scheduler-lock ownership. When available it also
+shows PID, process name, uptime, resident memory, scope, and definition path.
 
-The foreground fallback is useful in containers or a supervisor you already
-operate:
+## Progress and history
 
-```bash
-dbterm backup agent
-```
+Backup progress reports preflight, dump, verification, file capture, wrapping,
+publication, copy, retention, and notification boundaries. PostgreSQL/MySQL
+clients do not expose a dependable row percentage, so dbterm reports staged
+byte growth and elapsed time rather than inventing one. Wrapping and transfer
+show determinate byte progress when a total is known.
 
-## Service health
+Backup history records artifact path, manifest path, final-byte size/SHA-256,
+format, verification and publication state, retention outcome, and notification
+outcome. Copy history separately records trigger, discovery count, already
+present count, bytes copied, required verification, per-artifact source and
+destination, publication state, pruning, warnings, and SMTP outcome.
 
-Backup Center separates four facts that are easy to confuse:
-
-- whether a native registration exists;
-- whether startup is enabled;
-- whether the manager reports it running; and
-- whether the dbterm heartbeat and global scheduler lock are healthy.
-
-When available, status also shows PID, process name, uptime, resident memory,
-last heartbeat, manager, scope, and registration detail. Process metrics are
-diagnostic only; failure to read them never stops a backup.
-
-## Logs and diagnostics
-
-Routine agent logs are written to:
-
-```text
-<dbterm log directory>/dbterm-backup-agent.log
-```
-
-The active log and one archive are each bounded to 5 MiB. Backup Center can
-show a tail with the exact path, and the CLI prints paths with:
+Useful commands:
 
 ```bash
-dbterm backup paths
-dbterm backup logs --lines 200
-dbterm backup logs --previous
-```
-
-Native managers may also create exceptional stdout/stderr files in the same
-directory. A good error includes the failed phase, database/client involved,
-destination, and corrective action without printing database or SMTP secrets.
-
-Useful checks:
-
-```bash
-dbterm backup status
-dbterm backup service status --all
 dbterm backup list
-dbterm backup paths
+dbterm backup status
+dbterm backup copy list
+dbterm backup copy status
+dbterm backup service status --all
 dbterm backup logs --lines 200
 ```
 
 ## Inspect and restore
 
-Inspection identifies gzip, Zstandard, single-entry ZIP, and age wrappers,
-then detects PostgreSQL custom/tar/plain SQL, MySQL SQL, SQLite databases, or
-SQLite SQL from bytes rather than trusting the extension. Misleading names
-produce warnings.
-
-Inspection and restore currently accept a local file. Download an rclone-backed
-artifact first, then inspect the downloaded copy:
-
-```bash
-rclone copyto offsite:dbterm/orders.dump.zst ./orders.dump.zst
-dbterm backup inspect ./orders.dump.zst
-```
+Inspection detects age, gzip, Zstandard, and single-entry ZIP wrappers, then
+identifies PostgreSQL custom/tar/plain SQL, MySQL SQL, SQLite database/SQL, or a
+dbterm bundle from bytes rather than the filename. An adjacent sidecar, when
+present, must match size, SHA-256, engine/format, encryption, and wrappers that
+can be observed from the bytes.
 
 ```bash
 dbterm backup inspect ./backup-file
 dbterm backup inspect --identity ./age-identity.txt ./backup-file.age
-```
-
-Inspection unwraps at most three layers. Each decoded layer defaults to a 1 GiB
-safety cap and uses private OS temporary files, not memory. Increase the cap
-only for a trusted larger artifact and ensure temporary storage has enough
-space:
-
-```bash
 dbterm backup inspect --max-decoded-gib 8 ./large-backup.zst
 ```
 
-Restore is preview-first. The detected engine must match the selected saved
-connection, explicit consent is required, and destructive clean mode requires
-the exact database name or normalized SQLite path.
+Inspection unwraps at most three compression/encryption layers. Each decoded
+layer defaults to a 1 GiB limit and uses private temporary files instead of
+loading the artifact into memory.
+
+### Inspecting or restoring a recorded copy
 
 ```bash
-dbterm backup restore --connection staging --yes ./backup-file
+dbterm backup copy inspect vrindavan-to-ct400
+dbterm backup copy inspect vrindavan-to-ct400 --artifact artifact_...
+dbterm backup copy inspect encrypted-copy --identity ./age-identity.txt
+```
+
+Without `--artifact`, the command deterministically selects the newest
+completed, unpruned copied recovery point. It re-reads the durable copy's
+sidecar, binds it to the catalog artifact ID/size/SHA-256, streams the exact
+artifact into a private local directory, verifies its lightweight format, runs
+the ordinary byte-based inspection, then removes only the exact staged files
+and directory. Unexpected staging changes are preserved rather than recursively
+deleted.
+
+For a push job the destination may be remote SFTP, so `copy inspect` downloads
+it temporarily. For pull jobs the normal destination is already local. The
+CLI command is inspection-only: the private stage is removed when it exits, and
+there is no direct `dbterm backup copy restore` CLI command.
+
+In the TUI Copies view, select a job and press `I`. dbterm lists every
+completed, unpruned destination artifact owned by that copy job, newest first,
+with its timestamp, size, verification strength, and short artifact ID. Choose
+the exact recovery point to stage and reverify before dbterm opens the ordinary
+inspection and guarded restore flow. This works for local copies, remote SFTP push
+copies, and the local destination copies produced by SFTP or rclone pulls.
+Choosing **Restore…** from the inspection result enters the existing guarded
+restore flow; private staging remains available for that flow and is cleaned up
+when it ends.
+
+### Guarded database and file restore
+
+Restore always inspects first, requires a compatible saved target, prints a
+plan, and requires `--yes`. Clean mode additionally requires the exact database
+name or normalized SQLite path:
+
+```bash
+dbterm backup restore \
+  --connection isolated-staging \
+  --yes \
+  ./backup-file
+
+dbterm backup restore \
+  --connection isolated-staging \
+  --mode clean \
+  --confirm-clean staging_database \
+  --yes \
+  ./backup-file
 ```
 
 PostgreSQL clean restore is opt-in. MySQL warns that non-transactional or
-already-applied statements may remain after a client failure. SQLite restores
-use a verified staging database and preserve a pre-restore copy.
+already-applied statements may remain if its client fails. SQLite database-file
+restore requires clean mode, uses a verified staging database, and preserves a
+pre-restore copy.
 
-## Native files and paths
+A dbterm bundle restores its database only by default. Select each desired file
+set explicitly and map it to a new isolated root:
+
+```bash
+dbterm backup restore \
+  --connection isolated-staging \
+  --restore-files profile-photos=/srv/restore/profile_pics \
+  --restore-files documents=/srv/restore/documents \
+  --yes \
+  ./registration.dbterm.zst.age
+```
+
+The TUI restore form uses semicolon-separated mappings in **File targets**, for
+example `profile-photos=/srv/restore/photos;documents=/srv/restore/docs`.
+
+File restore defaults to no-clobber. `--overwrite-files` permits atomic
+replacement of existing regular files only. Symlinks, reparse points,
+non-regular targets, path traversal, reserved Windows device names, filesystem
+roots, overlapping target roots, duplicate labels, and collisions with the
+backup or SQLite database path are refused. Defaults limit selected file sets
+to 100,000 files and 10 GiB; change them deliberately with
+`--max-file-set-files` and `--max-file-set-gib`.
+
+All selected file paths are preflighted before the database client starts. The
+database is restored first, then selected files are published one by one. File
+publication is atomic per file, but database plus multiple files are not one
+cross-resource transaction. If file publication fails after the database
+restore, the error explicitly reports that boundary.
+
+Restore-drill results are not yet stored as a separate durable history type.
+Record drill date, target, row-count checks, and representative file hashes in
+the deployment's operational log.
+
+## Failure behavior
+
+| Failure | Behavior |
+| --- | --- |
+| Second agent | Kernel lock refuses it and reports ownership |
+| Same job triggered twice | Job lease permits one run; the other trigger is refused/coalesced |
+| Dump or basic verification fails | No completion manifest; no successful recovery point |
+| Required file set is missing, unsafe, changing, or empty | Backup fails before publication |
+| Optional file set has the same problem | Whole set is omitted with a manifest/history warning |
+| Cancel before publication | Child work stops and private staging is removed |
+| Cancel/error at publication boundary | Complete or possible artifact is preserved as artifact-only/uncertain for review |
+| Missing sidecar | Copy scanner treats artifact as incomplete |
+| Network interruption | No destination completion manifest; retry/reconciliation is limited to this artifact |
+| Host-key mismatch | Connection is blocked before transfer |
+| Wrong/missing volume sentinel | Copy stops before writing |
+| Destination lacks local capacity | Copy fails before staging that artifact and keeps the newest recovery point |
+| Several source artifacts are missing | They are processed oldest-first |
+| Same name or conflicting artifact ID | Existing final object is never overwritten; mismatch fails |
+| SMTP fails | Backup/copy validity remains unchanged; mail error is separate |
+| Retention sees changed data | Deletion is refused and changed quarantine is preserved |
+| Clock differs across hosts | Identity and checksum decide equality; modtime alone does not |
+
+An artifact-only or uncertain publication is not automatically promoted to a
+successful backup. Review its exact path, size, SHA-256, and any adjacent
+sidecar, then inspect or quarantine it. Do not hand-author a sidecar or rewrite
+history to claim success.
+
+## Native paths, secrets, and logs
 
 Run `dbterm backup paths` for authoritative paths on the current machine.
 
@@ -1480,32 +2139,93 @@ Run `dbterm backup paths` for authoritative paths on the current machine.
 | macOS | `~/Library/Application Support/dbterm` | same application-support tree | `~/Library/Logs/dbterm` |
 | Windows | `%AppData%\dbterm` | `%LocalAppData%\dbterm` | state + `\logs` |
 
-Saved database credentials remain in private `connections.json`. Jobs,
-schedules, SMTP settings, leases, run history, checksums, and heartbeats live
-in `backup/backups.db`. Raw dumps and temporary database-client credential
-files are staged in the private state area and cleaned after use. Old crash
-partials are cleaned on a later run.
+Saved database credentials remain in private `connections.json`. Backup plans,
+copy jobs, SMTP settings, leases, history, checksums, producer identity, and
+heartbeats live in `backup/backups.db`. Protect both locations as secrets.
+
+Private POSIX files use mode `0600` and directories use `0700`. Windows private
+state uses a protected DACL for the runtime identity, SYSTEM, and built-in
+Administrators. dbterm applies private/no-clobber semantics to its catalog,
+credential files, raw dump staging, bundle staging, wrapper staging, copy
+staging, inspection/restore staging, publication stages, and generated age
+identities. It cannot retroactively secure an arbitrary operator-supplied
+directory.
+
+The destination namespace is a security boundary. Use a directory where
+untrusted users cannot rename, replace, or delete entries. Per-file private
+permissions do not make an untrusted writable parent safe.
+
+Agent logs are written to:
+
+```text
+<dbterm log directory>/dbterm-backup-agent.log
+```
+
+The active log and one archive are each bounded to 5 MiB.
+
+```bash
+dbterm backup logs --lines 200
+dbterm backup logs --previous
+```
+
+## Current limitations and deferred work
+
+- No incremental database chain, PITR/WAL/binlog orchestration, replication,
+  block-level deduplication, or bespoke chunk store.
+- File sets are full captures inside each selected recovery point, not an
+  incremental photo/document mirror.
+- No rclone push or direct rclone backup generation; rclone is a pull source.
+- No SCP execution; `ssh://` means SFTP. No OpenSSH config/ProxyCommand support.
+- No byte-range copy resume. Retries re-transfer or reconcile only an exact
+  artifact-only destination.
+- No arbitrary pre/post hooks, application quiescing, VSS, LVM/ZFS snapshot, or
+  filesystem repair.
+- Managed mount lifecycle is Linux-only. Its destination-volume modes and fields
+  are available through CLI flags and the TUI copy wizard.
+- Copy SMTP settings are configurable and testable in the TUI, but reusable
+  SMTP profiles, recovery notices, daily summaries, low-space thresholds, and
+  no-heartbeat mail are deferred. The CLI intentionally has no password flag.
+- No grandfather-father-son monthly/yearly retention.
+- The CLI can stage and inspect a recorded copy, but it has no direct
+  `backup copy restore` command. TUI Copies `I` stages local, SFTP, and
+  rclone-derived copies and can continue into the existing guarded restore flow.
+- Restore-drill outcomes are not yet a durable history type.
+- Legacy `.sha256` sidecars are not first-class copy completion manifests.
+- Portable manifests are checksummed but not signed.
+- No central control plane, distributed transaction, or automatic migration of
+  legacy schedules and artifacts.
 
 ## Reliability checklist
 
-- Keep the dbterm binary and native database clients at stable paths.
-- Run the first backup manually and inspect its history entry.
-- Keep destination capacity above one raw dump plus one wrapped artifact.
-- Use count, age, and/or size retention rather than an unbounded directory.
-- Encrypt off-machine artifacts and store the age identity separately.
-- Use a dedicated SMTP app password and failure notifications.
-- Confirm the agent heartbeat, startup state, uptime, and recent log after OS
-  updates or credential changes.
-- Perform a real restore drill into an isolated target on a schedule.
-- Monitor both successful backups and the absence of expected backups.
+- Keep dbterm and required native database/rclone/Linux volume tools at stable
+  paths visible to the service identity.
+- Run the first backup and first copy manually, and keep automatic copy triggers
+  disabled until the real copy transfers and verifies an artifact successfully.
+- Confirm both artifact and `.dbterm.json` sidecar exist at every expected
+  location.
+- Use age for off-machine confidentiality and test the separately stored
+  identity with `backup keycheck`.
+- Keep enough producer staging/destination capacity for the native dump, bundle,
+  and wrapped artifact; keep vault capacity above the artifact plus safety
+  margin.
+- Pin SFTP host keys and use one restricted service identity per responsibility.
+- Use sentinel identity for a destination where a missing mount could redirect
+  writes to the system disk.
+- Configure count, age, and/or byte retention; preview before manual cleanup.
+- Monitor recent successful backup time and independent copy freshness, not just
+  the service heartbeat.
+- Test notification delivery after credential or SMTP changes.
+- Restore into an isolated database/directory and compare representative row
+  counts and file hashes on a defined schedule.
 
 ## Maintainer verification
 
-Backup changes should pass unit tests, the race detector, vet, site validation,
-and cross-builds for Linux, macOS, and Windows on amd64 and arm64. Platform
-service definitions and folder-picker behavior need build-tagged tests; native
-runtime testing is still required before claiming a platform-specific manager
-change production-ready.
+Backup changes should pass focused unit tests, the full unit suite, the race
+detector where supported, `go vet`, documentation/site validation, and
+Linux/macOS/Windows amd64/arm64 build gates. Native SFTP servers, database
+clients, system service managers, Linux mount privileges, removable hardware,
+and Windows ACL/reparse behavior still require platform integration testing
+before a deployment-specific production claim.
 
 ---
 
@@ -1636,6 +2356,7 @@ dbterm handles database credentials and backup artifacts locally. Before sharing
 # 5) If that tag already exists, the workflow skips release creation safely.
 #
 # Newest entry first:
+0.11.0|Ganga|Portable backup manifests, guarded application-file bundles, verified local and SFTP push/pull copies, multi-time scheduling, managed volumes, and remote recovery inspection.
 0.10.1|Parvati|Resizable Tables sidebar and object-only type-ahead with direct keyboard navigation across matching tables, views, and database objects.
 0.10.0|Beas|Searchable table-and-column schema trees, direct column palette navigation, selectable result headers, smart SQL templates and typo recovery, remembered table context, and indexed large-schema performance.
 0.9.2|Jhelum|Remembered per-table result positions, direct table-name copy, and consistent effective shortcuts across Help, Settings, the command palette, and responsive TUI hints.
