@@ -1,6 +1,7 @@
 package privatefile
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -38,6 +39,19 @@ func TestCreateAndCreateTempAreNoClobberAndPrivateOnUnix(t *testing.T) {
 		t.Fatal(err)
 	}
 	temporaryPath := temporary.Name()
+	if _, err := temporary.WriteString("round trip"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := temporary.Seek(0, io.SeekStart); err != nil {
+		t.Fatal(err)
+	}
+	contents, err := io.ReadAll(temporary)
+	if err != nil {
+		t.Fatalf("read private temporary file after writing: %v", err)
+	}
+	if string(contents) != "round trip" {
+		t.Fatalf("private temporary contents = %q, want round trip", contents)
+	}
 	if err := temporary.Close(); err != nil {
 		t.Fatal(err)
 	}
