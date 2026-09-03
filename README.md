@@ -28,7 +28,7 @@ The current backup-generation routes are:
 | **Local database** | Supported |
 | **Remote / cloud database** | Supported |
 
-New `rclone://...` generation jobs fail closed. Generic rclone finalization cannot guarantee dbterm's atomic create-only publication rule across backends. Existing rclone history remains visible for migration, while a future independent copy-job layer can add off-machine copies with destination-specific safety.
+New `rclone://...` generation jobs fail closed because generic rclone finalization cannot guarantee dbterm's atomic create-only publication rule across backends. Use independent copy jobs for verified off-machine copies: push local artifacts to local or pinned-SFTP destinations, or pull from local, pinned-SFTP, or rclone sources into a local vault. Generic rclone push remains disabled for the same immutability reason.
 
 PostgreSQL uses custom `pg_dump` archives; MySQL/MariaDB uses single-database `mysqldump` SQL; SQLite uses a consistent built-in snapshot; Turso uses a single-transaction logical export; and D1 uses Cloudflare's native export API. Restore currently targets PostgreSQL, MySQL/MariaDB, and local SQLite.
 
@@ -335,7 +335,7 @@ PostgreSQL/MySQL backup and restore use their official clients; bounded-memory S
 - macOS: `brew install libpq mysql-client sqlite`
 - Windows: install PostgreSQL/MySQL clients as needed and `sqlite3` from the [official SQLite downloads](https://sqlite.org/download.html)
 
-Remote sources work through saved connections, including reachable cloud databases. Backup generation currently publishes only to absolute local or OS-mounted folders, so local→local and remote→local/mounted backups use the verified pipeline. New `rclone://...` generation jobs are rejected because generic rclone moves cannot provide a portable atomic create-if-absent guarantee. Existing rclone records remain visible for migration; use a separately verified storage workflow until dbterm's independent copy-job layer is available.
+Remote database sources work through saved connections, including reachable cloud databases. Backup generation publishes only to absolute local or OS-mounted folders, so local-to-local and remote-to-local/mounted backups use the verified pipeline. Independent copy jobs can push those completed artifacts to local or pinned-SFTP destinations, or pull them from local, pinned-SFTP, or rclone sources into a local vault. New `rclone://...` generation and rclone-push jobs remain rejected because generic rclone moves cannot provide a portable atomic create-if-absent guarantee.
 
 Turso logical exports keep schema and data reads on one source transaction. Virtual/FTS tables are rejected before publication because exporting their shadow tables independently can produce an unrestorable dump. Cloudflare D1 uses Cloudflare's native export API and streams its short-lived signed HTTPS result into dbterm's private staging area; Cloudflare can temporarily make the database unavailable while that export runs. Restore in this release targets PostgreSQL, MySQL/MariaDB, and local SQLite; Turso/D1 SQL backups remain inspectable artifacts.
 

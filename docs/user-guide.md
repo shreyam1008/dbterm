@@ -72,7 +72,7 @@ Update to the newest release or a specific version:
 
 ```bash
 dbterm --update
-dbterm --update 0.10.1
+dbterm --update 0.11.0
 ```
 
 The Dashboard `U` action opens the same Version & Update workflow. Updates verify the release checksum and replace only the executable. Saved connections, settings, query history, backup plans and history, completed artifacts, and Change Profiler anchors remain in the invoking user's profile. If a system-owned binary needs elevation, `sudo dbterm --update` preserves the invoking user's data rather than switching to a root profile.
@@ -695,7 +695,7 @@ Report vulnerabilities privately through the repository's [security advisory flo
 
 ## Current release and change history
 
-This manual targets dbterm **v0.10.1 “Parvati”**. It adds a mouse-resizable Tables sidebar and object-only sidebar type-ahead with direct Up/Down match navigation, while keeping collapsed-column discovery in the command palette.
+This manual targets dbterm **v0.11.0 “Ganga”**. It adds portable backup manifests, guarded database-and-file bundles, verified local and pinned-SFTP push/pull copies, rclone-to-local pull, multiple daily schedule times, managed vault volumes, copy alerts, and guarded inspection or restore from copied recovery points.
 
 Run `dbterm --version` for the installed build and open Dashboard `U` for its release notes and checksum-verified updater. The repository's [release manifest](https://github.com/shreyam1008/dbterm/blob/main/cmd/dbterm/releases.txt) is the version source used by builds, while [GitHub Releases](https://github.com/shreyam1008/dbterm/releases) provides immutable artifacts, checksums, and historical notes. When an installed version differs from this page, prefer that binary's `--help`, `backup --help`, and offline Guide for exact accepted flags.
 
