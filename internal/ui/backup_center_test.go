@@ -311,7 +311,7 @@ func TestParseBackupRestoreFileTargets(t *testing.T) {
 }
 
 func TestBackupBundleRestoreFormRendersAtCommonTerminalSizes(t *testing.T) {
-	for _, size := range []struct{ width, height int }{{80, 24}, {120, 35}} {
+	for _, size := range []struct{ width, height int }{{80, 24}, {120, 30}, {120, 35}} {
 		t.Run(fmt.Sprintf("%dx%d", size.width, size.height), func(t *testing.T) {
 			application := tview.NewApplication()
 			pages := tview.NewPages()
@@ -1036,6 +1036,7 @@ func TestBackupCenterProtectionSummaryFitsCommonTerminalSizes(t *testing.T) {
 		reject         []string
 	}{
 		{name: "local 80x24 long values", width: 80, height: 24, destination: filepath.Join(t.TempDir(), "registration-production-backups", "daily-database-archives"), wantKind: "LOCAL", wantProtection: "LOCAL COPY PRESENT", wantCount: "1 found", wantDetail: "last verified", wantCopyDetail: "checksum not re-read", reject: []string{"ONE VERIFIED COPY", "1 verified", "checksum verified"}},
+		{name: "legacy rclone record 120x30", width: 120, height: 30, destination: "rclone://vault/dbterm", wantKind: "rclone", wantProtection: "LEGACY REMOTE COPY RECORDED", wantCount: "1 legacy record", wantDetail: "size checked", wantCopyDetail: "availability not rechecked", reject: []string{"LOCAL COPY PRESENT", "checksum verified"}},
 		{name: "legacy rclone record 120x35", width: 120, height: 35, destination: "rclone://vault/dbterm", wantKind: "rclone", wantProtection: "LEGACY REMOTE COPY RECORDED", wantCount: "1 legacy record", wantDetail: "size checked", wantCopyDetail: "availability not rechecked", reject: []string{"LOCAL COPY PRESENT", "checksum verified"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {

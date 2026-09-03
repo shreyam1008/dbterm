@@ -742,7 +742,7 @@ func recordCopyJobProofForUITest(t *testing.T, store *backupcore.Store, job *bac
 }
 
 func TestBackupCopiesRenderAtCommonTerminalSizes(t *testing.T) {
-	for _, size := range []struct{ width, height int }{{80, 24}, {120, 35}} {
+	for _, size := range []struct{ width, height int }{{80, 24}, {120, 30}, {120, 35}} {
 		t.Run(strconvItoa(size.width)+"x"+strconvItoa(size.height), func(t *testing.T) {
 			store, err := backupcore.OpenStore(filepath.Join(t.TempDir(), "backups.db"))
 			if err != nil {
