@@ -3,7 +3,7 @@
 Owner: Shreyam Adhikari (`@shreyam1008`)
 Canonical product URL: <https://dbterm.shreyam1008.com.np/>
 Repository: <https://github.com/shreyam1008/dbterm>
-Last verified: 3 September 2026
+Last verified: 6 September 2026
 
 This is the execution record for dbterm's public distribution, directory submissions, community posts, authorship links, package listings, and agent-discovery surfaces. Update this file after every submission or status change. Do not mark a platform **live** until a public URL can be opened without the submitting account.
 
@@ -33,7 +33,7 @@ This is the execution record for dbterm's public distribution, directory submiss
 | --- | --- | --- | --- |
 | GitHub Releases | **Live** | <https://github.com/shreyam1008/dbterm/releases/latest> | v0.11.0 is published. |
 | Debian packages | **Live** | <https://github.com/shreyam1008/dbterm/releases/tag/v0.11.0> | v0.11.0 `.deb` artifacts for amd64 and arm64 are attached to the release. |
-| APT repository | **Live; signing remediation required** | <https://dbterm.shreyam1008.com.np/apt/dists/stable/Release> | v0.11.0 metadata and amd64/arm64 indexes return `200`, but the repository is not yet signed. Do not describe it as authenticated until `InRelease` or `Release.gpg` is published and verified. |
+| APT repository | **Live; signed** | <https://dbterm.shreyam1008.com.np/apt/dists/stable/InRelease> | v0.11.0 signed metadata and public key published. Anonymous HTTPS install/removal on Ubuntu amd64 passed in [run 34028772854](https://github.com/shreyam1008/dbterm/actions/runs/34028772854); arm64 indexes are also published. See [signing recovery and installation](apt-signing.md). |
 | Go module / pkg.go.dev | **Live** | <https://pkg.go.dev/github.com/shreyam1008/dbterm> | Public Go package page and README badge are live. |
 | Homebrew | **Live** | <https://github.com/shreyam1008/homebrew-tap/blob/main/Formula/dbterm.rb> | Personal tap formula is public and currently points to v0.8.0. Install with `brew tap shreyam1008/tap` then `brew install shreyam1008/tap/dbterm`. |
 | Scoop | **Live** | <https://github.com/shreyam1008/scoop-bucket/blob/main/bucket/dbterm.json> | Personal bucket manifest is public and currently points to v0.8.0. |
