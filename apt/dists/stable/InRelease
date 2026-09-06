@@ -1,3 +1,6 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA256
+
 Origin: dbterm
 Label: dbterm
 Suite: stable
@@ -16,3 +19,17 @@ SHA256:
  c24e5ff32da3ed2b8514324207f5873a3b09ba477eef7f6bcdfffedf7ab52220              401 main/binary-amd64/Packages.gz
  7e46d56615ef2836319368cd655f724ff6b96a942838012fbe471b5b84262fb2              522 main/binary-arm64/Packages
  00efb5f81ac65795107520ff539d20ccede7f7df02b75b16b501e9b4b7649ecf              400 main/binary-arm64/Packages.gz
+-----BEGIN PGP SIGNATURE-----
+
+iQGzBAEBCAAdFiEEjXZzKA2QmzwSruZpcf7KBTcw6FsFAmqdReUACgkQcf7KBTcw
+6Fv0Vwv/VFc0NAZSpwCS+4aaaoe2cLxeM+5+qcSZB25OEglPQXbgwuO+GIiYOOf2
+w5AMQCvJCkAingrIKDZeOmLWpMzrc8z0+p0QMV2Dpv0bDduDKbD90YzP2N6dpDLn
+6yvq+N82kfuXRf+YgQQTnnymaj0PPyuqsz6sqNzvlyBExx+GKXGOhOTkjAhl6Q95
+jB1puMLuYNUpraNZA6UsT8uUG8XKYNd4TmxqmQF1InhfO4z+FEYO+qa4RVzWJ/ky
+u8qPWDJcPRAU6yceKjykIyIVDNTD0+pYWsRPq1DPMAiQfsu4WzpCnVxkPkvZaDWH
++ri7FGmFKXLiXJTtcSoyNQ9cn9lDwLySqr5k8Qcm66Fd7sTuLh9Ofbdy4LRN9p21
+j/FW43BB8TnfNcy0/CIHQCigSIZA4luqLaVjjsEjbv0xGsdU6VrwTA2/POgtZMrq
+XkfdJEf43QOH/Dm9gk36bThMW6pzAQsXonaUxRK5eggIQYV7HjP1XejMkuSddXAg
+26HGbzPG
+=EeVh
+-----END PGP SIGNATURE-----
