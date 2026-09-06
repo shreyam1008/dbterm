@@ -6,6 +6,10 @@ APT_ROOT="${1:-apt}"
 DEB_SOURCE_DIR="${2:-dist}"
 PKG_NAME="${PKG_NAME:-dbterm}"
 DIST_CODENAME="${DIST_CODENAME:-stable}"
+SIGNING_KEY="${APT_SIGNING_KEY_ID:?Set APT_SIGNING_KEY_ID to the repository signing key fingerprint}"
+
+# Fail before changing metadata if the persistent signing key is unavailable.
+gpg --batch --list-secret-keys "$SIGNING_KEY" >/dev/null
 
 if ! command -v dpkg-scanpackages >/dev/null 2>&1; then
   echo "dpkg-scanpackages not found. Install dpkg-dev to generate APT metadata." >&2
@@ -56,5 +60,13 @@ FILES=$(find main -type f \( -name Packages -o -name Packages.gz \) | sort)
 } > Release
 
 popd >/dev/null
+
+gpg --batch --yes --local-user "$SIGNING_KEY" --digest-algo SHA256 \
+  --clearsign --output "$DISTS_DIR/InRelease" "$DISTS_DIR/Release"
+gpg --batch --yes --local-user "$SIGNING_KEY" --digest-algo SHA256 \
+  --armor --detach-sign --output "$DISTS_DIR/Release.gpg" "$DISTS_DIR/Release"
+gpg --batch --armor --export "$SIGNING_KEY" > "$APT_ROOT/key.asc"
+gpg --batch --export "$SIGNING_KEY" > "$APT_ROOT/key.gpg"
+gpgv --keyring "$(realpath "$APT_ROOT/key.gpg")" "$DISTS_DIR/InRelease"
 
 echo "APT repo metadata generated under $APT_ROOT"

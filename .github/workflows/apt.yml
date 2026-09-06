@@ -1,0 +1,78 @@
+name: Repair signed APT repository
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing stable release to publish
+        default: v0.11.0
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dbterm-publish-main
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: published
+      - name: Download and verify existing release packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          mkdir dist
+          gh release download "$TAG" --dir dist --pattern '*.deb' --pattern checksums.txt
+          cd dist
+          for arch in amd64 arm64; do
+            file="dbterm_${TAG#v}_${arch}.deb"
+            awk -v file="$file" '$2 == file { print; found=1 } END { if (!found) exit 1 }' checksums.txt | sha256sum --strict --check -
+            test "$(dpkg-deb -f "$file" Package)" = dbterm
+            test "$(dpkg-deb -f "$file" Version)" = "${TAG#v}"
+          done
+      - name: Import persistent repository signing key
+        env:
+          APT_SIGNING_PRIVATE_KEY: ${{ secrets.APT_SIGNING_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$APT_SIGNING_PRIVATE_KEY"
+          export GNUPGHOME="$RUNNER_TEMP/apt-gnupg"
+          install -d -m 700 "$GNUPGHOME"
+          printf '%s' "$APT_SIGNING_PRIVATE_KEY" | gpg --batch --import
+          echo "GNUPGHOME=$GNUPGHOME" >> "$GITHUB_ENV"
+      - name: Generate and verify signed repository
+        env:
+          APT_SIGNING_KEY_ID: ${{ vars.APT_SIGNING_KEY_ID }}
+        run: bash scripts/build-apt-repo.sh published/apt dist
+      - name: Verify authenticated APT install
+        run: |
+          set -euo pipefail
+          chmod -R a+rX published/apt
+          sudo install -m 644 published/apt/key.gpg /usr/share/keyrings/dbterm-test.gpg
+          printf 'deb [signed-by=/usr/share/keyrings/dbterm-test.gpg] file:%s/published/apt stable main\n' "$GITHUB_WORKSPACE" | sudo tee /etc/apt/sources.list.d/dbterm-test.list
+          sudo apt-get update
+          sudo apt-get install -y dbterm
+          dpkg-query -W dbterm
+          sudo apt-get remove -y dbterm
+      - name: Publish verified repository
+        working-directory: published
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apt
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "apt: sign and verify ${TAG}"
+          git push origin gh-pages

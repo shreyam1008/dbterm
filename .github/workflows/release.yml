@@ -207,11 +207,17 @@ jobs:
 
       - name: Publish APT repository (gh-pages)
         env:
+          APT_SIGNING_PRIVATE_KEY: ${{ secrets.APT_SIGNING_PRIVATE_KEY }}
+          APT_SIGNING_KEY_ID: ${{ vars.APT_SIGNING_KEY_ID }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           TAG_NAME: ${{ needs.release-meta.outputs.tag_name }}
         run: |
           set -euo pipefail
+          test -n "$APT_SIGNING_PRIVATE_KEY"
+          export GNUPGHOME="$RUNNER_TEMP/apt-gnupg"
+          install -d -m 700 "$GNUPGHOME"
+          printf '%s' "$APT_SIGNING_PRIVATE_KEY" | gpg --batch --import
           REPO_URL="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           PAGES_DIR="/tmp/dbterm-gh-pages"
 
