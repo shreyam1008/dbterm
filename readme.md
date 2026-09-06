@@ -1,5 +1,7 @@
 # dbterm
 
+Official downloads and package links: [dbterm distribution tracker](https://shreyam1008.com.np/projects/#distribution-dbterm). Includes GitHub releases, signed APT, Homebrew, Scoop, and pending-channel status.
+
 Open-source terminal database workbench for local and cloud data.
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/shreyam1008/dbterm.svg)](https://pkg.go.dev/github.com/shreyam1008/dbterm)
