@@ -1,6 +1,8 @@
 # dbterm first-workflow recording plan
 
-Status: script prepared; no video recorded or published. Companion page: `/first-workflow/`. Use the sample SQL in `docs/first-workflow.md`. Record the current released binary and note its version before publishing. Check every action against that binary; current-source documentation alone does not verify released behavior.
+Status: completed 7 September 2026 as an 88-second Remotion video using actual dbterm v0.11.0 terminal captures. The video is caption-led with original instrumental audio, not a spoken recording. It is embedded in the local `/first-workflow/` page build; public deployment remains unverified. Editable production source is in the owner's code2video repository under `src/videos/dbterm-workflow/`; the final wording/timing there supersedes the initial spoken draft below.
+
+The sample was exercised in an isolated profile: SQLite backup completed, its original three rows and integrity were checked, the two SQL statements executed, and Change Profiler reported one insert and one update. No real user databases were used. See `docs/first-workflow.md` for the reproducible SQL.
 
 Aim for about 90 seconds after preparing the three-row SQLite demo. Show only the disposable database, with a clean terminal and no personal connection names. Keep text readable at mobile width. Provide captions and the companion guide link. Leave actual backup/capture completion visible; label any time cuts. No simulated footage or unsupported speed claims.
 

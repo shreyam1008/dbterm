@@ -1,0 +1,43 @@
+WEBVTT
+
+00:00:00.000 --> 00:00:06.000
+Back up a database, edit two rows, then check exactly what changed.
+
+00:00:06.000 --> 00:00:13.000
+Install dbterm. Add a SQLite connection to a new demo file. The guide includes the sample SQL.
+
+00:00:13.000 --> 00:00:19.000
+Alt+T focuses Tables. Type a name, press Enter to open it, and Space to pin it.
+
+00:00:19.000 --> 00:00:25.000
+Ctrl+P searches commands, tables and recent SQL. Try “backup”.
+
+00:00:25.000 --> 00:00:32.000
+Alt+B opens Instant Backup. Choose an absolute folder and a file name, then Create Backup.
+
+00:00:32.000 --> 00:00:37.000
+This run created a SQLite snapshot and a completion manifest. SQLite needs no separate dump tool.
+
+00:00:37.000 --> 00:00:44.000
+Alt+W opens Change Profiler. Press N, name your anchor, select the tasks table and capture it.
+
+00:00:44.000 --> 00:00:50.000
+Alt+Q focuses SQL. Run this update with Enter. It changes only task 1.
+
+00:00:50.000 --> 00:00:56.000
+Insert task 4. We now expect one updated row and one new row.
+
+00:00:56.000 --> 00:01:02.000
+Return to Change Profiler, select your anchor and press S to scan. Enter opens the report.
+
+00:01:02.000 --> 00:01:09.000
+Open the updated row. Task 1 went from todo to done. Its title and ID stayed the same.
+
+00:01:09.000 --> 00:01:15.000
+An anchor shows observed differences. It is not an undo button, and it does not identify who made a change.
+
+00:01:15.000 --> 00:01:21.000
+Capture an anchor, exercise a feature, then inspect the rows. Useful for seed scripts and small data fixes too.
+
+00:01:21.000 --> 00:01:28.000
+Get the app and follow the sample walkthrough. Open source. Built by Shreyam Adhikari.

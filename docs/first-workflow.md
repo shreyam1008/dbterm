@@ -56,7 +56,7 @@ INSERT INTO tasks VALUES (4, 'Record the demo', 'todo');
 
 Open Change Profiler again with `Alt+W`. Select your anchor and press `S` to scan. Open the report with `Enter`.
 
-You should find one updated row—task 1 changed from `todo` to `done`—and one inserted row, task 4. The other two tasks should be unchanged. Press `F` when you're ready for the final scan and to finish the anchor; the compact report stays available.
+You should find one updated row—task 1 changed from `todo` to `done`—and one inserted row, task 4. The other two tasks should be unchanged. Use `Tab` to focus the row list, select the updated row with the arrow keys, and press `Enter` to see its full before/after values. Close that view and return to the anchor list with `Esc`, then press `F` for the final scan and to finish the anchor; the compact report stays available.
 
 The report shows observed changes, not who made them. It isn't an undo button or a continuous audit log. Your backup is the separate recovery artifact.
 

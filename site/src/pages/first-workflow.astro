@@ -3,6 +3,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import { Content } from '../../../docs/first-workflow.md';
 const title = 'Back up, edit and compare a SQLite database with dbterm';
 const description = 'A practical dbterm walkthrough: navigate with the keyboard, back up a SQLite database, change two rows and review the before-and-after report.';
+const media = `${import.meta.env.BASE_URL}media/dbterm-workflow/`;
 ---
 <BaseLayout title={title} description={description}>
   <section class="hero-panel docs-hero" aria-labelledby="workflow-title">
@@ -11,8 +12,19 @@ const description = 'A practical dbterm walkthrough: navigate with the keyboard,
     <p>A small SQLite example you can follow from your terminal.</p>
     <p>By <a href="https://shreyam1008.com.np/">Shreyam Adhikari</a> · 7 September 2026</p>
   </section>
+  <figure class="workflow-video">
+    <video controls playsinline preload="none" poster={`${media}poster.jpg`} width="1920" height="1080" aria-label="88-second dbterm backup and change comparison tutorial">
+      <source src={`${media}dbterm-workflow.mp4`} type="video/mp4" />
+      <track kind="captions" src={`${media}captions.vtt`} srclang="en" label="English instructions" />
+      <a href={`${media}dbterm-workflow.mp4`}>Download the walkthrough video</a>
+    </video>
+    <figcaption>88 seconds · dbterm v0.11.0 · edited terminal captures with on-screen instructions. Works with sound off. <a href={`${media}transcript.txt`}>Read the transcript</a> or follow the steps below.</figcaption>
+  </figure>
   <article class="docs-content workflow-article" aria-label="dbterm practical walkthrough"><Content /></article>
 </BaseLayout>
 <style>
   .workflow-article { max-width: 56rem; margin: 2rem auto 5rem; padding: 0 1.25rem; }
+  .workflow-video { max-width: 72rem; margin: 2rem auto; padding: 0 1.25rem; }
+  video { display: block; width: 100%; height: auto; border-radius: 12px; background: #10151e; }
+  figcaption { margin-top: .8rem; color: var(--ink-soft); line-height: 1.6; }
 </style>
