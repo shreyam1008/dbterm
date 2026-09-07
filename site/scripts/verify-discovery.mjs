@@ -8,7 +8,7 @@ const repoDir = path.resolve(siteDir, "..");
 const distDir = path.join(siteDir, "dist");
 const productSource = await readFile(path.join(repoDir, "product.json"), "utf8");
 const siteRoot = new URL(JSON.parse(productSource).canonicalUrl);
-const routes = ["", "features/", "backup/", "guide/", "compare/", "open-source/", "agents/"];
+const routes = ["", "features/", "backup/", "guide/", "first-workflow/", "compare/", "open-source/", "agents/"];
 
 const assert = (condition, message) => {
   if (!condition) throw new Error(message);

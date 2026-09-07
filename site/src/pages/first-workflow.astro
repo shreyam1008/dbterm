@@ -1,0 +1,18 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { Content } from '../../../docs/first-workflow.md';
+const title = 'Back up, edit and compare a SQLite database with dbterm';
+const description = 'A practical dbterm walkthrough: navigate with the keyboard, back up a SQLite database, change two rows and review the before-and-after report.';
+---
+<BaseLayout title={title} description={description}>
+  <section class="hero-panel docs-hero" aria-labelledby="workflow-title">
+    <p class="eyebrow">Your first dbterm workflow</p>
+    <h1 id="workflow-title">Back up. Make a change. Check the result.</h1>
+    <p>A small SQLite example you can follow from your terminal.</p>
+    <p>By <a href="https://shreyam1008.com.np/">Shreyam Adhikari</a> · 7 September 2026</p>
+  </section>
+  <article class="docs-content workflow-article" aria-label="dbterm practical walkthrough"><Content /></article>
+</BaseLayout>
+<style>
+  .workflow-article { max-width: 56rem; margin: 2rem auto 5rem; padding: 0 1.25rem; }
+</style>

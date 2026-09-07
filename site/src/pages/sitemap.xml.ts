@@ -2,7 +2,7 @@ import type { APIRoute } from "astro";
 
 export const prerender = true;
 
-const routes = ["", "features/", "backup/", "guide/", "compare/", "open-source/", "agents/"];
+const routes = ["", "features/", "backup/", "guide/", "first-workflow/", "compare/", "open-source/", "agents/"];
 
 export const GET: APIRoute = ({ site }) => {
   const root = site ? site.toString() : "https://example.github.io/dbterm/";
