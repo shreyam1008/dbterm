@@ -1,6 +1,6 @@
 # dbterm first-workflow recording plan
 
-Status: completed 7 September 2026 as an 88-second Remotion video using actual dbterm v0.11.0 terminal captures. The video is caption-led with original instrumental audio, not a spoken recording. It is embedded in the local `/first-workflow/` page build; public deployment remains unverified. Editable production source is in the owner's code2video repository under `src/videos/dbterm-workflow/`; the final wording/timing there supersedes the initial spoken draft below.
+Status: rebuilt 7 September 2026 as a 54-second animated walkthrough, with large example data, typed SQL, an animated before/after comparison and a real dbterm v0.11.0 report capture. The video is caption-led with original instrumental audio. Illustrative data panels simplify the workflow; they are not screenshots of the app. It is embedded in `/first-workflow/`; the revision is being published through the Website workflow. Editable production source is in the owner's code2video repository under `src/videos/dbterm-workflow/`; the final wording/timing there supersedes the initial spoken draft below.
 
 The sample was exercised in an isolated profile: SQLite backup completed, its original three rows and integrity were checked, the two SQL statements executed, and Change Profiler reported one insert and one update. No real user databases were used. See `docs/first-workflow.md` for the reproducible SQL.
 
@@ -21,3 +21,4 @@ Suggested title: **Back up, change, compare: a short dbterm walkthrough**
 Suggested description: “I maintain dbterm, a terminal database workbench. This walkthrough uses a tiny SQLite database to show keyboard navigation, an instant backup and a before/after comparison. Steps and sample SQL: https://dbterm.shreyam1008.com.np/first-workflow/”
 
 Do not publish the description link until the page is deployed. Re-record any step that differs in the installed release. Reddit remains owner-published only.
+

@@ -1,0 +1,26 @@
+00:00:00 — What did that query change?
+A small database fix: back up, save a checkpoint, then compare.
+
+00:00:05 — One table. All keyboard.
+Alt+T focuses Tables. Type to find one, Enter opens it, and Space pins it.
+
+00:00:11 — Take a backup first.
+Alt+B opens Instant Backup. Choose an absolute folder, create the backup, and wait for success.
+
+00:00:18 — Name the before.
+Alt+W opens Change Profiler. Press N, name an anchor, select tasks and capture the baseline.
+
+00:00:24 — Finish one. Add one.
+Alt+Q focuses SQL. Run each statement with Enter: update task 1, then insert task 4.
+
+00:00:32 — Here's exactly what moved.
+Scan your anchor with S. The result: one inserted row, one updated row, no deleted rows.
+
+00:00:39 — Open the row. Check both values.
+Open the report, select the updated row and press Enter for its full before-and-after values.
+
+00:00:44 — Before your next quick fix.
+An anchor shows observed differences. It is not an undo button or a record of who made the change.
+
+00:00:48 — See what changed.
+Try the sample SQLite workflow. Get dbterm and the step-by-step guide on the site.
