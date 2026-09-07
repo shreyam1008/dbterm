@@ -143,12 +143,12 @@ func (a *App) showBackupCenter() {
 	))
 
 	list := tview.NewList().ShowSecondaryText(true)
-	list.SetBorder(true).SetTitle(fmt.Sprintf(" %s Your Backups (%d) ", iconBackup, len(jobs))).SetBorderColor(surface1).SetTitleColor(mauve)
+	list.SetBorder(true).SetTitle(fmt.Sprintf(" %s Backup Plans (%d) ", iconBackup, len(jobs))).SetBorderColor(surface1).SetTitleColor(mauve)
 	list.SetBackgroundColor(bg)
 	list.SetMainTextColor(text).SetSecondaryTextColor(subtext0)
 	list.SetSelectedBackgroundColor(surface0).SetSelectedTextColor(green)
 	if len(jobs) == 0 {
-		list.AddItem("  [::b][#f9e2af]No backups yet[-][-]", "  Press N, choose a database, then choose where and when to back it up.", 0, nil)
+		list.AddItem("  [::b][#f9e2af]No backup plans yet[-][-]", "  Press N to choose a database, destination and schedule.", 0, nil)
 		a.backupCenterSelectedJob = ""
 	} else {
 		for _, job := range jobs {
@@ -180,7 +180,7 @@ func (a *App) showBackupCenter() {
 	updateDetail := func(index int) {
 		if index < 0 || index >= len(jobs) {
 			detail.SetTitle(" Start Here ")
-			detail.SetText(" [#89b4fa]N[-] Create a backup   [#89b4fa]I[-] Restore a file   [#89b4fa]H[-] View activity\n [#a6adc8]A new backup needs only a database, destination, and schedule. Safe defaults handle everything else.[-]")
+			detail.SetText(" [#89b4fa]N[-] Create a plan   [#89b4fa]I[-] Inspect / restore a file   [#89b4fa]H[-] View activity\n\n [#a6adc8]Instant backups create files without adding a plan here.\n Create a plan when you want to repeat a backup or run it on a schedule.[-]")
 			return
 		}
 		job := jobs[index]
