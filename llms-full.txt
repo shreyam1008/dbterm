@@ -10,9 +10,13 @@ License: MIT
 
 # dbterm
 
-Official downloads and package links: [dbterm distribution tracker](https://shreyam1008.com.np/projects/#distribution-dbterm). Includes GitHub releases, signed APT, Homebrew, Scoop, and pending-channel status.
+**A keyboard-first terminal SQL client and database backup workbench for PostgreSQL, MySQL/MariaDB, SQLite, Turso, and Cloudflare D1.**
 
-Open-source terminal database workbench for local and cloud data.
+[Official dbterm website](https://dbterm.shreyam1008.com.np/) · [Download dbterm](https://github.com/shreyam1008/dbterm/releases/latest) · [Getting started](https://dbterm.shreyam1008.com.np/guide/) · [Backup guide](https://dbterm.shreyam1008.com.np/backup/)
+
+Free and open source, built in Go for Windows, macOS, and Linux. Browse databases, run SQL, compare data checkpoints, and manage backups from one terminal.
+
+For package-manager links and availability, see the [dbterm distribution tracker](https://shreyam1008.com.np/projects/#distribution-dbterm), covering signed APT, Homebrew, Scoop, and pending channels.
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/shreyam1008/dbterm.svg)](https://pkg.go.dev/github.com/shreyam1008/dbterm)
 [![CI](https://github.com/shreyam1008/dbterm/actions/workflows/ci.yml/badge.svg)](https://github.com/shreyam1008/dbterm/actions/workflows/ci.yml)
