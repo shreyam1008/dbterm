@@ -18,5 +18,9 @@ The existing `dbterm-discovery` Worker route adds discovery headers and serves
 `product.md` for homepage requests accepting Markdown. Its origin fetch must
 continue to work with Pages; check both normal HTML and Markdown after DNS changes.
 
-Migration rollback: restore the host CNAME to `shreyam1008.github.io`, DNS-only.
-The existing GitHub Pages deployment remains available during migration.
+GitHub Pages hosting was disabled on 9 September 2026. Keep the `gh-pages`
+artifact branch and Website/release workflows: Cloudflare still depends on them.
+
+Rollback now requires re-enabling and successfully deploying GitHub Pages before
+restoring its DNS target; changing DNS alone is not sufficient. Retiring GitHub
+Pages also retires the old github.io-hosted URLs and redirects.
