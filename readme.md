@@ -8,6 +8,8 @@ Free and open source, built in Go for Windows, macOS, and Linux. Browse database
 
 For package-manager links and availability, see the [dbterm distribution tracker](https://shreyam1008.com.np/projects/#distribution-dbterm), covering signed APT, Homebrew, Scoop, and pending channels.
 
+Microsoft Store preparation: the name is reserved and a console MSIX candidate is validated. [Store packaging, edition behavior and release automation](https://github.com/shreyam1008/dbterm/blob/main/docs/microsoft-store.md) are documented; the app is not yet published there.
+
 [![Go Reference](https://pkg.go.dev/badge/github.com/shreyam1008/dbterm.svg)](https://pkg.go.dev/github.com/shreyam1008/dbterm)
 [![CI](https://github.com/shreyam1008/dbterm/actions/workflows/ci.yml/badge.svg)](https://github.com/shreyam1008/dbterm/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/shreyam1008/dbterm)](https://github.com/shreyam1008/dbterm/releases/latest)

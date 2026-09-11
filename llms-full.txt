@@ -1,6 +1,6 @@
 # dbterm — complete product and operating documentation
 
-> Canonical full-text context for dbterm v0.11.0 “Ganga”, generated from the repository's human manuals. dbterm is a keyboard-first local database workbench and native backup agent created by Shreyam Adhikari (shreyam1008).
+> Canonical full-text context for dbterm v0.11.1 “Ganga”, generated from the repository's human manuals. dbterm is a keyboard-first local database workbench and native backup agent created by Shreyam Adhikari (shreyam1008).
 
 Canonical website: https://dbterm.shreyam1008.com.np/
 Source: https://github.com/shreyam1008/dbterm
@@ -17,6 +17,8 @@ License: MIT
 Free and open source, built in Go for Windows, macOS, and Linux. Browse databases, run SQL, compare data checkpoints, and manage backups from one terminal.
 
 For package-manager links and availability, see the [dbterm distribution tracker](https://shreyam1008.com.np/projects/#distribution-dbterm), covering signed APT, Homebrew, Scoop, and pending channels.
+
+Microsoft Store preparation: the name is reserved and a console MSIX candidate is validated. [Store packaging, edition behavior and release automation](https://github.com/shreyam1008/dbterm/blob/main/docs/microsoft-store.md) are documented; the app is not yet published there.
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/shreyam1008/dbterm.svg)](https://pkg.go.dev/github.com/shreyam1008/dbterm)
 [![CI](https://github.com/shreyam1008/dbterm/actions/workflows/ci.yml/badge.svg)](https://github.com/shreyam1008/dbterm/actions/workflows/ci.yml)
@@ -528,7 +530,7 @@ Update to the newest release or a specific version:
 
 ```bash
 dbterm --update
-dbterm --update 0.11.0
+dbterm --update 0.11.1
 ```
 
 The Dashboard `U` action opens the same Version & Update workflow. Updates verify the release checksum and replace only the executable. Saved connections, settings, query history, backup plans and history, completed artifacts, and Change Profiler anchors remain in the invoking user's profile. If a system-owned binary needs elevation, `sudo dbterm --update` preserves the invoking user's data rather than switching to a root profile.
@@ -1151,7 +1153,7 @@ Report vulnerabilities privately through the repository's [security advisory flo
 
 ## Current release and change history
 
-This manual targets dbterm **v0.11.0 “Ganga”**. It adds portable backup manifests, guarded database-and-file bundles, verified local and pinned-SFTP push/pull copies, rclone-to-local pull, multiple daily schedule times, managed vault volumes, copy alerts, and guarded inspection or restore from copied recovery points.
+This manual targets dbterm **v0.11.1 “Ganga”**. It adds portable backup manifests, guarded database-and-file bundles, verified local and pinned-SFTP push/pull copies, rclone-to-local pull, multiple daily schedule times, managed vault volumes, copy alerts, and guarded inspection or restore from copied recovery points.
 
 Run `dbterm --version` for the installed build and open Dashboard `U` for its release notes and checksum-verified updater. The repository's [release manifest](https://github.com/shreyam1008/dbterm/blob/main/cmd/dbterm/releases.txt) is the version source used by builds, while [GitHub Releases](https://github.com/shreyam1008/dbterm/releases) provides immutable artifacts, checksums, and historical notes. When an installed version differs from this page, prefer that binary's `--help`, `backup --help`, and offline Guide for exact accepted flags.
 
@@ -2362,6 +2364,7 @@ dbterm handles database credentials and backup artifacts locally. Before sharing
 # 5) If that tag already exists, the workflow skips release creation safely.
 #
 # Newest entry first:
+0.11.1|Ganga|Protect Microsoft Store installations from self-update, self-uninstall and version-bound backup service registration; add verified MSIX packaging and release automation.
 0.11.0|Ganga|Portable backup manifests, guarded application-file bundles, verified local and SFTP push/pull copies, multi-time scheduling, managed volumes, and remote recovery inspection.
 0.10.1|Parvati|Resizable Tables sidebar and object-only type-ahead with direct keyboard navigation across matching tables, views, and database objects.
 0.10.0|Beas|Searchable table-and-column schema trees, direct column palette navigation, selectable result headers, smart SQL templates and typo recovery, remembered table context, and indexed large-schema performance.
