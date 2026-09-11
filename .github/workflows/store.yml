@@ -1,0 +1,95 @@
+name: Microsoft Store
+on:
+  release:
+    types: [published]
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing published stable tag
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: microsoft-store
+  cancel-in-progress: false
+jobs:
+  package:
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: windows-latest
+    outputs:
+      ready: ${{ steps.release.outputs.ready }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Select and verify published stable release
+        id: release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_HEAD: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = $env:REQUESTED_TAG
+          if (-not $tag) {
+            $tag = gh release view --json tagName --jq .tagName
+            if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve release.' }
+          }
+          if ($tag -cnotmatch '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') { throw 'Stable SemVer tag required.' }
+          $release = gh release view $tag --json tagName,isDraft,isPrerelease,assets | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $release.isDraft -or $release.isPrerelease) { throw 'Release must be published and stable.' }
+          if ($env:EVENT_NAME -eq 'workflow_run') {
+            $tagCommit = git rev-list -n 1 $tag
+            if ($LASTEXITCODE -ne 0 -or $tagCommit -ne $env:RELEASE_HEAD) { 'No new stable release from this run.'; exit 0 }
+          }
+          $assetName = 'dbterm-windows-amd64.exe'
+          $assets = @($release.assets | Where-Object name -CEQ $assetName)
+          if ($assets.Count -ne 1 -or $assets[0].digest -notmatch '^sha256:[a-f0-9]{64}$') { throw 'One release asset with a GitHub SHA-256 digest is required.' }
+          gh release download $tag --pattern $assetName --dir .local/store-input
+          if ($LASTEXITCODE -ne 0) { throw 'Release download failed.' }
+          ./packaging/windows/store/build-store.ps1 -Tag $tag -InputPath ".local/store-input/$assetName" -InputSha256 $assets[0].digest.Substring(7) -OutputDirectory dist/store-ci
+          "ready=true" >> $env:GITHUB_OUTPUT
+      - name: Retain validated package and receipt
+        if: steps.release.outputs.ready == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: store-package
+          path: |
+            dist/store-ci/*.msix
+            dist/store-ci/build-receipt.json
+          if-no-files-found: error
+  publish:
+    needs: package
+    if: needs.package.outputs.ready == 'true' && vars.STORE_UPLOAD_ENABLED == 'true'
+    runs-on: windows-latest
+    environment: microsoft-store
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: store-package
+          path: dist/store-ci
+      - uses: microsoft/microsoft-store-apppublisher@15abd1c50fcc164b19cb240fb04ef3c49bf715a2
+      - name: Submit update without overwriting an existing draft
+        shell: pwsh
+        env:
+          STORE_TENANT_ID: ${{ secrets.STORE_TENANT_ID }}
+          STORE_SELLER_ID: ${{ secrets.STORE_SELLER_ID }}
+          STORE_CLIENT_ID: ${{ secrets.STORE_CLIENT_ID }}
+          STORE_CLIENT_SECRET: ${{ secrets.STORE_CLIENT_SECRET }}
+        run: |
+          $packages = @(Get-ChildItem dist/store-ci -Filter '*.msix')
+          if ($packages.Count -ne 1) { throw 'Exactly one validated package required.' }
+          ./packaging/windows/store/publish-store.ps1 -ProductId 9P0RG2ZJ47M8 -Package $packages[0].FullName

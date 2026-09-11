@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/shreyam1008/dbterm/internal/storeinstall"
 	"path/filepath"
 	"strings"
 )
@@ -121,6 +122,9 @@ func RequiresElevation(err error) bool {
 // runtime paths. System scope additionally requires absolute ConfigDir and
 // StateDir paths.
 func New(options Options) (Manager, error) {
+	if storeinstall.Managed() || storeinstall.IsPackagePath(options.Executable) {
+		return nil, fmt.Errorf("native backup service registration is unavailable in the Microsoft Store edition because package paths change on update; use dbterm backup agent in a running terminal, or use the standalone edition for an OS-managed service")
+	}
 	normalized, err := normalizeOptions(options)
 	if err != nil {
 		return nil, err
