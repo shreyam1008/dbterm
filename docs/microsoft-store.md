@@ -20,6 +20,10 @@ The Store edition uses Microsoft Store Library for updates and Windows Settings 
 - The CI package was unpacked and development-registered locally, replacing only the earlier development candidate. Its registered alias reports v0.11.1/build d3e4402; update, uninstall and service commands all return the expected Store-specific refusal before modifying data. This is not a Store-signed installation test.
 - Still required: real terminal UI acceptance and sanitized screenshots, Store-signed installation/update/uninstall acceptance, completed listing and certification. The existing main_ui.png contains production-looking data and is not suitable as fresh Store evidence.
 
+## Isolated data acceptance
+
+The exact registered v0.11.1 Store package also passed a real SQLite SELECT through its local stdio MCP interface. A separate config/state/log profile contains only one read-only connection and four fictional inventory rows. The query returned all four expected rows; the owner's saved profiles and databases were not used. The local receipt is `.local/store-ci/v0.11.1/screenshot-demo-validated/acceptance.json`, with the sample database and isolated profile beside it. This is database/runtime evidence, not a terminal UI screenshot. Use this profile for the remaining Windows capture, never the existing production-looking image.
+
 ## Automation
 
 `.github/workflows/store.yml` consumes published stable releases, validates the GitHub asset SHA-256, derives MAJOR.MINOR.PATCH.0 and retains the MSIX plus receipt. `workflow_run` also handles releases created by GitHub's built-in token, whose release events do not start another workflow. It only uses a release tagged at the completed release run's commit.
