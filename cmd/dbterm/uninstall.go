@@ -17,11 +17,15 @@ import (
 
 	"github.com/shreyam1008/dbterm/internal/appdirs"
 	backupcore "github.com/shreyam1008/dbterm/internal/backup"
+	"github.com/shreyam1008/dbterm/internal/storeinstall"
 )
 
 // ── CLI: --uninstall ──
 
 func runUninstall(purge bool, assumeYes bool) error {
+	if storeinstall.Managed() {
+		return fmt.Errorf("this installation is managed by Microsoft Store; uninstall dbterm from Windows Settings > Apps; this command has not removed your profiles, backups or scheduled tasks")
+	}
 	paths := uninstallDataPaths{Config: configDir()}
 	exePath, err := os.Executable()
 	if err != nil {

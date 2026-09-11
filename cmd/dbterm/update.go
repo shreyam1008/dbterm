@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/shreyam1008/dbterm/internal/osservice"
+	"github.com/shreyam1008/dbterm/internal/storeinstall"
 )
 
 const defaultRepo = "shreyam1008/dbterm"
@@ -22,6 +23,9 @@ const defaultRepo = "shreyam1008/dbterm"
 // ── CLI: --update ──
 
 func runUpdate(requestedVersion string) error {
+	if storeinstall.Managed() {
+		return fmt.Errorf("this installation is managed by Microsoft Store; update dbterm from Microsoft Store Library")
+	}
 	repo := strings.TrimSpace(os.Getenv("DBTERM_REPO"))
 	if repo == "" {
 		repo = defaultRepo

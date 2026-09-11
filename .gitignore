@@ -24,6 +24,7 @@ vendor/
 
 # Local configuration
 .env
+/.local/
 
 # Logs
 *.log
