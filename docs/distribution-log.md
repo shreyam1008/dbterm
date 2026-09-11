@@ -9,6 +9,27 @@ This is the execution record for dbterm's public distribution, directory submiss
 
 ## Status key
 
+### Microsoft Store assessment — 11 September 2026
+
+The owner has requested Microsoft Store expansion after ProtoPeek and TailScout.
+The terminal interface is not itself a blocker: a desktop MSIX can declare a
+console entry point and `dbterm.exe` execution alias. No dbterm Store reservation,
+package, or submission is claimed yet.
+
+Before packaging, test terminal launch, configuration/secret paths, external
+PostgreSQL/MySQL tools, backup destinations, native scheduler/service helpers and
+upgrade/uninstall behavior under package identity. Do not include credentials or
+real customer databases in screenshots or package content. Preserve the existing
+Windows release and MIT notices; derive MAJOR.MINOR.PATCH.0 from an exact stable
+release tag. A Store package must not try to replace its WindowsApps executable.
+
+Store artifact generation can follow a published stable GitHub release. Automatic
+Store submission additionally requires Partner Center Entra API access and the
+initial listing setup. See [console execution aliases](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-uap5-appexecutionalias)
+and [Store CLI](https://learn.microsoft.com/en-us/windows/apps/publish/msstore-dev-cli/overview).
+
+### Existing channel status definitions
+
 - **Live** — publicly accessible and verified.
 - **Pending** — submitted, but waiting for moderation or maintainer review.
 - **Submitted, public URL unavailable** — the submission action was recorded, but no public listing can currently be verified.
