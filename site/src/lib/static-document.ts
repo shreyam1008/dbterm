@@ -7,6 +7,7 @@ export const staticDocument = (body: string, contentType: string) =>
   });
 
 const readmeLinkTargets = new Map([
+  ["docs/microsoft-store.md", "https://github.com/shreyam1008/dbterm/blob/main/docs/microsoft-store.md"],
   ["LICENSE", "https://github.com/shreyam1008/dbterm/blob/main/LICENSE"],
   ["docs/user-guide.md", "https://dbterm.shreyam1008.com.np/guide.md"],
   ["docs/backup.md", "https://dbterm.shreyam1008.com.np/backup.md"],
