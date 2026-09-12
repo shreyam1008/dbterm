@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "2026-06-11",
+  "serverInfo": {
+    "name": "dbterm",
+    "title": "dbterm local database MCP server",
+    "version": "0.11.1",
+    "description": "Local STDIO MCP server for schema inspection, bounded read-only SQL, relationship navigation, and explicitly opted-in profile setup."
+  },
+  "publisher": { "name": "Shreyam Adhikari", "url": "https://shreyam1008.com.np/" },
+  "transports": [{ "type": "stdio", "command": "dbterm", "args": ["mcp", "serve"], "description": "Runs on the user's computer and never opens a network port." }],
+  "capabilities": {
+    "tools": ["list_connections", "inspect_database", "inspect_table", "query_read_only", "explain_query", "follow_record", "save_connection_profile"],
+    "readOnly": true,
+    "secrets": "stored credentials are write-only and are never returned"
+  },
+  "documentation": "https://dbterm.shreyam1008.com.np/agents/"
+}

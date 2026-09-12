@@ -1,0 +1,16 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "dbterm public discovery resources",
+    "version": "0.11.1",
+    "description": "Read-only documentation and discovery resources for dbterm. dbterm's database MCP server runs locally over STDIO; this site does not expose a hosted database API."
+  },
+  "servers": [{ "url": "https://dbterm.shreyam1008.com.np" }],
+  "paths": {
+    "/product.json": { "get": { "operationId": "getProductMetadata", "summary": "Get dbterm product metadata", "responses": { "200": { "description": "Product metadata", "content": { "application/json": { "schema": { "type": "object" } } } } } } },
+    "/llms.txt": { "get": { "operationId": "getLlmsIndex", "summary": "Get the agent-readable documentation index", "responses": { "200": { "description": "Markdown documentation index", "content": { "text/markdown": { "schema": { "type": "string" } } } } } } },
+    "/agents.md": { "get": { "operationId": "getAgentGuide", "summary": "Get local MCP setup and safety guidance", "responses": { "200": { "description": "Markdown guide", "content": { "text/markdown": { "schema": { "type": "string" } } } } } } },
+    "/.well-known/agent-skills/index.json": { "get": { "operationId": "getAgentSkills", "summary": "Get the Agent Skills index", "responses": { "200": { "description": "Agent Skills discovery index", "content": { "application/json": { "schema": { "type": "object" } } } } } } },
+    "/.well-known/mcp/server-card.json": { "get": { "operationId": "getMcpServerCard", "summary": "Get dbterm's local STDIO MCP card", "responses": { "200": { "description": "MCP Server Card", "content": { "application/json": { "schema": { "type": "object" } } } } } } }
+  }
+}

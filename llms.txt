@@ -27,6 +27,11 @@ Important scope: backup supports all five database targets; restore currently su
 
 - [Agent Skill discovery index](https://dbterm.shreyam1008.com.np/.well-known/agent-skills/index.json): Machine-readable index and digest for the public dbterm skill.
 - [Use dbterm Agent Skill](https://dbterm.shreyam1008.com.np/.well-known/agent-skills/use-dbterm/SKILL.md): Installable operating and safety instructions for agents using dbterm MCP.
+- [API catalog](https://dbterm.shreyam1008.com.np/.well-known/api-catalog): RFC 9727 linkset for the public documentation API.
+- [OpenAPI document](https://dbterm.shreyam1008.com.np/openapi.json): Read-only catalog of public documentation resources.
+- [ARD capability manifest](https://dbterm.shreyam1008.com.np/.well-known/ai-catalog.json): Agentic Resource Discovery entries for the skill, API catalog, and local STDIO MCP server.
+- [MCP Server Card](https://dbterm.shreyam1008.com.np/.well-known/mcp/server-card.json): Local `dbterm mcp serve` transport and read-only capabilities.
+- [Auth metadata](https://dbterm.shreyam1008.com.np/auth.md): Anonymous documentation-site boundary; dbterm has no hosted OAuth service.
 
 ## Optional
 

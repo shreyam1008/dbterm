@@ -78,12 +78,31 @@ scoop bucket add shreyam1008 https://github.com/shreyam1008/scoop-bucket
 scoop install dbterm
 ```
 
+### Debian / Ubuntu
+
+Stable releases include versioned amd64 and arm64 `.deb` artifacts. The signed
+APT repository is published from the same release artifacts; see the
+[distribution guide](https://github.com/shreyam1008/dbterm/blob/main/packaging/PACKAGING.md) for the repository key and install
+commands.
+
+### Snap candidate
+
+The release workflow also attaches `dbterm_<version>_amd64.snap`. It uses classic
+confinement so the terminal client can reach local database files, backup paths,
+and the user's local MCP STDIO process. Snap Store publication is a separate
+candidate/review step and is not presented as live until an anonymous listing
+check is recorded.
+
 ## Documentation
 
 - Website: <https://dbterm.shreyam1008.com.np/>
 - Complete feature map: <https://dbterm.shreyam1008.com.np/features/>
 - Complete user guide: <https://dbterm.shreyam1008.com.np/guide/> ([Markdown source](https://dbterm.shreyam1008.com.np/guide.md))
 - AI agent and MCP guide: <https://dbterm.shreyam1008.com.np/agents/>
+- Agent Skill index: <https://dbterm.shreyam1008.com.np/.well-known/agent-skills/index.json>
+- API catalog: <https://dbterm.shreyam1008.com.np/.well-known/api-catalog>
+- OpenAPI document: <https://dbterm.shreyam1008.com.np/openapi.json>
+- MCP Server Card: <https://dbterm.shreyam1008.com.np/.well-known/mcp/server-card.json>
 - Backup Center: <https://dbterm.shreyam1008.com.np/backup/>
 - Complete backup handbook: [docs/backup.md](https://dbterm.shreyam1008.com.np/backup.md)
 - Marketing, domain, and search plan: [docs/marketing-plan.md](https://github.com/shreyam1008/dbterm/blob/main/docs/marketing-plan.md)

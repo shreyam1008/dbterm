@@ -1,0 +1,11 @@
+{
+  "linkset": [
+    {
+      "anchor": "https://dbterm.shreyam1008.com.np/",
+      "service-desc": [{ "href": "https://dbterm.shreyam1008.com.np/openapi.json", "type": "application/openapi+json", "title": "dbterm public discovery resources" }],
+      "service-doc": [{ "href": "https://dbterm.shreyam1008.com.np/agents/", "type": "text/html", "title": "dbterm for AI agents" }],
+      "status": [{ "href": "https://dbterm.shreyam1008.com.np/.well-known/status.json", "type": "application/json", "title": "dbterm site status" }],
+      "alternate": [{ "href": "https://dbterm.shreyam1008.com.np/llms.txt", "type": "text/markdown", "title": "Agent-readable documentation index" }]
+    }
+  ]
+}
