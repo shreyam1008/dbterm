@@ -46,7 +46,8 @@ jobs:
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
           version="${TAG#v}"
           asset="dbterm_${version}_amd64.snap"
-          cp "${{ steps.snapcraft.outputs.snap }}" "$asset"
+          snap_path="${{ steps.snapcraft.outputs.snap }}"
+          if [[ "$snap_path" != "$asset" ]]; then cp "$snap_path" "$asset"; fi
           sha256sum "$asset" > "${asset}.sha256"
           gh release upload "$TAG" "$asset" "${asset}.sha256" --repo "$GITHUB_REPOSITORY" --clobber
 

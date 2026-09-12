@@ -17,7 +17,7 @@ parts:
     build-snaps:
       - go/1.26/stable
     override-build: |
-      version="$(awk -F'|' '!/^[[:space:]]*#/ && !/^[[:space:]]*$/ {gsub(/^[[:space:]]+|[[:space:]]+$/, \"\", $1); print $1; exit}' cmd/dbterm/releases.txt)"
+      version="$(awk -F'|' '!/^[[:space:]]*#/ && !/^[[:space:]]*$/ {gsub(/^[[:space:]]+|[[:space:]]+$/, "", $1); print $1; exit}' cmd/dbterm/releases.txt)"
       test -n "$version"
       craftctl set version="$version"
       mkdir -p "$CRAFT_PART_INSTALL/bin"
