@@ -10,6 +10,12 @@ License: MIT
 
 # dbterm
 
+Distribution checked 12 September 2026: GitHub downloads and signed APT are live.
+After [APT setup](https://github.com/shreyam1008/dbterm/blob/main/docs/apt-signing.md), run `sudo apt install dbterm`. Snap is a
+GitHub candidate; Snap Store and Flatpak are not published. Microsoft Store's
+package is validated, but screenshots/listing acceptance and submission remain.
+See the [shared publication status](https://shreyam1008.com.np/projects/#distribution-dbterm).
+
 **A keyboard-first terminal SQL client and database backup workbench for PostgreSQL, MySQL/MariaDB, SQLite, Turso, and Cloudflare D1.**
 
 [Official dbterm website](https://dbterm.shreyam1008.com.np/) · [Download dbterm](https://github.com/shreyam1008/dbterm/releases/latest) · [Getting started](https://dbterm.shreyam1008.com.np/guide/) · [Backup guide](https://dbterm.shreyam1008.com.np/backup/)
