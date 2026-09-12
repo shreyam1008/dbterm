@@ -1,5 +1,12 @@
 # dbterm distribution and promotion log
 
+## Personal Ubuntu publication checkpoint — 12 September 2026
+
+Exact Snap name `dbterm` is registered to `shreyam1008`. PR #17 merged after CI passed. The metadata-only corrected `dbterm_0.11.1_amd64-store1.snap` and its SHA-256/provenance receipts are attached to v0.11.1. Upload now awaits manual classic review; invalid app plugs no longer block review. No candidate/stable channel is public.
+
+The owner approved the Canonical requests, but separate forum authentication has not completed; do not claim a submitted topic. [Windows continuation](https://github.com/shreyam1008/buggy/blob/master/docs/projects/flagship-windows-handoff-2026-09-12.md). The Snap workflow selects the corrected asset for this exact release and verifies its receipt.
+
+
 Owner: Shreyam Adhikari (`@shreyam1008`)
 Canonical product URL: <https://dbterm.shreyam1008.com.np/>
 Repository: <https://github.com/shreyam1008/dbterm>

@@ -29,8 +29,15 @@ jobs:
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
           version="${TAG#v}"
           asset="dbterm_${version}_amd64.snap"
-          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$asset" --pattern checksums.txt
-          awk -v file="$asset" '$2 == file { print; found=1 } END { if (!found) exit 1 }' checksums.txt | sha256sum --strict --check -
+          # Original 0.11.1 has invalid classic app plugs; use verified metadata repair.
+          if [[ "$version" == "0.11.1" ]]; then asset="dbterm_${version}_amd64-store1.snap"; fi
+          if [[ "$version" == "0.11.1" ]]; then
+            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$asset" --pattern "${asset}.sha256"
+            sha256sum --strict --check "${asset}.sha256"
+          else
+            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$asset" --pattern checksums.txt
+            awk -v file="$asset" '$2 == file { print; found=1 } END { if (!found) exit 1 }' checksums.txt | sha256sum --strict --check -
+          fi
           echo "asset=$asset" >> "$GITHUB_OUTPUT"
       - name: Upload to candidate for installation testing
         uses: snapcore/action-publish@v1
