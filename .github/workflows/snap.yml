@@ -1,0 +1,56 @@
+name: Build and attach Snap
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Stable tag to build
+        required: true
+        default: v0.11.1
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dbterm-snap
+  cancel-in-progress: false
+
+jobs:
+  snap:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_ref || github.ref }}
+          fetch-depth: 0
+
+      - name: Build classic Snap candidate
+        id: snapcraft
+        uses: snapcore/action-build@v1
+        with:
+          snapcraft-args: --destructive-mode
+
+      - name: Attach Snap and checksum to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.source_ref || github.ref_name }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          version="${TAG#v}"
+          asset="dbterm_${version}_amd64.snap"
+          cp "${{ steps.snapcraft.outputs.snap }}" "$asset"
+          sha256sum "$asset" > "${asset}.sha256"
+          gh release upload "$TAG" "$asset" "${asset}.sha256" --repo "$GITHUB_REPOSITORY" --clobber
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: dbterm-snap
+          path: ${{ steps.snapcraft.outputs.snap }}
+          if-no-files-found: error

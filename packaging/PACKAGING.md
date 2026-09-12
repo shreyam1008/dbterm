@@ -1,7 +1,13 @@
 # dbterm — Packaging Guide
 
 Publisher: Shreyam Adhikari (shreyam1008@gmail.com)
-Current release: 0.8.0
+Current release: 0.11.1
+
+The release manifest in `cmd/dbterm/releases.txt` is the version source for the
+GitHub release, Debian packages, APT publication, and the classic Snap candidate.
+Adding a new first line automatically carries that version into the release
+workflow and Snap metadata; no package manifest version needs to be edited by
+hand.
 
 ---
 
@@ -16,7 +22,7 @@ Current release: 0.8.0
 
 ---
 
-## Publication status for v0.8.0
+## Publication status for v0.11.1
 
 | Ecosystem | Status |
 | --- | --- |
@@ -27,6 +33,35 @@ Current release: 0.8.0
 | Scoop | Published in [`shreyam1008/scoop-bucket`](https://github.com/shreyam1008/scoop-bucket) |
 | WinGet | [PR 418259](https://github.com/microsoft/winget-pkgs/pull/418259) for v0.6.4 passed validation and CLA; pending maintainer merge before a v0.8.0 update |
 | AUR | v0.8.0 prepared locally; publishing requires a configured AUR account and trusted SSH setup |
+| Snap Store | Classic Snap candidate is built in the release workflow; candidate/stable publication requires an authenticated Snap Store account and review |
+| Flatpak | Held for now; dbterm is a terminal-first client with local database drivers and no hosted GUI service |
+
+## Snap candidate
+
+`snap/snapcraft.yaml` builds `dbterm` from the release manifest and attaches
+`dbterm_<version>_amd64.snap` to each new GitHub release. Classic confinement is
+intentional: dbterm needs the user's local database files, optional database
+clients, backup destinations, and local STDIO MCP process. The package does not
+claim a hosted API or a remote agent endpoint.
+
+Build and inspect a candidate locally on Ubuntu:
+
+```sh
+snapcraft --destructive-mode
+snap install --dangerous ./dbterm_0.11.1_amd64.snap
+dbterm --version
+```
+
+After installation and removal have been tested, run the manual
+`Publish verified Snap artifact` workflow. It verifies the GitHub checksum and
+uploads the exact artifact to the `candidate` channel using the
+`SNAPCRAFT_STORE_CREDENTIALS` secret. Promote to `stable` only after the
+maintainer has reviewed the confined terminal and backup behavior.
+
+Flatpak remains a later option. A useful strict-sandbox build would need a
+separately designed portal/host-helper boundary for database sockets, backup
+paths, and the local MCP STDIO process; publishing a thin wrapper would be
+misleading.
 
 ---
 

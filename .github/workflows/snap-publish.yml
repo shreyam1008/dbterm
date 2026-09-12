@@ -1,0 +1,41 @@
+name: Publish verified Snap artifact
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Stable release tag containing the Snap artifact
+        required: true
+        default: v0.11.1
+
+permissions:
+  contents: read
+
+concurrency:
+  group: snap-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download and verify release artifact
+        id: meta
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          version="${TAG#v}"
+          asset="dbterm_${version}_amd64.snap"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$asset" --pattern checksums.txt
+          awk -v file="$asset" '$2 == file { print; found=1 } END { if (!found) exit 1 }' checksums.txt | sha256sum --strict --check -
+          echo "asset=$asset" >> "$GITHUB_OUTPUT"
+      - name: Upload to candidate for installation testing
+        uses: snapcore/action-publish@v1
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        with:
+          snap: ${{ steps.meta.outputs.asset }}
+          release: candidate

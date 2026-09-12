@@ -1,2 +1,31 @@
 /apt/dists/*
   Cache-Control: public, max-age=0, must-revalidate
+
+/*
+  X-Content-Type-Options: nosniff
+  Content-Signal: search=yes, ai-input=yes, ai-train=yes, use=full
+  Link: </.well-known/api-catalog>; rel="api-catalog"; type="application/linkset+json", </openapi.json>; rel="service-desc"; type="application/openapi+json", </llms.txt>; rel="service-doc"; type="text/markdown", </.well-known/agent-skills/index.json>; rel="service-desc"; type="application/json", </.well-known/mcp/server-card.json>; rel="service-desc"; type="application/json", </.well-known/ai-catalog.json>; rel="ai-catalog"; type="application/json"
+
+/robots.txt
+  Content-Type: text/plain; charset=utf-8
+
+/llms.txt
+  Content-Type: text/markdown; charset=utf-8
+
+/openapi.json
+  Content-Type: application/openapi+json; charset=utf-8
+
+/.well-known/api-catalog
+  Access-Control-Allow-Origin: *
+  Content-Type: application/linkset+json; charset=utf-8
+
+/.well-known/ai-catalog.json
+  Access-Control-Allow-Origin: *
+  Content-Type: application/json; charset=utf-8
+
+/.well-known/mcp/server-card.json
+  Access-Control-Allow-Origin: *
+  Content-Type: application/json; charset=utf-8
+
+/.well-known/status.json
+  Content-Type: application/json; charset=utf-8

@@ -1,0 +1,36 @@
+name: dbterm
+base: core24
+adopt-info: dbterm
+summary: Keyboard-first terminal database workbench
+description: |
+  dbterm is a keyboard-first terminal client for PostgreSQL, MySQL/MariaDB,
+  SQLite, Turso and Cloudflare D1. It also provides guarded local and remote
+  backup workflows and a read-only MCP server over local STDIO.
+grade: stable
+confinement: classic
+license: MIT
+
+parts:
+  dbterm:
+    plugin: nil
+    source: .
+    build-snaps:
+      - go/1.26/stable
+    override-build: |
+      version="$(awk -F'|' '!/^[[:space:]]*#/ && !/^[[:space:]]*$/ {gsub(/^[[:space:]]+|[[:space:]]+$/, \"\", $1); print $1; exit}' cmd/dbterm/releases.txt)"
+      test -n "$version"
+      craftctl set version="$version"
+      mkdir -p "$CRAFT_PART_INSTALL/bin"
+      CGO_ENABLED=0 go build -trimpath -buildvcs=false \
+        -ldflags="-s -w -buildid= -X main.version=$version" \
+        -o "$CRAFT_PART_INSTALL/bin/dbterm" ./cmd/dbterm
+      install -Dm644 LICENSE "$CRAFT_PART_INSTALL/usr/share/doc/dbterm/copyright"
+      install -Dm644 README.md "$CRAFT_PART_INSTALL/usr/share/doc/dbterm/README.md"
+
+apps:
+  dbterm:
+    command: bin/dbterm
+    plugs:
+      - home
+      - network
+      - removable-media

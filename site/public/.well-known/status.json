@@ -1,0 +1,7 @@
+{
+  "service": "dbterm public documentation",
+  "status": "operational",
+  "version": "0.11.1",
+  "updated": "2026-09-12",
+  "scope": "static discovery resources; database access remains local to the user's dbterm process"
+}

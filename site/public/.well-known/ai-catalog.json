@@ -1,0 +1,30 @@
+{
+  "specVersion": "1.0",
+  "host": { "displayName": "dbterm", "identifier": "https://dbterm.shreyam1008.com.np/" },
+  "entries": [
+    {
+      "identifier": "urn:air:dbterm.shreyam1008.com.np:skill:use-dbterm",
+      "displayName": "Use dbterm Agent Skill",
+      "type": "application/ai-skill",
+      "url": "https://dbterm.shreyam1008.com.np/.well-known/agent-skills/use-dbterm/SKILL.md",
+      "description": "Safe setup and read-only operating instructions for dbterm's local MCP server.",
+      "representativeQueries": ["set up dbterm for an MCP client", "inspect a database safely with dbterm"]
+    },
+    {
+      "identifier": "urn:air:dbterm.shreyam1008.com.np:api:public-discovery",
+      "displayName": "dbterm public discovery resources",
+      "type": "application/openapi+json",
+      "url": "https://dbterm.shreyam1008.com.np/openapi.json",
+      "description": "OpenAPI description for public documentation and discovery files. It does not expose database queries.",
+      "representativeQueries": ["find dbterm's public machine-readable resources", "read the dbterm agent guide"]
+    },
+    {
+      "identifier": "urn:air:dbterm.shreyam1008.com.np:mcp:local-stdio",
+      "displayName": "dbterm local MCP server",
+      "type": "application/mcp-server-card+json",
+      "url": "https://dbterm.shreyam1008.com.np/.well-known/mcp/server-card.json",
+      "description": "A local STDIO MCP server for bounded, read-only database inspection; no hosted endpoint is advertised.",
+      "representativeQueries": ["connect an agent to dbterm", "what database operations does dbterm expose"]
+    }
+  ]
+}

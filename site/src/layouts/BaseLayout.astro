@@ -97,6 +97,10 @@ const jsonLdBlocks = Array.isArray(jsonLd) ? jsonLd : jsonLd ? [jsonLd] : [];
     <link rel="me" href="https://github.com/shreyam1008" />
     <link rel="manifest" href={withBase("/manifest.webmanifest")} />
     <link rel="sitemap" type="application/xml" href={withBase("/sitemap.xml")} />
+    <link rel="api-catalog" type="application/linkset+json" href={withBase("/.well-known/api-catalog")} />
+    <link rel="service-desc" type="application/openapi+json" href={withBase("/openapi.json")} />
+    <link rel="ai-catalog" type="application/json" href={withBase("/.well-known/ai-catalog.json")} />
+    <link rel="service-doc" type="text/markdown" href={withBase("/llms.txt")} />
     {markdownAlternate && <link rel="alternate" type="text/markdown" href={markdownAlternate} title={`${title} in Markdown`} />}
     <link rel="describedby" type="text/plain" href={withBase("/llms.txt")} title="dbterm agent-readable documentation index" />
     <link rel="preload" href={manropeLatinUrl} as="font" type="font/woff2" crossorigin />
@@ -261,6 +265,50 @@ const jsonLdBlocks = Array.isArray(jsonLd) ? jsonLd : jsonLd ? [jsonLd] : [];
           }, 1600);
         });
       });
+
+      // WebMCP is deliberately read-only. The website can describe the local
+      // STDIO integration and open public documentation, but it cannot access
+      // a database or receive credentials in the browser.
+      (() => {
+        const context = navigator.modelContext;
+        if (!context?.registerTool && !context?.provideContext) return;
+        const origin = window.location.origin;
+        const tools = [
+          {
+            name: "get_dbterm_release",
+            description: "Return the current public dbterm release and its GitHub release URL.",
+            inputSchema: { type: "object", properties: {}, additionalProperties: false },
+            execute: () => ({ version: "0.11.1", name: "Ganga", url: "https://github.com/shreyam1008/dbterm/releases/tag/v0.11.1" })
+          },
+          {
+            name: "open_dbterm_resource",
+            description: "Open a public dbterm documentation or discovery resource.",
+            inputSchema: {
+              type: "object",
+              properties: { resource: { type: "string", enum: ["guide", "backup", "agents", "llms", "skills", "apiCatalog", "openapi"] } },
+              required: ["resource"],
+              additionalProperties: false
+            },
+            execute: (input = {}) => {
+              const paths = {
+                guide: "/guide/", backup: "/backup/", agents: "/agents/", llms: "/llms.txt",
+                skills: "/.well-known/agent-skills/index.json", apiCatalog: "/.well-known/api-catalog", openapi: "/openapi.json"
+              };
+              const url = origin + (paths[String(input.resource || "guide")] || paths.guide);
+              window.open(url, "_blank", "noopener,noreferrer");
+              return { url };
+            }
+          }
+        ];
+        if (context.registerTool) {
+          const controller = new AbortController();
+          window.addEventListener("pagehide", () => controller.abort(), { once: true });
+          tools.forEach((tool) => {
+            try { void context.registerTool(tool, { signal: controller.signal }); } catch {}
+          });
+        }
+        if (context.provideContext) void context.provideContext({ tools });
+      })();
     </script>
   </body>
 </html>
