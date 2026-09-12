@@ -146,8 +146,6 @@ jobs:
       - name: Build classic Snap candidate
         id: snapcraft
         uses: snapcore/action-build@v1
-        with:
-          snapcraft-args: --destructive-mode
 
       - name: Upload Snap artifact
         uses: actions/upload-artifact@v7
