@@ -30,7 +30,3 @@ parts:
 apps:
   dbterm:
     command: bin/dbterm
-    plugs:
-      - home
-      - network
-      - removable-media
