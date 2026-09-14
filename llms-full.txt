@@ -1,6 +1,6 @@
 # dbterm — complete product and operating documentation
 
-> Canonical full-text context for dbterm v0.11.1 “Ganga”, generated from the repository's human manuals. dbterm is a keyboard-first local database workbench and native backup agent created by Shreyam Adhikari (shreyam1008).
+> Canonical full-text context for dbterm v0.11.2 “Ganga”, generated from the repository's human manuals. dbterm is a keyboard-first local database workbench and native backup agent created by Shreyam Adhikari (shreyam1008).
 
 Canonical website: https://dbterm.shreyam1008.com.np/
 Source: https://github.com/shreyam1008/dbterm
@@ -235,6 +235,8 @@ Press `Alt+W`, then `N`, to create a named before/after anchor. The review scree
 The portable engine works across every supported database without installing triggers or server objects. It streams rows, compares stable-key hashes, and adaptively compresses exact before-values in the private local profiler store. PostgreSQL/MySQL use a consistent repeatable-read snapshot, SQLite/Turso use a transaction, and Cloudflare D1 is reported as best-effort. Database-native WAL/binlog capture is intentionally not enabled automatically because it requires engine-specific privileges/configuration and can retain server logs when a consumer stops.
 
 ## Backup Center
+
+Backup Center keeps recovery evidence and copy health visible beside its plans. `H` opens searchable combined Activity; `L` opens filterable, following agent logs. Creation forms start with the essentials, offer **Browse…** beside local folders, and group advanced options under `F4`, including configurable generation retries. See the [complete backup guide](https://dbterm.shreyam1008.com.np/backup.md).
 
 For a one-off backup, press `Alt+B` from Tables, Query, or Results; use `F2` for the native folder chooser or type an absolute local/OS-mounted path. `F3` refreshes destination and private-staging capacity. For durable jobs, press `B` on Dashboard or `Alt+K` anywhere. `N` then chooses an existing saved database or lets you add one; `Ctrl+N` adds another database from the plan form. `Ctrl+B` on a highlighted Dashboard connection starts with it preselected.
 
@@ -555,7 +557,7 @@ Update to the newest release or a specific version:
 
 ```bash
 dbterm --update
-dbterm --update 0.11.1
+dbterm --update 0.11.2
 ```
 
 The Dashboard `U` action opens the same Version & Update workflow. Updates verify the release checksum and replace only the executable. Saved connections, settings, query history, backup plans and history, completed artifacts, and Change Profiler anchors remain in the invoking user's profile. If a system-owned binary needs elevation, `sudo dbterm --update` preserves the invoking user's data rather than switching to a root profile.
@@ -814,6 +816,8 @@ Press `Alt+B` from Tables, Query, or Results. Choose an absolute local or OS-mou
 The portable `.dbterm.json` sidecar is the completion signal for independent copy jobs. It records a stable artifact/run/job identity, producer, UTC creation time, engine and format, exact byte size, SHA-256, verification state, file-set summary, and warnings. It excludes credentials and connection strings. A filename or modification time alone is never proof that a recovery point is complete.
 
 ### Durable plans
+
+The selected plan panel shows local recovery evidence, copy health, schedule and policy. `Tab` focuses its scrollable details. `H` opens combined Activity with search and a failure filter; `L` opens agent logs with filtering and follow. Creation forms provide **Browse…** for desktop folder selection and keep paths editable for headless use. `F4` opens one advanced category at a time, including retries and timeout. Database plans default to one attempt; enable additional attempts explicitly. The [backup guide](https://dbterm.shreyam1008.com.np/backup.md) explains retry limits and available controls.
 
 Open Backup Center with `Alt+K` or Dashboard `B`. Press `N` to select a saved database or add one; Dashboard `Ctrl+B` starts with its highlighted connection, and `Ctrl+N` adds another connection from inside the plan form.
 
@@ -1178,7 +1182,7 @@ Report vulnerabilities privately through the repository's [security advisory flo
 
 ## Current release and change history
 
-This manual targets dbterm **v0.11.1 “Ganga”**. It adds portable backup manifests, guarded database-and-file bundles, verified local and pinned-SFTP push/pull copies, rclone-to-local pull, multiple daily schedule times, managed vault volumes, copy alerts, and guarded inspection or restore from copied recovery points.
+This manual targets dbterm **v0.11.2 “Ganga”**. Backup Center adds focused creation forms, desktop folder browsing, searchable combined activity, filterable agent logs with follow, and configurable transient generation retries. The detailed recovery overview, independent verified copies and guarded restore remain available. Windows backup-agent registration uses a correctly encoded task definition.
 
 Run `dbterm --version` for the installed build and open Dashboard `U` for its release notes and checksum-verified updater. The repository's [release manifest](https://github.com/shreyam1008/dbterm/blob/main/cmd/dbterm/releases.txt) is the version source used by builds, while [GitHub Releases](https://github.com/shreyam1008/dbterm/releases) provides immutable artifacts, checksums, and historical notes. When an installed version differs from this page, prefer that binary's `--help`, `backup --help`, and offline Guide for exact accepted flags.
 
@@ -1220,6 +1224,62 @@ dbterm uses one binary and one lightweight backup agent per local catalog. A
 producer creates a database recovery artifact. A copy job then moves an already
 completed artifact to another local directory, an SFTP vault, or from an rclone
 source into a local vault. Backup and copy runs have separate history and health.
+
+## Backup Center overview and troubleshooting
+
+Creating a plan starts with the database, destination folder, and schedule.
+**More options** (`F4`) opens one category at a time: name/timing, retention,
+compression/encryption, retries, or email. `Back` returns to the main form and
+keeps all edits. Instant Backup starts with the database, folder, and filename;
+**Details** (`F4`) reveals its format and storage information. Click **Browse…**
+beside a folder, or tab from the path to Browse and press Enter, to select it in
+the system folder chooser. This also works for local copy sources/destinations,
+volume mount points, and included application folders. `F2` opens the chooser;
+in copy forms it uses the focused folder, or the route's local destination/source.
+`F3` checks available storage in backup creation forms. Paths remain editable
+for typing or pasting, including over SSH without a desktop. Canceling the
+chooser keeps the current path. Opening or canceling a creation form does not
+create a destination folder or run a backup.
+
+Backup and copy completion dialogs show a compact result with **Details** and
+**Done**. Details opens the full scrollable paths, checksums, warnings, or failure
+diagnostics, so long paths cannot push the closing action off-screen.
+
+Open Backup Center with `B` on Dashboard or `Alt+K`. The overview separates backup
+and copy attention counts and shows the agent, current work, next run and last
+recorded verified backup. The selected plan panel keeps recovery evidence, copy
+health, schedule, destination and policies visible. `Tab` focuses its scrollable
+details; `Esc` returns to the plan list.
+
+- `H` opens combined Activity, newest first, bounded to the latest 250 backup
+  runs and 250 copy runs. `/` filters by job name, job/run ID, status, or error
+  text. `F` switches to failed/canceled runs, and `F5` reloads the catalog.
+- `Enter` opens scrollable run details. `R` starts a new run of the selected
+  job's **current saved configuration**. It does not replay historical settings,
+  resume a partial database dump, or automatically restore anything.
+- `L` opens the agent's bounded log tail directly. `/` filters its text, `F`
+  toggles follow every two seconds, `R` refreshes, `C` copies the filtered text,
+  and `P` copies log paths. Scrolling upward pauses follow. `Esc` returns to the
+  invoking view. These are agent logs, not a complete per-run log archive;
+  manual runs still expose their results and generation attempts in Activity.
+
+### Retry controls
+
+Backup plans expose **Max Attempts**, **Initial Retry Seconds**, and **Maximum
+Retry Seconds** under More options (`F4`) → **Retries & timeout**. Copy jobs expose the same fields in
+their editor. Attempts include the first try: `1` disables automatic retries.
+Copy jobs default to three attempts. Existing and new database plans default to
+one attempt until explicitly changed, preserving the existing execution policy.
+
+Database generation retries recognize a conservative set of transient errors,
+including connection resets/refusals and a busy/locked SQLite database. They use
+capped exponential backoff with jitter. All attempts and delays share the
+original run timeout and job lease. Authentication/configuration errors,
+cancellation, disk-full errors, and failures after publication starts are not
+automatically retried. Each terminal generation run records attempt times,
+phases, and redacted errors in its existing catalog record; old or interrupted
+runs may have no attempt details. Retention, notifications, and after-success
+copies run after generation is resolved, not once for every generation attempt.
 
 ## Protection boundary
 
@@ -1321,10 +1381,15 @@ Main Backup Center:
 | `N` | Create a backup plan |
 | `C` | Open independent copy jobs |
 | `Enter` | Open actions for the selected plan |
+| `Tab` | Focus scrollable selected-plan details |
+| `E` | Edit the selected plan |
 | `R` | Run the selected backup now |
 | `I` | Inspect a local backup and enter guarded restore |
 | `H` | Open backup activity/history |
 | `A` | Inspect or manage the native agent/service |
+| `L` | Read, filter or follow agent logs |
+| `G` | Generate an age recovery identity |
+| `F5` | Refresh the plan list and status snapshot |
 | `Space` | Pause or resume a timed backup plan |
 
 Selected-plan actions include editing the plan, running it, viewing activity,
@@ -2389,6 +2454,7 @@ dbterm handles database credentials and backup artifacts locally. Before sharing
 # 5) If that tag already exists, the workflow skips release creation safely.
 #
 # Newest entry first:
+0.11.2|Ganga|Improve Backup Center with focused creation forms and desktop folder browsing, combined searchable activity, following agent logs, configurable transient generation retries, visible recovery details, and reliable Windows backup-agent task registration.
 0.11.1|Ganga|Protect Microsoft Store installations from self-update, self-uninstall and version-bound backup service registration; add verified MSIX packaging and release automation.
 0.11.0|Ganga|Portable backup manifests, guarded application-file bundles, verified local and SFTP push/pull copies, multi-time scheduling, managed volumes, and remote recovery inspection.
 0.10.1|Parvati|Resizable Tables sidebar and object-only type-ahead with direct keyboard navigation across matching tables, views, and database objects.

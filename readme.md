@@ -226,6 +226,8 @@ The portable engine works across every supported database without installing tri
 
 ## Backup Center
 
+Backup Center keeps recovery evidence and copy health visible beside its plans. `H` opens searchable combined Activity; `L` opens filterable, following agent logs. Creation forms start with the essentials, offer **Browse…** beside local folders, and group advanced options under `F4`, including configurable generation retries. See the [complete backup guide](https://dbterm.shreyam1008.com.np/backup.md).
+
 For a one-off backup, press `Alt+B` from Tables, Query, or Results; use `F2` for the native folder chooser or type an absolute local/OS-mounted path. `F3` refreshes destination and private-staging capacity. For durable jobs, press `B` on Dashboard or `Alt+K` anywhere. `N` then chooses an existing saved database or lets you add one; `Ctrl+N` adds another database from the plan form. `Ctrl+B` on a highlighted Dashboard connection starts with it preselected.
 
 A backup job creates a full engine-native database recovery point by default. dbterm does not silently configure database-native incremental backup, WAL/binlog archiving, or point-in-time recovery. Copy jobs can transfer only the completed artifacts that a destination is missing, which saves network work but does not turn those full snapshots into incremental database backups.
