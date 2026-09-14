@@ -12,7 +12,7 @@ func TestLinuxPickerCandidatesDetectsHeadlessSession(t *testing.T) {
 	_, err := linuxPickerCandidates("", func(string) string { return "" }, func(name string) (string, error) {
 		return "/usr/bin/" + name, nil
 	})
-	if !errors.Is(err, ErrUnavailable) || !strings.Contains(err.Error(), "type the destination") {
+	if !errors.Is(err, ErrUnavailable) || !strings.Contains(err.Error(), "type the folder path") {
 		t.Fatalf("error = %v, want friendly headless error", err)
 	}
 }
