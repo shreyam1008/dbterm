@@ -8,6 +8,93 @@ producer creates a database recovery artifact. A copy job then moves an already
 completed artifact to another local directory, an SFTP vault, or from an rclone
 source into a local vault. Backup and copy runs have separate history and health.
 
+## Find the right action
+
+Open Backup Center with `B` on Dashboard or `Alt+K`. The home screen keeps the
+plan name, latest result, schedule and destination close together. A compact
+toolbar exposes **New backup**, **Copies**, **Activity**, and **Tools**.
+Actionable warnings stay visible; detailed status and policies open separately.
+Plain-text labels work without an icon font.
+
+| What you want to do | Where to go |
+| --- | --- |
+| Create a full database backup plan | **New backup** (`N`) |
+| Run a saved plan now | Select the plan, then `R` or **Enter > Run backup now** |
+| Change timing, destination or advanced settings | **Enter > Edit settings** (`E`) |
+| Review paths, local evidence, copy health and policies | **Enter > Recovery details**, `V`, or `Tab` |
+| Bundle documents or photos with the database | **Enter > Included folders** |
+| Pause a timed plan or clean old backups | Open the plan with `Enter` |
+| Keep another local or remote recovery copy | **Copies** (`C`); open a copy for its actions |
+| Inspect a backup file or perform a guarded restore | **Tools > Inspect or restore** (`I`) |
+| Run schedules after the UI closes | **Tools > Backup agent** (`A`) |
+| Review backup/copy results and retry attempts | **Activity** (`H`) |
+| Read or follow the agent log | **Tools > Agent logs** (`L`) |
+| Check overall health, current work and the next run | **Tools > Status overview** |
+| Create an age recovery identity | **Tools > Encryption keys** (`G`) |
+| Learn the capabilities and shortcuts in the terminal | **Tools > What can Backup Center do?** |
+
+`Enter` opens a short plan or copy menu; only the highlighted action shows its
+explanation. `Esc` returns to the list. In the copy list, `E` opens the editor,
+`V` or `Tab` opens full details, and `Enter` opens the copy's action menu.
+Existing direct shortcuts remain available. `F5` refreshes either list.
+
+Home and copy views fit a bounded workspace on large terminals and reflow down
+to 80×24. Long paths and recovery evidence remain available in scrollable
+Details. **Tools > Status overview** retains separate backup/copy attention
+counts, the last recorded verified backup, agent activity and the next timed job.
+
+## Create a backup
+
+Creating a plan starts with the database, destination folder, and schedule.
+**More options** (`F4`) opens one category at a time: name/timing, retention,
+compression/encryption, retries, or email. `Back` returns to the main form and
+keeps all edits. Instant Backup starts with the database, folder, and filename;
+**Details** (`F4`) reveals its format and storage information. Click **Browse…**
+beside a folder, or tab from the path to Browse and press Enter, to select it in
+the system folder chooser. This also works for local copy sources/destinations,
+volume mount points, and included application folders. `F2` opens the chooser;
+in copy forms it uses the focused folder, or the route's local destination/source.
+`F3` checks available storage in backup creation forms. Paths remain editable
+for typing or pasting, including over SSH without a desktop. Canceling the
+chooser keeps the current path. Opening or canceling a creation form does not
+create a destination folder or run a backup.
+
+Backup and copy completion dialogs show a compact result with **Details** and
+**Done**. Details opens the full scrollable paths, checksums, warnings, or failure
+diagnostics, so long paths cannot push the closing action off-screen.
+
+## Activity and troubleshooting
+
+- `H` opens combined Activity, newest first, bounded to the latest 250 backup
+  runs and 250 copy runs. `/` filters by job name, job/run ID, status, or error
+  text. `F` switches to failed/canceled runs, and `F5` reloads the catalog.
+- `Enter` opens scrollable run details. `R` starts a new run of the selected
+  job's **current saved configuration**. It does not replay historical settings,
+  resume a partial database dump, or automatically restore anything.
+- `L` opens the agent's bounded log tail directly. `/` filters its text, `F`
+  toggles follow every two seconds, `R` refreshes, `C` copies the filtered text,
+  and `P` copies log paths. Scrolling upward pauses follow. `Esc` returns to the
+  invoking view. These are agent logs, not a complete per-run log archive;
+  manual runs still expose their results and generation attempts in Activity.
+
+### Retry controls
+
+Backup plans expose **Max Attempts**, **Initial Retry Seconds**, and **Maximum
+Retry Seconds** under More options (`F4`) → **Retries & timeout**. Copy jobs expose the same fields in
+their editor. Attempts include the first try: `1` disables automatic retries.
+Copy jobs default to three attempts. Existing and new database plans default to
+one attempt until explicitly changed, preserving the existing execution policy.
+
+Database generation retries recognize a conservative set of transient errors,
+including connection resets/refusals and a busy/locked SQLite database. They use
+capped exponential backoff with jitter. All attempts and delays share the
+original run timeout and job lease. Authentication/configuration errors,
+cancellation, disk-full errors, and failures after publication starts are not
+automatically retried. Each terminal generation run records attempt times,
+phases, and redacted errors in its existing catalog record; old or interrupted
+runs may have no attempt details. Retention, notifications, and after-success
+copies run after generation is resolved, not once for every generation attempt.
+
 ## Protection boundary
 
 dbterm currently creates a **full database backup on every backup run**. It does
@@ -108,10 +195,16 @@ Main Backup Center:
 | `N` | Create a backup plan |
 | `C` | Open independent copy jobs |
 | `Enter` | Open actions for the selected plan |
+| `V` / `Tab` | Open full recovery details |
+| `?` | Open Tools and the in-app capability guide |
+| `E` | Edit the selected plan |
 | `R` | Run the selected backup now |
 | `I` | Inspect a local backup and enter guarded restore |
 | `H` | Open backup activity/history |
 | `A` | Inspect or manage the native agent/service |
+| `L` | Read, filter or follow agent logs |
+| `G` | Generate an age recovery identity |
+| `F5` | Refresh the plan list and status snapshot |
 | `Space` | Pause or resume a timed backup plan |
 
 Selected-plan actions include editing the plan, running it, viewing activity,
@@ -123,7 +216,10 @@ Copies view:
 | Key | Action |
 | --- | --- |
 | `N` | Add a supported copy topology |
-| `Enter` / `E` | Edit a topology supported by the wizard |
+| `Enter` / `?` | Open the selected copy's action menu |
+| `E` | Edit a topology supported by the wizard |
+| `V` / `Tab` | Open full copy details, proof, lag and volume evidence |
+| `F5` | Refresh copy status |
 | `T` | Run a non-destructive endpoint test |
 | `R` | Run the copy and measure real end-to-end throughput |
 | `I` | Choose a recorded recovery point, then stage, verify, inspect, or restore it |

@@ -35,6 +35,8 @@ Important scope: backup supports all five database targets; restore currently su
 
 ## Optional
 
+- [Navigable backup handbook](https://dbterm.shreyam1008.com.np/backup-guide/): Capability map, workflows, desktop/headless forms, retries, logs and recovery details, including the upcoming navigation redesign.
+
 - [Human documentation](https://dbterm.shreyam1008.com.np/guide/): Styled, navigable HTML version of the complete user guide.
 - [Feature map](https://dbterm.shreyam1008.com.np/features/): Visual product feature tour.
 - [Database tool comparison](https://dbterm.shreyam1008.com.np/compare/): Factual scope comparison with desktop and terminal alternatives.
