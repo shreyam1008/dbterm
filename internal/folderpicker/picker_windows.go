@@ -11,7 +11,7 @@ import (
 
 const powershellFolderPicker = `Add-Type -AssemblyName System.Windows.Forms
 $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
-$dialog.Description = 'Choose backup destination'
+$dialog.Description = 'Choose a folder'
 $dialog.ShowNewFolderButton = $true
 $initial = [Environment]::GetEnvironmentVariable('DBTERM_FOLDER_PICKER_START')
 if ($initial -and [System.IO.Directory]::Exists($initial)) { $dialog.SelectedPath = $initial }
@@ -37,7 +37,7 @@ func Choose(ctx context.Context, initialFolder string) (string, error) {
 		})
 	}
 	if len(candidates) == 0 {
-		return "", fmt.Errorf("%w: PowerShell was not found; type the destination path", ErrUnavailable)
+		return "", fmt.Errorf("%w: PowerShell was not found; type the folder path", ErrUnavailable)
 	}
 	return executePicker(ctx, candidates)
 }

@@ -115,32 +115,10 @@ func (a *App) showBackupCenter() {
 		}
 	}
 
-	header := tview.NewTextView().SetDynamicColors(true).SetTextAlign(tview.AlignCenter)
+	header := tview.NewTextView().SetDynamicColors(true).SetWrap(false)
 	header.SetBackgroundColor(bg)
-	enabled := 0
-	for _, job := range jobs {
-		if job.Enabled && job.Schedule.Kind != backupcore.ScheduleManual {
-			enabled++
-		}
-	}
-	agentLabel := "[#6c7086]agent off[-]"
-	agentHealthy := false
-	if status, statusErr := backupcore.AgentHealth(context.Background(), a.backupStore, time.Now()); statusErr == nil && status.Healthy {
-		agentHealthy = true
-		agentLabel = "[green]agent ready[-]"
-		if status.Activity != nil && strings.TrimSpace(status.Activity.JobName) != "" {
-			agentLabel = "[yellow]backup running[-]"
-		}
-	}
-	automation := backupAutomationStatus(len(jobs), enabled, agentHealthy)
-	lastRun := "never"
-	if len(runs) > 0 {
-		lastRun = backupRunSummary(runs[0])
-	}
-	header.SetText(fmt.Sprintf(
-		"\n[::b][#cba6f7]%s Backups[-][-]  %s\n[#a6adc8]%d plans  │  %s  │  %d scheduled  │  last %s  │  %s[-]",
-		iconBackup, automation, len(jobs), copyJobCountLabel(len(copyJobs)), enabled, tview.Escape(lastRun), agentLabel,
-	))
+	status, _ := backupcore.AgentHealth(context.Background(), a.backupStore, time.Now())
+	header.SetText(backupOverviewText(jobs, latest, latestVerified, copyJobs, latestCopies, status, time.Now()))
 
 	list := tview.NewList().ShowSecondaryText(true)
 	list.SetBorder(true).SetTitle(fmt.Sprintf(" %s Backup Plans (%d) ", iconBackup, len(jobs))).SetBorderColor(surface1).SetTitleColor(mauve)
@@ -175,7 +153,7 @@ func (a *App) showBackupCenter() {
 		}
 	}
 
-	detail := tview.NewTextView().SetDynamicColors(true).SetWrap(false)
+	detail := tview.NewTextView().SetDynamicColors(true).SetWrap(true).SetScrollable(true)
 	detail.SetBorder(true).SetTitle(" Selected Backup ").SetTitleColor(mauve).SetBorderColor(surface1).SetBackgroundColor(mantle)
 	updateDetail := func(index int) {
 		if index < 0 || index >= len(jobs) {
@@ -184,6 +162,7 @@ func (a *App) showBackupCenter() {
 			return
 		}
 		job := jobs[index]
+		detail.ScrollToBeginning()
 		detail.SetTitle(" Selected Backup ")
 		next := "manual only"
 		if job.Schedule.Kind != backupcore.ScheduleManual && !job.Enabled {
@@ -203,11 +182,12 @@ func (a *App) showBackupCenter() {
 		copyTopology := backupCopyTopologySummary(copyJobs, job.ID)
 		copyHealth := backupCopyHealthSummary(copyJobs, latestCopies, job.ID, time.Now())
 		detail.SetText(fmt.Sprintf(
-			" [#89b4fa]DATABASE[-]   %s\n [#89b4fa]CONTENT[-]    %s\n [#89b4fa]WHEN[-]       %s  │  next %s\n [#89b4fa]SAVE TO[-]    %s\n [#89b4fa]LOCAL BACKUP[-] %s\n [#89b4fa]LOCAL CHECK[-]  %s\n [#89b4fa]COPY JOBS[-]    %s\n [#89b4fa]COPY HEALTH[-]  %s\n [#89b4fa]LAST[-]       %s\n [#89b4fa]POLICY[-]     keep %s  │  %s  │  %s",
-			tview.Escape(backupJobConnectionDetail(a.store.Connections, job.ConnectionID)),
-			tview.Escape(backupPayloadLabel(job)), tview.Escape(backupScheduleLabel(job.Schedule)), tview.Escape(next), tview.Escape(job.Destination), protection, localEvidence, tview.Escape(copyTopology), tview.Escape(copyHealth), tview.Escape(last),
+			" [#89b4fa]LOCAL BACKUP[-] %s\n [#89b4fa]LOCAL CHECK[-]  %s\n [#89b4fa]COPY JOBS[-]    %s\n [#89b4fa]COPY HEALTH[-]  %s\n [#89b4fa]LAST[-]       %s\n [#89b4fa]WHEN[-]       %s  │  next %s\n [#89b4fa]DATABASE[-]   %s\n [#89b4fa]CONTENT[-]    %s\n [#89b4fa]SAVE TO[-]    %s\n [#89b4fa]POLICY[-]     keep %s  │  %s  │  %s",
+			protection, localEvidence, tview.Escape(copyTopology), tview.Escape(copyHealth), tview.Escape(last), tview.Escape(backupScheduleLabel(job.Schedule)), tview.Escape(next),
+			tview.Escape(backupJobConnectionDetail(a.store.Connections, job.ConnectionID)), tview.Escape(backupPayloadLabel(job)), tview.Escape(job.Destination),
 			tview.Escape(backupRetentionSummary(job.Retention)), tview.Escape(string(job.Compression)), encryption,
 		))
+		detail.SetText(detail.GetText(false) + "\n [#89b4fa]RETRIES[-]    " + backupRetryPolicyLabel(job.MaxAttempts))
 	}
 	list.SetChangedFunc(func(index int, _, _ string, _ rune) {
 		if index >= 0 && index < len(jobs) {
@@ -253,6 +233,14 @@ func (a *App) showBackupCenter() {
 		return &job, true
 	}
 	list.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyTab {
+			a.app.SetFocus(detail)
+			return nil
+		}
+		if event.Key() == tcell.KeyF5 {
+			a.showBackupCenter()
+			return nil
+		}
 		if event.Key() == tcell.KeyEscape {
 			closeCenter()
 			return nil
@@ -267,6 +255,9 @@ func (a *App) showBackupCenter() {
 		}
 		if event.Key() == tcell.KeyRune && event.Modifiers()&(tcell.ModCtrl|tcell.ModAlt|tcell.ModMeta) == 0 {
 			switch event.Rune() {
+			case 'l', 'L':
+				a.showBackupAgentLogs()
+				return nil
 			case 'n', 'N':
 				a.showBackupConnectionPicker()
 				return nil
@@ -335,11 +326,19 @@ func (a *App) showBackupCenter() {
 		return event
 	})
 
-	layout := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(header, 4, 0, false).
+	detail.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyTab || event.Key() == tcell.KeyBacktab || event.Key() == tcell.KeyEscape {
+			a.app.SetFocus(list)
+			return nil
+		}
+		return event
+	})
+	body := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(header, 5, 0, false).
 		AddItem(list, 0, 1, true).
 		AddItem(detail, 12, 0, false).
 		AddItem(footer, 1, 0, false)
+	layout := &backupCenterLayout{Flex: body, header: header, detail: detail, footer: footer}
 	a.pages.AddAndSwitchToPage(pageBackupCenter, layout, true)
 	a.app.SetFocus(list)
 }
@@ -650,9 +649,9 @@ func backupPlanDefaultsSummary(job backupcore.Job) string {
 }
 
 const (
-	backupFormLabelConnection  = "Database Connection"
-	backupFormLabelDestination = "Save To (absolute/mounted folder)"
-	backupFormLabelAdvanced    = "More Settings (Enter)"
+	backupFormLabelConnection  = "Database"
+	backupFormLabelDestination = "Save to"
+	backupFormLabelAdvanced    = "More options"
 )
 
 func backupConnectionOptionLabel(connection config.ConnectionConfig) string {
@@ -674,9 +673,13 @@ type backupJobFormDraft struct {
 	maxStorageGiB     string
 	maxStorageChanged bool
 	timeoutMinutes    string
+	maxAttempts       string
+	retryInitial      string
+	retryMax          string
 	smtpPort          string
 	recipients        string
 	expanded          bool
+	optionSection     int
 }
 
 func (a *App) showBackupJobFormForConnection(existing *backupcore.Job, preferredConnectionID string) *tview.Form {
@@ -703,6 +706,15 @@ func (a *App) showBackupJobFormForConnection(existing *backupcore.Job, preferred
 		job = *existing
 	} else if strings.TrimSpace(preferredConnectionID) != "" {
 		job.ConnectionID = strings.TrimSpace(preferredConnectionID)
+	}
+	if job.MaxAttempts == 0 {
+		job.MaxAttempts = 1
+	}
+	if job.RetryInitialSeconds == 0 {
+		job.RetryInitialSeconds = 2
+	}
+	if job.RetryMaxSeconds == 0 {
+		job.RetryMaxSeconds = 60
 	}
 
 	connections := make([]string, len(a.store.Connections))
@@ -763,14 +775,15 @@ func (a *App) showBackupJobFormForConnection(existing *backupcore.Job, preferred
 		maxAgeDays:       strconv.Itoa(job.Retention.MaxAgeDays),
 		maxStorageGiB:    formatOptionalGiB(job.Retention.MaxTotalBytes),
 		timeoutMinutes:   strconv.Itoa(job.TimeoutMinutes),
-		smtpPort:         strconv.Itoa(job.Notification.SMTPPort),
-		recipients:       strings.Join(job.Notification.Recipients, ", "),
-		expanded:         false,
+		maxAttempts:      strconv.Itoa(job.MaxAttempts), retryInitial: strconv.Itoa(job.RetryInitialSeconds), retryMax: strconv.Itoa(job.RetryMaxSeconds),
+		smtpPort:   strconv.Itoa(job.Notification.SMTPPort),
+		recipients: strings.Join(job.Notification.Recipients, ", "),
+		expanded:   false,
 	}
 
 	container := tview.NewFlex().SetDirection(tview.FlexRow)
 	var renderForm func(focusLabel string)
-	var currentForm *tview.Form
+	currentForm := tview.NewForm()
 	closeForm := func() {
 		a.pages.RemovePage(pageBackupForm)
 		a.pages.ShowPage(pageBackupCenter)
@@ -872,6 +885,10 @@ func (a *App) showBackupJobFormForConnection(existing *backupcore.Job, preferred
 				return
 			}
 		}
+		if candidate.MaxAttempts, candidate.RetryInitialSeconds, candidate.RetryMaxSeconds, parseErr = parseBackupRetryFields(draft.maxAttempts, draft.retryInitial, draft.retryMax); parseErr != nil {
+			a.ShowAlert(fmt.Sprintf("%s %v", iconWarn, parseErr), pageBackupForm)
+			return
+		}
 		if candidate.TimeoutMinutes, parseErr = parseBackupFormInt("Timeout minutes", draft.timeoutMinutes, 1, 24*60); parseErr != nil {
 			a.ShowAlert(fmt.Sprintf("%s %v", iconWarn, parseErr), pageBackupForm)
 			return
@@ -936,76 +953,29 @@ func (a *App) showBackupJobFormForConnection(existing *backupcore.Job, preferred
 		}
 	}
 
-	w, h := a.modalSize(68, 104, 20, 32)
+	w, h := a.modalSize(64, 88, 20, 20)
 	footer := tview.NewTextView().SetDynamicColors(true).SetTextAlign(tview.AlignCenter)
 	footer.SetBackgroundColor(crust)
 	footer.SetText(backupPlanFormFooterText(w))
 
 	renderForm = func(focusLabel string) {
-		form := tview.NewForm()
-		currentForm = form
+		form := currentForm
+		form.Clear(true)
 		formTitle := " Create Backup "
 		if existing != nil {
 			formTitle = " Backup Settings "
 		}
 		form.SetBorder(true).SetTitle(formTitle).SetTitleColor(mauve).SetBorderColor(surface1)
 		form.SetBackgroundColor(bg)
-		form.SetItemPadding(0)
+		form.SetItemPadding(1)
+		if draft.expanded {
+			form.SetItemPadding(0)
+		}
+		form.SetBorderPadding(1, 1, 2, 2)
 		form.SetFieldBackgroundColor(mantle).SetFieldTextColor(text).SetLabelColor(text).
 			SetButtonBackgroundColor(surface1).SetButtonTextColor(green)
-		addBackupFormSection(form, "ESSENTIALS", "Database, local or OS-mounted destination, and timing")
 		connectionIndex := backupConnectionIndex(a.store.Connections, draft.job.ConnectionID)
-		connectionText := "[#f9e2af]Missing saved connection — choose a replacement in More Settings.[-]"
-		if connectionIndex >= 0 {
-			connectionText = fmt.Sprintf("[#89b4fa]%s[-]  [#a6adc8]%s[-]",
-				tview.Escape(nonEmptyOr(strings.TrimSpace(a.store.Connections[connectionIndex].Name), "unnamed connection")),
-				tview.Escape(backupConnectionSummary(a.store.Connections[connectionIndex])))
-		}
-		form.AddTextView("Database", connectionText, 0, 1, true, false)
-		if connectionIndex < 0 {
-			form.AddTextView("Needs attention", "[#f9e2af]The original connection no longer exists. Open More Settings and choose another database.[-]", 0, 1, true, false)
-		}
-		form.AddInputField(backupFormLabelDestination, draft.job.Destination, 40, nil, func(value string) {
-			draft.job.Destination = value
-		})
-		form.AddTextView("Destination Help", "[#a6adc8]Absolute local folder or OS-mounted volume. New rclone publication is disabled.[-]", 0, 1, true, false)
-		form.AddDropDown("Schedule", scheduleOptions, backupScheduleIndex(draft.job.Schedule.Kind), func(_ string, index int) {
-			if index >= 0 && index < 4 {
-				kind := []backupcore.ScheduleKind{backupcore.ScheduleManual, backupcore.ScheduleInterval, backupcore.ScheduleDaily, backupcore.ScheduleWeekly}[index]
-				if kind != draft.job.Schedule.Kind {
-					draft.job.Schedule.Kind = kind
-					if kind == backupcore.ScheduleManual {
-						draft.job.Enabled = false
-					}
-					renderForm("Schedule")
-				}
-			}
-		})
-		switch draft.job.Schedule.Kind {
-		case backupcore.ScheduleManual:
-			form.AddTextView("Runs", "[#89b4fa]Only when you choose Run now.[-] No background agent is needed.", 0, 1, true, false)
-		case backupcore.ScheduleInterval:
-			form.AddInputField("Every Minutes", draft.everyMinutes, 8, func(value string, _ rune) bool { return digitsOnly(value) }, func(value string) { draft.everyMinutes = value })
-		case backupcore.ScheduleDaily:
-			form.AddInputField("Run At (comma-separated HH:MM)", draft.wallClockTimes, 28, nil, func(value string) { draft.wallClockTimes = value })
-		case backupcore.ScheduleWeekly:
-			form.AddInputField("Weekdays", draft.weekdays, 34, nil, func(value string) { draft.weekdays = value })
-			form.AddInputField("Run At (comma-separated HH:MM)", draft.wallClockTimes, 28, nil, func(value string) { draft.wallClockTimes = value })
-		}
-		if draft.job.Schedule.Kind != backupcore.ScheduleManual {
-			form.AddCheckbox("Enable Schedule", draft.job.Enabled, func(value bool) { draft.job.Enabled = value })
-		}
-		form.AddTextView("Included", "[#a6adc8]"+tview.Escape(backupPlanDefaultsSummary(draft.job))+"[-]", 0, 2, true, false)
-		form.AddCheckbox(backupFormLabelAdvanced, draft.expanded, func(value bool) {
-			if value == draft.expanded {
-				return
-			}
-			draft.expanded = value
-			renderForm(backupFormLabelAdvanced)
-		})
-
-		if draft.expanded {
-			addBackupFormSection(form, "DATABASE & NAME", "Change only if needed")
+		if !draft.expanded {
 			form.AddDropDown(backupFormLabelConnection, connections, connectionIndex, func(_ string, index int) {
 				if index < 0 || index >= len(a.store.Connections) {
 					return
@@ -1023,84 +993,146 @@ func (a *App) showBackupJobFormForConnection(existing *backupcore.Job, preferred
 					}
 				}
 			})
-			form.AddInputField("Backup Name", draft.job.Name, 36, nil, func(value string) { draft.job.Name = value })
+			if connectionIndex < 0 {
+				form.AddTextView("", "[#f9e2af]Choose a replacement for the missing database.[-]", 0, 1, true, false)
+			}
+			form.AddFormItem(newBackupFolderField(backupFormLabelDestination, draft.job.Destination, 48, func(value string) {
+				draft.job.Destination = value
+			}, chooseFolder))
+			form.AddDropDown("Schedule", scheduleOptions, backupScheduleIndex(draft.job.Schedule.Kind), func(_ string, index int) {
+				if index >= 0 && index < 4 {
+					kind := []backupcore.ScheduleKind{backupcore.ScheduleManual, backupcore.ScheduleInterval, backupcore.ScheduleDaily, backupcore.ScheduleWeekly}[index]
+					if kind != draft.job.Schedule.Kind {
+						draft.job.Schedule.Kind = kind
+						if kind == backupcore.ScheduleManual {
+							draft.job.Enabled = false
+						}
+						renderForm("Schedule")
+					}
+				}
+			})
+			switch draft.job.Schedule.Kind {
+			case backupcore.ScheduleManual:
+			case backupcore.ScheduleInterval:
+				form.AddInputField("Every (minutes)", draft.everyMinutes, 8, func(value string, _ rune) bool { return digitsOnly(value) }, func(value string) { draft.everyMinutes = value })
+			case backupcore.ScheduleDaily:
+				form.AddInputField("At (HH:MM)", draft.wallClockTimes, 28, nil, func(value string) { draft.wallClockTimes = value })
+			case backupcore.ScheduleWeekly:
+				form.AddInputField("Weekdays", draft.weekdays, 34, nil, func(value string) { draft.weekdays = value })
+				form.AddInputField("At (HH:MM)", draft.wallClockTimes, 28, nil, func(value string) { draft.wallClockTimes = value })
+			}
 			if draft.job.Schedule.Kind != backupcore.ScheduleManual {
-				form.AddInputField("Timezone", nonEmptyOr(draft.job.Schedule.Timezone, "Local"), 32, nil, func(value string) { draft.job.Schedule.Timezone = value })
-				form.AddCheckbox("Catch up one missed run", draft.job.Schedule.RunMissedOnWake, func(value bool) { draft.job.Schedule.RunMissedOnWake = value })
+				if draft.job.Schedule.Timezone != "Local" && draft.job.Schedule.Timezone != "" {
+					form.AddTextView("Timezone", tview.Escape(draft.job.Schedule.Timezone), 0, 1, true, false)
+				}
+				form.AddCheckbox("Schedule active", draft.job.Enabled, func(value bool) { draft.job.Enabled = value })
 			}
+		} else {
+			form.SetTitle(" Backup options ")
+			form.AddDropDown("Section", []string{"Name & timing", "Storage & retention", "Compression & encryption", "Retries & timeout", "Email alerts"}, draft.optionSection, func(_ string, index int) {
+				if index >= 0 && index < 5 && index != draft.optionSection {
+					draft.optionSection = index
+					renderForm("Section")
+				}
+			})
+			switch draft.optionSection {
+			case 0:
 
-			addBackupFormSection(form, "STORAGE & RETENTION", "Verified newest stays")
-			form.AddInputField("Filename Template", draft.job.FilenameTemplate, 34, nil, func(value string) { draft.job.FilenameTemplate = value })
-			form.AddInputField("Keep Latest", draft.keepLatest, 8, func(value string, _ rune) bool { return digitsOnly(value) }, func(value string) { draft.keepLatest = value })
-			form.AddInputField("Max Age Days (0 = off)", draft.maxAgeDays, 8, func(value string, _ rune) bool { return digitsOnly(value) }, func(value string) { draft.maxAgeDays = value })
-			form.AddInputField("Max Stored GiB (0 = off)", draft.maxStorageGiB, 10, func(value string, _ rune) bool { return decimalOnly(value) }, func(value string) {
-				draft.maxStorageGiB = value
-				draft.maxStorageChanged = true
-			})
-			form.AddInputField("Timeout Minutes", draft.timeoutMinutes, 8, func(value string, _ rune) bool { return digitsOnly(value) }, func(value string) { draft.timeoutMinutes = value })
+				form.AddInputField("Backup Name", draft.job.Name, 36, nil, func(value string) { draft.job.Name = value })
+				if draft.job.Schedule.Kind != backupcore.ScheduleManual {
+					form.AddInputField("Timezone", nonEmptyOr(draft.job.Schedule.Timezone, "Local"), 32, nil, func(value string) { draft.job.Schedule.Timezone = value })
+					form.AddCheckbox("Catch up one missed run", draft.job.Schedule.RunMissedOnWake, func(value bool) { draft.job.Schedule.RunMissedOnWake = value })
+				}
 
-			addBackupFormSection(form, "COMPRESSION & SECURITY", "Balanced defaults")
-			form.AddDropDown("Compression", compressionOptions, backupCompressionIndex(draft.job.Compression), func(_ string, index int) {
-				if index >= 0 && index < 4 {
-					compression := []backupcore.Compression{backupcore.CompressionZstd, backupcore.CompressionGzip, backupcore.CompressionZip, backupcore.CompressionNone}[index]
-					if compression != draft.job.Compression {
-						draft.job.Compression = compression
-						renderForm("Compression")
-					}
-				}
-			})
-			if draft.job.Compression != backupcore.CompressionNone {
-				form.AddInputField("Compression Level", draft.compressionLevel, 5, func(value string, _ rune) bool { return digitsOnly(value) }, func(value string) { draft.compressionLevel = value })
-			}
-			form.AddCheckbox("Encrypt with age X25519", draft.job.Encryption == backupcore.EncryptionAge, func(value bool) {
-				encryption := backupcore.EncryptionNone
-				if value {
-					encryption = backupcore.EncryptionAge
-				}
-				if encryption != draft.job.Encryption {
-					draft.job.Encryption = encryption
-					renderForm("Encrypt with age X25519")
-				}
-			})
-			if draft.job.Encryption == backupcore.EncryptionAge {
-				form.AddInputField("age Recipient (age1…)", draft.job.AgeRecipient, 34, nil, func(value string) { draft.job.AgeRecipient = value })
-			}
+			case 1:
 
-			addBackupFormSection(form, "EMAIL ALERTS", "Off by default; any SMTP server is supported")
-			form.AddDropDown("Send Email", notificationOptions, backupNotificationIndex(draft.job.Notification.Policy), func(_ string, index int) {
-				if index >= 0 && index < 4 {
-					policy := []backupcore.NotificationPolicy{backupcore.NotificationNever, backupcore.NotificationFailure, backupcore.NotificationSuccess, backupcore.NotificationBoth}[index]
-					if policy != draft.job.Notification.Policy {
-						draft.job.Notification.Policy = policy
-						renderForm("Send Email")
-					}
-				}
-			})
-			if draft.job.Notification.Policy != backupcore.NotificationNever {
-				form.AddInputField("SMTP Host", draft.job.Notification.SMTPHost, 34, nil, func(value string) { draft.job.Notification.SMTPHost = value })
-				form.AddInputField("SMTP Port", draft.smtpPort, 8, func(value string, _ rune) bool { return digitsOnly(value) }, func(value string) { draft.smtpPort = value })
-				form.AddDropDown("TLS", tlsOptions, backupTLSIndex(draft.job.Notification.TLSMode), func(_ string, index int) {
-					if index >= 0 && index < 3 {
-						draft.job.Notification.TLSMode = []backupcore.SMTPTLSMode{backupcore.SMTPTLSStartTLS, backupcore.SMTPTLSImplicit, backupcore.SMTPTLSNone}[index]
+				form.AddInputField("Filename Template", draft.job.FilenameTemplate, 34, nil, func(value string) { draft.job.FilenameTemplate = value })
+				form.AddInputField("Keep Latest", draft.keepLatest, 8, func(value string, _ rune) bool { return digitsOnly(value) }, func(value string) { draft.keepLatest = value })
+				form.AddInputField("Max Age Days (0 = off)", draft.maxAgeDays, 8, func(value string, _ rune) bool { return digitsOnly(value) }, func(value string) { draft.maxAgeDays = value })
+				form.AddInputField("Max Stored GiB (0 = off)", draft.maxStorageGiB, 10, func(value string, _ rune) bool { return decimalOnly(value) }, func(value string) {
+					draft.maxStorageGiB = value
+					draft.maxStorageChanged = true
+				})
+			case 2:
+
+				form.AddDropDown("Compression", compressionOptions, backupCompressionIndex(draft.job.Compression), func(_ string, index int) {
+					if index >= 0 && index < 4 {
+						compression := []backupcore.Compression{backupcore.CompressionZstd, backupcore.CompressionGzip, backupcore.CompressionZip, backupcore.CompressionNone}[index]
+						if compression != draft.job.Compression {
+							draft.job.Compression = compression
+							renderForm("Compression")
+						}
 					}
 				})
-				form.AddInputField("Recipients (comma separated)", draft.recipients, 32, nil, func(value string) { draft.recipients = value })
-				form.AddInputField("SMTP Username", draft.job.Notification.Username, 34, nil, func(value string) { draft.job.Notification.Username = value })
-				form.AddPasswordField("SMTP App Password", draft.job.Notification.Password, 32, '•', func(value string) { draft.job.Notification.Password = value })
-				form.AddInputField("From Address", draft.job.Notification.From, 34, nil, func(value string) { draft.job.Notification.From = value })
-				form.AddTextView("Email Test", "[#a6adc8]Send a test before saving; no backup is created or changed.[-]", 0, 1, true, false)
+				if draft.job.Compression != backupcore.CompressionNone {
+					form.AddInputField("Compression Level", draft.compressionLevel, 5, func(value string, _ rune) bool { return digitsOnly(value) }, func(value string) { draft.compressionLevel = value })
+				}
+				form.AddCheckbox("Encrypt with age X25519", draft.job.Encryption == backupcore.EncryptionAge, func(value bool) {
+					encryption := backupcore.EncryptionNone
+					if value {
+						encryption = backupcore.EncryptionAge
+					}
+					if encryption != draft.job.Encryption {
+						draft.job.Encryption = encryption
+						renderForm("Encrypt with age X25519")
+					}
+				})
+				if draft.job.Encryption == backupcore.EncryptionAge {
+					form.AddInputField("age Recipient (age1…)", draft.job.AgeRecipient, 34, nil, func(value string) { draft.job.AgeRecipient = value })
+				}
+
+			case 3:
+
+				form.AddInputField("Timeout Minutes", draft.timeoutMinutes, 8, func(value string, _ rune) bool { return digitsOnly(value) }, func(value string) { draft.timeoutMinutes = value })
+				addBackupRetryFields(form, &draft.maxAttempts, &draft.retryInitial, &draft.retryMax)
+
+			case 4:
+
+				form.AddDropDown("Send Email", notificationOptions, backupNotificationIndex(draft.job.Notification.Policy), func(_ string, index int) {
+					if index >= 0 && index < 4 {
+						policy := []backupcore.NotificationPolicy{backupcore.NotificationNever, backupcore.NotificationFailure, backupcore.NotificationSuccess, backupcore.NotificationBoth}[index]
+						if policy != draft.job.Notification.Policy {
+							draft.job.Notification.Policy = policy
+							renderForm("Send Email")
+						}
+					}
+				})
+				if draft.job.Notification.Policy != backupcore.NotificationNever {
+					form.AddInputField("SMTP Host", draft.job.Notification.SMTPHost, 34, nil, func(value string) { draft.job.Notification.SMTPHost = value })
+					form.AddInputField("SMTP Port", draft.smtpPort, 8, func(value string, _ rune) bool { return digitsOnly(value) }, func(value string) { draft.smtpPort = value })
+					form.AddDropDown("TLS", tlsOptions, backupTLSIndex(draft.job.Notification.TLSMode), func(_ string, index int) {
+						if index >= 0 && index < 3 {
+							draft.job.Notification.TLSMode = []backupcore.SMTPTLSMode{backupcore.SMTPTLSStartTLS, backupcore.SMTPTLSImplicit, backupcore.SMTPTLSNone}[index]
+						}
+					})
+					form.AddInputField("Recipients (comma separated)", draft.recipients, 32, nil, func(value string) { draft.recipients = value })
+					form.AddInputField("SMTP Username", draft.job.Notification.Username, 34, nil, func(value string) { draft.job.Notification.Username = value })
+					form.AddPasswordField("SMTP App Password", draft.job.Notification.Password, 32, '•', func(value string) { draft.job.Notification.Password = value })
+					form.AddInputField("From Address", draft.job.Notification.From, 34, nil, func(value string) { draft.job.Notification.From = value })
+					form.AddTextView("Email Test", "[#a6adc8]Sends email only; no backup runs.[-]", 0, 1, true, false)
+				}
 			}
 		}
-
-		form.AddButton("Save Backup", saveJob)
-		form.AddButton("Browse Folder…", chooseFolder)
-		if draft.expanded {
-			form.AddButton("Add Database…", addConnection)
+		if !draft.expanded {
+			form.AddCheckbox(backupFormLabelAdvanced, false, func(value bool) {
+				if value {
+					draft.expanded = true
+					renderForm("Section")
+				}
+			})
 		}
-		if draft.expanded && draft.job.Notification.Policy != backupcore.NotificationNever {
+		form.AddButton("Save Backup", saveJob)
+		if draft.expanded {
+			form.AddButton("Back", func() { draft.expanded = false; renderForm(backupFormLabelAdvanced) })
+			if draft.optionSection == 0 {
+				form.AddButton("Add Database…", addConnection)
+			}
+		}
+		if draft.expanded && draft.optionSection == 4 && draft.job.Notification.Policy != backupcore.NotificationNever {
 			form.AddButton("Send Test Email", testEmail)
 		}
 		form.AddButton("Cancel", closeForm)
+		styleBackupFormControls(form)
 		form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 			if event.Key() == tcell.KeyF2 {
 				chooseFolder()
@@ -1125,14 +1157,21 @@ func (a *App) showBackupJobFormForConnection(existing *backupcore.Job, preferred
 			}
 			return event
 		})
-		container.Clear().AddItem(form, 0, 1, true).AddItem(footer, 2, 0, false)
+		container.Clear().AddItem(form, 0, 1, true).AddItem(footer, 1, 0, false)
 		if focusLabel != "" {
 			setBackupFormFocus(form, focusLabel)
 		}
 		a.app.SetFocus(form)
 	}
 
-	grid := backupModalGrid(container, w, h)
+	grid := newBackupFormModal(container, w, h, footer, backupPlanFormFooterText)
+	grid.heightHint = func() int {
+		padding := 1
+		if draft.expanded {
+			padding = 0
+		}
+		return backupFormContentHeight(currentForm, padding)
+	}
 	a.pages.AddPage(pageBackupForm, grid, true, true)
 	renderForm("")
 	return currentForm
@@ -1142,7 +1181,9 @@ func addBackupFormSection(form *tview.Form, title, summary string) {
 	if form == nil {
 		return
 	}
-	form.AddTextView("", fmt.Sprintf("[::b][#89b4fa]%s[-][-]  [#a6adc8]%s[-]", tview.Escape(title), tview.Escape(summary)), 0, 1, true, false)
+	view := tview.NewTextView().SetDynamicColors(true).SetScrollable(false).SetSize(2, 0).
+		SetText(fmt.Sprintf("[::b][#89b4fa]%s[-][-]\n[#a6adc8]%s[-]", tview.Escape(title), tview.Escape(summary)))
+	form.AddFormItem(&backupFormSection{view})
 }
 
 func backupModalGrid(content tview.Primitive, width, height int) *tview.Grid {
@@ -1359,7 +1400,7 @@ func (a *App) runBackupJobNow(jobID string) {
 				if err != nil {
 					detail = "\n\nPost-backup outcome: " + tview.Escape(err.Error())
 				}
-				a.ShowAlert(fmt.Sprintf("%s Cancel arrived at the publication boundary. %s\n\n%s%s", iconWarn, outcome, tview.Escape(run.Artifact.Path), detail), pageBackupCenter)
+				a.showBackupOutcome(fmt.Sprintf("%s An artifact was preserved.\n\nCancellation arrived during publication. Review Details before use.", iconWarn), fmt.Sprintf("%s Cancel arrived at the publication boundary. %s\n\n%s%s", iconWarn, outcome, tview.Escape(run.Artifact.Path), detail), pageBackupCenter)
 				return
 			}
 			if canceled.Load() && (run.Status == backupcore.RunCanceled || errors.Is(err, context.Canceled)) {
@@ -1368,7 +1409,7 @@ func (a *App) runBackupJobNow(jobID string) {
 			}
 			if err != nil {
 				last := lastProgress.Load().(backupcore.ProgressEvent)
-				a.ShowAlert(fmt.Sprintf("%s Backup failed:\n\n%s\n\nLast phase: %s — %s", iconFail, tview.Escape(err.Error()), tview.Escape(nonEmptyOr(last.Phase, "unknown")), tview.Escape(nonEmptyOr(last.Message, "no progress detail"))), pageBackupCenter)
+				a.showBackupOutcome(fmt.Sprintf("%s Backup failed\n\nOpen Details for the cause and last progress.", iconFail), fmt.Sprintf("%s Backup failed:\n\n%s\n\nLast phase: %s — %s", iconFail, tview.Escape(err.Error()), tview.Escape(nonEmptyOr(last.Phase, "unknown")), tview.Escape(nonEmptyOr(last.Message, "no progress detail"))), pageBackupCenter)
 				return
 			}
 			notification := backupRunNotificationSummary(run)
@@ -1379,60 +1420,17 @@ func (a *App) runBackupJobNow(jobID string) {
 			if strings.TrimSpace(run.RetentionError) != "" {
 				retention = "WARNING: " + run.RetentionError
 			}
-			a.ShowAlert(fmt.Sprintf("%s Backup complete\n\nPath: %s\nManifest: %s\nSize: %s\nSHA-256: %s\nVerification: %s\nRetention: %s\nNotification: %s", iconSuccess, tview.Escape(run.Artifact.Path), tview.Escape(nonEmptyOr(run.Artifact.ManifestPath, "not recorded")), backupByteSize(uint64(run.Artifact.Size)), run.Artifact.SHA256, tview.Escape(nonEmptyOr(run.Artifact.VerificationLevel, "legacy level not recorded")), tview.Escape(retention), tview.Escape(notification)), pageBackupCenter)
+			summary := fmt.Sprintf("%s Backup complete\n\n%s · verified\nArtifact and manifest saved.", iconSuccess, backupByteSize(uint64(run.Artifact.Size)))
+			if run.RetentionError != "" || run.NotificationError != "" {
+				summary += "\n\nFollow-up warning: see Details."
+			}
+			a.showBackupOutcome(summary, fmt.Sprintf("%s Backup complete\n\nPath: %s\nManifest: %s\nSize: %s\nSHA-256: %s\nVerification: %s\nRetention: %s\nNotification: %s", iconSuccess, tview.Escape(run.Artifact.Path), tview.Escape(nonEmptyOr(run.Artifact.ManifestPath, "not recorded")), backupByteSize(uint64(run.Artifact.Size)), run.Artifact.SHA256, tview.Escape(nonEmptyOr(run.Artifact.VerificationLevel, "legacy level not recorded")), tview.Escape(retention), tview.Escape(notification)), pageBackupCenter)
 		})
 	}()
 }
 
 func (a *App) showBackupHistory() {
-	runs, err := a.backupStore.ListRuns(context.Background(), "", 250)
-	if err != nil {
-		a.ShowAlert(fmt.Sprintf("%s Could not load backup history:\n\n%v", iconWarn, err), pageBackupCenter)
-		return
-	}
-	list := tview.NewList().ShowSecondaryText(true)
-	list.SetBorder(true).SetTitle(fmt.Sprintf(" Backup History (%d) ", len(runs))).SetTitleColor(mauve).SetBorderColor(surface1)
-	list.SetBackgroundColor(bg)
-	list.SetMainTextColor(text).SetSecondaryTextColor(subtext0).SetSelectedBackgroundColor(surface0).SetSelectedTextColor(green)
-	if len(runs) == 0 {
-		list.AddItem("  [#6c7086]No backup runs recorded[-]", "  Run a job now or enable the background agent.", 0, nil)
-	}
-	jobNames := make(map[string]string)
-	if jobs, jobsErr := a.backupStore.ListJobs(context.Background()); jobsErr == nil {
-		for _, job := range jobs {
-			jobNames[job.ID] = job.Name
-		}
-	}
-	for _, run := range runs {
-		run := run
-		color := "green"
-		if run.Status == backupcore.RunFailed || run.Status == backupcore.RunCanceled {
-			color = "red"
-		}
-		jobName := nonEmptyOr(jobNames[run.JobID], run.JobID)
-		result := nonEmptyOr(run.Artifact.Path, run.Error)
-		if strings.TrimSpace(result) == "" {
-			result = "no artifact detail"
-		}
-		list.AddItem(fmt.Sprintf("  [%s]%s[-]  %s", color, strings.ToUpper(string(run.Status)), run.StartedAt.Local().Format("2006-01-02 15:04:05")),
-			tview.Escape(fmt.Sprintf("  %s  │  %s  │  %s", jobName, result, backupRunNotificationSummary(run))), 0, func() {
-				a.showBackupRunDetails(run, jobName)
-			})
-	}
-	list.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEscape || event.Key() == tcell.KeyBackspace || event.Key() == tcell.KeyBackspace2 {
-			a.pages.RemovePage("backupHistory")
-			a.showBackupCenter()
-			return nil
-		}
-		return event
-	})
-	screenW, _ := a.getScreenSize()
-	footer := tview.NewTextView().SetDynamicColors(true).SetTextAlign(tview.AlignCenter).SetText(backupHistoryFooterText(screenW))
-	footer.SetBackgroundColor(crust)
-	layout := tview.NewFlex().SetDirection(tview.FlexRow).AddItem(list, 0, 1, true).AddItem(footer, 1, 0, false)
-	a.pages.AddAndSwitchToPage("backupHistory", layout, true)
-	a.app.SetFocus(list)
+	a.showBackupActivity()
 }
 
 func backupRunNotificationSummary(run backupcore.Run) string {
@@ -1482,11 +1480,15 @@ func (a *App) showBackupRunDetails(run backupcore.Run, jobName string) {
 		iconBackup, tview.Escape(nonEmptyOr(jobName, run.JobID)), tview.Escape(run.ID), run.Trigger, run.Status,
 		run.StartedAt.Local().Format(time.RFC3339), finished, formatBackupProgressDuration(duration),
 		tview.Escape(artifact), tview.Escape(failure), tview.Escape(retention), tview.Escape(notification))
-	modal := tview.NewModal().SetText(message).AddButtons([]string{" Close "}).SetDoneFunc(func(_ int, _ string) {
-		a.pages.RemovePage("backupRunDetails")
-	})
-	modal.SetBackgroundColor(bg).SetButtonBackgroundColor(surface1).SetButtonTextColor(green).SetTextColor(text)
-	a.pages.AddPage("backupRunDetails", modal, true, true)
+	if len(run.Attempts) > 0 {
+		message += "\n\nGeneration attempts:"
+		for _, attempt := range run.Attempts {
+			message += tview.Escape(fmt.Sprintf("\n%d · %s · %s · %s", attempt.Number, attempt.StartedAt.Local().Format("15:04:05"), attempt.Phase, nonEmptyOr(attempt.Error, "succeeded")))
+		}
+	} else {
+		message += "\n\nGeneration attempts: not recorded for this run."
+	}
+	a.showBackupActivityDetails(message, func() { a.runBackupJobNow(run.JobID) }, run.Status != backupcore.RunRunning)
 }
 
 func backupArtifactPublicationLabel(artifact backupcore.Artifact) string {
@@ -2362,65 +2364,7 @@ func backupAgentScopeLabel(scope osservice.Scope) string {
 }
 
 func (a *App) showBackupAgentLogs() {
-	logDir, err := appdirs.LogDir()
-	if err != nil {
-		a.ShowAlert(fmt.Sprintf("%s Could not resolve the backup agent log directory:\n\n%v", iconWarn, err), pageBackupCenter)
-		return
-	}
-	const perFileTail = int64(64 * 1024)
-	content, paths, err := loadBackupAgentLogTail(logDir, perFileTail)
-	if err != nil {
-		a.ShowAlert(fmt.Sprintf("%s Could not read backup agent logs:\n\n%v", iconWarn, err), pageBackupCenter)
-		return
-	}
-
-	logView := tview.NewTextView().SetWrap(false).SetScrollable(true).SetText(content)
-	logView.SetBorder(true).SetTitle(" Backup Agent Logs (bounded tail) ").SetTitleColor(mauve).SetBorderColor(surface1).SetBackgroundColor(bg)
-	logView.SetTextColor(text)
-	footer := tview.NewTextView().SetDynamicColors(true).SetTextAlign(tview.AlignCenter)
-	footer.SetBackgroundColor(crust)
-	screenW, _ := a.getScreenSize()
-	footer.SetText(backupAgentLogsFooterText(screenW))
-	closeLogs := func() {
-		a.pages.RemovePage("backupAgentLogs")
-		a.showBackupAgentManager()
-	}
-	logView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEscape || event.Key() == tcell.KeyBackspace || event.Key() == tcell.KeyBackspace2 {
-			closeLogs()
-			return nil
-		}
-		if shortcut, ok := plainShortcutRune(event); ok {
-			switch shortcut {
-			case 'c':
-				a.copyValueAsync(content, func(copyErr error) {
-					if copyErr != nil {
-						a.ShowAlert(fmt.Sprintf("%s Log tail is in dbterm's internal clipboard; system clipboard unavailable:\n\n%v", iconInfo, copyErr), "backupAgentLogs")
-						return
-					}
-					a.ShowAlert(fmt.Sprintf("%s Bounded log tail copied.", iconSuccess), "backupAgentLogs")
-				})
-				return nil
-			case 'p':
-				a.copyValueAsync(strings.Join(paths, "\n"), func(copyErr error) {
-					if copyErr != nil {
-						a.ShowAlert(fmt.Sprintf("%s Log paths are in dbterm's internal clipboard; system clipboard unavailable:\n\n%v", iconInfo, copyErr), "backupAgentLogs")
-						return
-					}
-					a.ShowAlert(fmt.Sprintf("%s Log paths copied.", iconSuccess), "backupAgentLogs")
-				})
-				return nil
-			case 'r':
-				a.pages.RemovePage("backupAgentLogs")
-				a.showBackupAgentLogs()
-				return nil
-			}
-		}
-		return event
-	})
-	layout := tview.NewFlex().SetDirection(tview.FlexRow).AddItem(logView, 0, 1, true).AddItem(footer, 1, 0, false)
-	a.pages.AddAndSwitchToPage("backupAgentLogs", layout, true)
-	a.app.SetFocus(logView)
+	a.showBackupLogViewer()
 }
 
 func loadBackupAgentLogTail(logDir string, perFileLimit int64) (string, []string, error) {
@@ -2453,7 +2397,7 @@ func loadBackupAgentLogTail(logDir string, perFileLimit int64) (string, []string
 	if len(paths) == 0 {
 		path := filepath.Join(logDir, "dbterm-backup-agent.log")
 		paths = append(paths, path)
-		fmt.Fprintf(&content, "No backup agent logs exist yet.\n\nExpected rolling log:\n%s\n\nInstall/start the agent or run a job, then press R to refresh.", path)
+		fmt.Fprintf(&content, "No backup agent logs exist yet.\n\nExpected rolling log:\n%s\n\nStart the agent, then press R to refresh.\nManual run results are in Backup Center's Activity (H).", path)
 	}
 	return strings.TrimPrefix(content.String(), "\n"), paths, nil
 }
@@ -3042,25 +2986,19 @@ func parseBackupScheduleTimes(raw string) ([]string, error) {
 }
 
 func backupCenterFooterText(width int) string {
-	full := " [yellow]N[-] New backup  │  [yellow]C[-] Copies  │  [yellow]Enter[-] Actions  │  [yellow]R[-] Run now  │  [yellow]I[-] Restore  │  [yellow]H[-] Activity  │  [yellow]A[-] Agent  │  [yellow]Esc[-] Back "
-	medium := " [yellow]N[-] New  │  [yellow]C[-] Copies  │  [yellow]Enter[-] Actions  │  [yellow]R[-] Run  │  [yellow]I[-] Restore  │  [yellow]Esc[-] Back "
-	short := " [yellow]N[-] New  │  [yellow]C[-] Copies  │  [yellow]R[-] Run  │  [yellow]I[-] Restore  │  [yellow]Esc[-] Back "
-	minimal := " [yellow]N[-] New  │  [yellow]C[-] Copies  │  [yellow]Esc[-] Back "
-	return footerTextThatFits(width, full, medium, short, minimal)
+	return footerTextThatFits(width,
+		" [yellow]N[-] New · [yellow]C[-] Copies · [yellow]Enter[-] Actions · [yellow]R[-] Run · [yellow]I[-] Restore · [yellow]H[-] Activity · [yellow]L[-] Logs · [yellow]A[-] Agent · [yellow]Tab[-] Detail · [yellow]F5[-] Refresh · [yellow]Esc[-] Back ",
+		" [yellow]N[-] New · [yellow]C[-] Copies · [yellow]Enter[-] Actions · [yellow]H[-] Activity · [yellow]L[-] Logs · [yellow]Tab[-] Detail · [yellow]F5[-] Refresh · [yellow]Esc[-] Back ",
+		" [yellow]N[-] New · [yellow]C[-] Copies · [yellow]H[-] Activity · [yellow]L[-] Logs · [yellow]Tab[-] Detail · [yellow]F5[-] Refresh · [yellow]Esc[-] Back ",
+		" [yellow]N[-] New · [yellow]C[-] Copies · [yellow]H[-] Activity · [yellow]L[-] Logs · [yellow]Esc[-] Back ",
+	)
 }
 
 func backupPlanFormFooterText(width int) string {
-	actions := footerTextThatFits(width,
-		" [yellow]Tab / Shift+Tab[-] Move  │  [yellow]F2[-] Browse  │  [yellow]F3[-] Space  │  [yellow]F4[-] More  │  [yellow]Esc[-] Cancel ",
-		" [yellow]Tab[-] Move  │  [yellow]F2[-] Browse  │  [yellow]F3[-] Space  │  [yellow]F4[-] More  │  [yellow]Esc[-] Cancel ",
-		" [yellow]F2[-] Browse  │  [yellow]F3[-] Space  │  [yellow]F4[-] More  │  [yellow]Esc[-] Cancel ",
-		" [yellow]F4[-] More  │  [yellow]Esc[-] Cancel ",
+	return footerTextThatFits(width,
+		" [yellow]Tab[-] Move · [yellow]F2[-] Folder · [yellow]F3[-] Space · [yellow]F4[-] Options · [yellow]Esc[-] Cancel ",
+		" [yellow]F2[-] Folder · [yellow]F4[-] Options · [yellow]Esc[-] Cancel ",
 	)
-	note := footerTextThatFits(width,
-		" [#a6adc8]Safe defaults are set. Open More Settings only if you need them.[-] ",
-		" [#a6adc8]Safe defaults are already set.[-] ",
-	)
-	return actions + "\n" + note
 }
 
 func backupHistoryFooterText(width int) string {

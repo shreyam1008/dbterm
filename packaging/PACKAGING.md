@@ -1,7 +1,7 @@
 # dbterm — Packaging Guide
 
 Publisher: Shreyam Adhikari (shreyam1008@gmail.com)
-Current release: 0.11.1
+Current release: 0.11.2
 
 The release manifest in `cmd/dbterm/releases.txt` is the version source for the
 GitHub release, Debian packages, APT publication, and the classic Snap candidate.
@@ -22,7 +22,7 @@ hand.
 
 ---
 
-## Publication status for v0.11.1
+## Last verified package-channel status (v0.11.1)
 
 | Ecosystem | Status |
 | --- | --- |
@@ -48,7 +48,7 @@ Build and inspect a candidate locally on Ubuntu:
 
 ```sh
 snapcraft --destructive-mode
-snap install --dangerous ./dbterm_0.11.1_amd64.snap
+snap install --dangerous ./dbterm_0.11.2_amd64.snap
 dbterm --version
 ```
 

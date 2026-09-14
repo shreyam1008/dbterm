@@ -22,8 +22,8 @@ const backupTimestampLayout = "20060102_150405"
 
 const (
 	instantBackupPage             = "backupModal"
-	instantBackupDestinationLabel = "Destination (absolute/mounted folder)"
-	instantBackupFilenameLabel    = "File Name"
+	instantBackupDestinationLabel = "Save to"
+	instantBackupFilenameLabel    = "File name"
 )
 
 type backupPlan struct {
@@ -78,25 +78,51 @@ func (a *App) showBackupModal() {
 		SetTitleColor(mauve).
 		SetBorderColor(surface1)
 	form.SetBackgroundColor(bg)
+	form.SetItemPadding(1)
+	form.SetBorderPadding(1, 1, 2, 2)
 	form.SetFieldBackgroundColor(mantle).
 		SetFieldTextColor(text).
 		SetButtonBackgroundColor(surface1).
 		SetButtonTextColor(green).
 		SetLabelColor(text)
 
-	addBackupFormSection(form, "SOURCE", "Current workspace; no connection details are changed")
-	form.AddTextView("Connection", tview.Escape(backupTargetLabel(cfg)), 0, 1, true, false)
+	form.AddTextView("Database", tview.Escape(nonEmptyOr(cfg.Name, cfg.Database)+" · "+cfg.TypeLabel()), 0, 1, true, false)
 	form.AddTextView("Format", fmt.Sprintf("[green]%s[-]  [#a6adc8]%s[-]", tview.Escape(plan.formatLabel), tview.Escape(plan.toolLabel)), 0, 1, true, false)
-	addBackupFormSection(form, "DESTINATION", "Use an absolute folder or an OS-mounted volume")
-	form.AddInputField(instantBackupDestinationLabel, defaultDir, 72, nil, nil)
-	form.AddInputField(instantBackupFilenameLabel, defaultFile, 56, nil, nil)
-	form.AddTextView("Storage", backupDestinationStorageText(defaultDir), 0, 2, true, false)
-	form.AddTextView("Status", "[#a6adc8]Nothing is written until Create Backup is pressed.[-]", 0, 2, true, false)
+	destinationField := newBackupFolderField(instantBackupDestinationLabel, defaultDir, 48, nil, nil)
+	form.AddFormItem(destinationField)
+	form.AddInputField(instantBackupFilenameLabel, defaultFile, 48, nil, nil)
+	form.AddTextView("Storage", "", 0, 3, true, false)
+	form.AddTextView("", "", 0, 2, true, false)
 
-	destinationField, _ := form.GetFormItemByLabel(instantBackupDestinationLabel).(*tview.InputField)
 	filenameField, _ := form.GetFormItemByLabel(instantBackupFilenameLabel).(*tview.InputField)
 	storageView, _ := form.GetFormItemByLabel("Storage").(*tview.TextView)
-	statusView, _ := form.GetFormItemByLabel("Status").(*tview.TextView)
+	statusView, _ := form.GetFormItemByLabel("").(*tview.TextView)
+	databaseView := form.GetFormItemByLabel("Database")
+	formatView := form.GetFormItemByLabel("Format")
+	details := tview.NewCheckbox().SetLabel("Details")
+	detailsExpanded := false
+	renderFields := func() {
+		form.Clear(false)
+		form.SetItemPadding(1)
+		form.AddFormItem(databaseView).AddFormItem(destinationField).AddFormItem(filenameField)
+		if detailsExpanded {
+			form.SetItemPadding(0)
+			form.AddFormItem(formatView).AddFormItem(storageView)
+		}
+		form.AddFormItem(details).AddFormItem(statusView)
+		styleBackupFormControls(form)
+	}
+	details.SetChangedFunc(func(expanded bool) {
+		// tview invokes this callback before updating the checkbox itself.
+		detailsExpanded = expanded
+		if expanded {
+			storageView.SetText(backupDestinationStorageText(destinationField.GetText()))
+		}
+		renderFields()
+		setBackupFormFocus(form, "Details")
+		a.app.SetFocus(form)
+	})
+	renderFields()
 	setStatus := func(color, message string) {
 		if statusView == nil {
 			return
@@ -108,12 +134,12 @@ func (a *App) showBackupModal() {
 			if storageView != nil {
 				storageView.SetText("[#a6adc8]Path changed; press F3 to inspect its destination volume.[-]")
 			}
-			setStatus("#a6adc8", "Destination edited. Nothing has been written.")
+			setStatus("#a6adc8", "")
 		})
 	}
 	if filenameField != nil {
 		filenameField.SetChangedFunc(func(string) {
-			setStatus("#a6adc8", "Filename edited. Nothing has been written.")
+			setStatus("#a6adc8", "")
 		})
 	}
 	restoreReturnFocus := func() {
@@ -138,7 +164,7 @@ func (a *App) showBackupModal() {
 		if closed.Load() {
 			return
 		}
-		initial := strings.TrimSpace(formInputValueByLabel(form, instantBackupDestinationLabel))
+		initial := strings.TrimSpace(destinationField.GetText())
 		ctx, cancel := context.WithCancel(context.Background())
 		pickerCancel = cancel
 		token := a.showLoadingModal("Opening the system folder chooser...", withLoadingCancelOutcome("Press Esc to keep the typed destination.", cancel))
@@ -169,10 +195,9 @@ func (a *App) showBackupModal() {
 		}()
 	}
 
-	form.AddButton("Choose Folder…", chooseFolder)
 	form.AddButton("Create Backup", func() {
 		output, prepareErr := prepareInstantBackupOutput(
-			formInputValueByLabel(form, instantBackupDestinationLabel),
+			strings.TrimSpace(destinationField.GetText()),
 			formInputValueByLabel(form, instantBackupFilenameLabel),
 			defaultFile,
 			plan.extension,
@@ -187,6 +212,7 @@ func (a *App) showBackupModal() {
 		a.pages.RemovePage(instantBackupPage)
 		a.runDatabaseBackup(cfg, output, returnPage)
 	})
+	destinationField.browse.SetSelectedFunc(chooseFolder)
 	form.AddButton("Cancel", closeForm)
 
 	form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
@@ -195,9 +221,14 @@ func (a *App) showBackupModal() {
 			return nil
 		}
 		if event.Key() == tcell.KeyF3 {
+			details.SetChecked(true)
 			if storageView != nil {
-				storageView.SetText(backupDestinationStorageText(formInputValueByLabel(form, instantBackupDestinationLabel)))
+				storageView.SetText(backupDestinationStorageText(destinationField.GetText()))
 			}
+			return nil
+		}
+		if event.Key() == tcell.KeyF4 {
+			details.SetChecked(!details.IsChecked())
 			return nil
 		}
 		if event.Key() == tcell.KeyEscape {
@@ -207,7 +238,7 @@ func (a *App) showBackupModal() {
 		return event
 	})
 
-	modalW, modalH := a.modalSize(78, 116, 19, 24)
+	modalW, modalH := a.modalSize(64, 88, 18, 18)
 	footer := tview.NewTextView().
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignCenter)
@@ -217,29 +248,27 @@ func (a *App) showBackupModal() {
 	container := tview.NewFlex().
 		SetDirection(tview.FlexRow).
 		AddItem(form, 0, 1, true).
-		AddItem(footer, 2, 0, false)
+		AddItem(footer, 1, 0, false)
 
-	grid := tview.NewGrid().
-		SetColumns(0, modalW, 0).
-		SetRows(0, modalH, 0).
-		AddItem(container, 1, 1, 1, 1, 0, 0, true)
+	grid := newBackupFormModal(container, modalW, modalH, footer, instantBackupFooterText)
+	grid.heightHint = func() int {
+		padding := 1
+		if detailsExpanded {
+			padding = 0
+		}
+		return backupFormContentHeight(form, padding)
+	}
 
 	a.pages.AddPage(instantBackupPage, grid, true, true)
 	a.app.SetFocus(form)
 }
 
 func instantBackupFooterText(width int) string {
-	actions := footerTextThatFits(width,
-		" [yellow]Tab / Shift+Tab[-] Move  │  [yellow]F2[-] Choose folder  │  [yellow]F3[-] Storage info  │  [yellow]Esc[-] Cancel ",
-		" [yellow]Tab[-] Move  │  [yellow]F2[-] Folder  │  [yellow]F3[-] Storage  │  [yellow]Esc[-] Cancel ",
-		" [yellow]F2[-] Folder  │  [yellow]F3[-] Storage  │  [yellow]Esc[-] Cancel ",
+	return footerTextThatFits(width,
+		" [yellow]Tab[-] Move · [yellow]F2[-] Folder · [yellow]F3[-] Space · [yellow]F4[-] Details · [yellow]Esc[-] Cancel ",
+		" [yellow]F2[-] Folder · [yellow]F4[-] Details · [yellow]Esc[-] Cancel ",
 		" [yellow]Esc[-] Cancel ",
 	)
-	note := footerTextThatFits(width,
-		" [#a6adc8]Use an absolute or mounted-local path; canceling never creates a folder or backup.[-] ",
-		" [#a6adc8]Nothing is written until Create Backup.[-] ",
-	)
-	return actions + "\n" + note
 }
 
 type instantBackupOutput struct {
@@ -359,7 +388,7 @@ func (a *App) runDatabaseBackup(cfg *config.ConnectionConfig, output instantBack
 
 			if canceled.Load() && dumpErr == nil && artifact.PublicationState == backupcore.ArtifactPublicationComplete {
 				message := fmt.Sprintf("%s Cancellation arrived after the artifact and completion manifest were published. The successful backup was preserved at:\n\n%s", iconWarn, tview.Escape(artifact.Path))
-				a.ShowAlert(message, returnPage)
+				a.showBackupOutcome(fmt.Sprintf("%s Published backup preserved.\n\nCancellation arrived after publication.", iconWarn), message, returnPage)
 				return
 			}
 			if canceled.Load() && strings.TrimSpace(artifact.Path) == "" && errors.Is(dumpErr, context.Canceled) {
@@ -373,11 +402,11 @@ func (a *App) runDatabaseBackup(cfg *config.ConnectionConfig, output instantBack
 				if strings.TrimSpace(artifact.Path) != "" {
 					preserved = fmt.Sprintf("\n\nCandidate path: %s\nPublication: %s\nThis is not recorded as a successful backup. Inspect it and its sidecar, then manually remove or reconcile it.", tview.Escape(artifact.Path), tview.Escape(backupArtifactPublicationLabel(artifact)))
 				}
-				a.ShowAlert(fmt.Sprintf("%s Backup failed:\n\n%s%s\n\nLast phase: %s — %s", iconFail, tview.Escape(dumpErr.Error()), preserved, tview.Escape(nonEmptyOr(last.Phase, "unknown")), tview.Escape(nonEmptyOr(last.Message, "no progress detail"))), returnPage)
+				a.showBackupOutcome(fmt.Sprintf("%s Backup failed\n\nOpen Details for the cause and publication state.", iconFail), fmt.Sprintf("%s Backup failed:\n\n%s%s\n\nLast phase: %s — %s", iconFail, tview.Escape(dumpErr.Error()), preserved, tview.Escape(nonEmptyOr(last.Phase, "unknown")), tview.Escape(nonEmptyOr(last.Message, "no progress detail"))), returnPage)
 				return
 			}
 
-			a.ShowAlert(fmt.Sprintf("%s Backup created\n\nType: %s\nFormat: %s\nPath: %s\nManifest: %s\nSize: %s\nSHA-256: %s\nPublication: %s", iconSuccess, cfg.TypeLabel(), plan.formatLabel, tview.Escape(artifact.Path), tview.Escape(artifact.ManifestPath), format.FormatBytes(uint64(artifact.Size)), artifact.SHA256, tview.Escape(backupArtifactPublicationLabel(artifact))), returnPage)
+			a.showBackupOutcome(fmt.Sprintf("%s Backup created\n\n%s · verified\nArtifact and manifest saved.", iconSuccess, format.FormatBytes(uint64(artifact.Size))), fmt.Sprintf("%s Backup created\n\nType: %s\nFormat: %s\nPath: %s\nManifest: %s\nSize: %s\nSHA-256: %s\nPublication: %s", iconSuccess, cfg.TypeLabel(), plan.formatLabel, tview.Escape(artifact.Path), tview.Escape(artifact.ManifestPath), format.FormatBytes(uint64(artifact.Size)), artifact.SHA256, tview.Escape(backupArtifactPublicationLabel(artifact))), returnPage)
 		})
 	}()
 }

@@ -11,9 +11,9 @@ import (
 const appleScriptFolderPicker = `on run argv
   try
     if (count of argv) > 0 and item 1 of argv is not "" then
-      set chosenFolder to choose folder with prompt "Choose backup destination" default location (POSIX file (item 1 of argv))
+      set chosenFolder to choose folder with prompt "Choose a folder" default location (POSIX file (item 1 of argv))
     else
-      set chosenFolder to choose folder with prompt "Choose backup destination"
+      set chosenFolder to choose folder with prompt "Choose a folder"
     end if
     return POSIX path of chosenFolder
   on error number -128
@@ -26,7 +26,7 @@ end run`
 func Choose(ctx context.Context, initialFolder string) (string, error) {
 	executable, err := exec.LookPath("osascript")
 	if err != nil {
-		return "", fmt.Errorf("%w: osascript was not found; type the destination path", ErrUnavailable)
+		return "", fmt.Errorf("%w: osascript was not found; type the folder path", ErrUnavailable)
 	}
 	return executePicker(ctx, []pickerCommand{{
 		name: executable,

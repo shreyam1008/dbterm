@@ -4,12 +4,15 @@ package osservice
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/xml"
 	"fmt"
+	"io"
 	"os"
 	"os/user"
 	"strconv"
 	"strings"
+	"unicode/utf16"
 )
 
 const (
@@ -86,6 +89,7 @@ func (m *windowsManager) Install(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	taskXML = encodeWindowsTaskFile(taskXML)
 	var taskXMLPath string
 	cleanupTaskXML := func() {}
 	if m.scope() == ScopeSystem {
@@ -338,6 +342,21 @@ func (m *windowsManager) renderTaskXML() ([]byte, error) {
 	return renderWindowsTaskXML(m.options, m.userID)
 }
 
+// schtasks /Create reads a Unicode task definition. A UTF-8 declaration can
+// fail with "unable to switch the encoding", even for an ASCII-only task.
+// Keep the template in UTF-8 internally and encode the registration file with
+// a matching UTF-16 declaration and little-endian byte-order mark.
+func encodeWindowsTaskFile(payload []byte) []byte {
+	definition := strings.Replace(string(payload), xml.Header, "<?xml version=\"1.0\" encoding=\"UTF-16\"?>\n", 1)
+	units := utf16.Encode([]rune(definition))
+	encoded := make([]byte, 2+2*len(units))
+	encoded[0], encoded[1] = 0xff, 0xfe
+	for index, unit := range units {
+		binary.LittleEndian.PutUint16(encoded[2+index*2:], unit)
+	}
+	return encoded
+}
+
 func (m *windowsManager) requireElevation(operation string) error {
 	return requireElevation(m.scope(), operation, m.elevation)
 }
@@ -389,7 +408,30 @@ func windowsTaskEnabled(payload string) (bool, error) {
 			Enabled *bool `xml:"Enabled"`
 		} `xml:"Settings"`
 	}
-	if err := xml.Unmarshal([]byte(strings.TrimPrefix(payload, "\ufeff")), &definition); err != nil {
+	// /Query emits a UTF-16 declaration, including when the command output
+	// has already been decoded to UTF-8. Handle the raw BOM form as well.
+	if strings.HasPrefix(payload, "\xff\xfe") || strings.HasPrefix(payload, "\xfe\xff") {
+		var order binary.ByteOrder = binary.LittleEndian
+		if strings.HasPrefix(payload, "\xfe\xff") {
+			order = binary.BigEndian
+		}
+		if len(payload)%2 != 0 {
+			return false, fmt.Errorf("parse Windows backup task definition: truncated UTF-16 output")
+		}
+		units := make([]uint16, (len(payload)-2)/2)
+		for index := range units {
+			units[index] = order.Uint16([]byte(payload[2+index*2 : 4+index*2]))
+		}
+		payload = string(utf16.Decode(units))
+	}
+	decoder := xml.NewDecoder(strings.NewReader(strings.TrimPrefix(payload, "\ufeff")))
+	decoder.CharsetReader = func(charset string, input io.Reader) (io.Reader, error) {
+		if strings.EqualFold(charset, "UTF-16") {
+			return input, nil // payload is UTF-8 after the BOM conversion above.
+		}
+		return nil, fmt.Errorf("unsupported task XML encoding %q", charset)
+	}
+	if err := decoder.Decode(&definition); err != nil {
 		return false, fmt.Errorf("parse Windows backup task definition: %w", err)
 	}
 	if definition.Settings.Enabled == nil {

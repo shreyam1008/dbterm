@@ -15,6 +15,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	backupcore "github.com/shreyam1008/dbterm/internal/backup"
+	"github.com/shreyam1008/dbterm/internal/folderpicker"
 )
 
 const (
@@ -23,7 +24,9 @@ const (
 	pageBackupCopyHistory   = "backupCopyHistory"
 	pageBackupCopyRetention = "backupCopyRetention"
 	pageBackupCopyInspect   = "backupCopyInspect"
+)
 
+const (
 	copyTopologyLocalLocal = iota
 	copyTopologyLocalSFTP
 	copyTopologyBackupSFTP
@@ -59,6 +62,9 @@ type backupCopyFormDraft struct {
 	freshnessMinutes      string
 	keepLatest            string
 	timeoutMinutes        string
+	maxAttempts           string
+	retryInitial          string
+	retryMax              string
 	volumeMode            backupcore.CopyVolumeMode
 	volumeMountPoint      string
 	volumeSentinelFile    string
@@ -1122,7 +1128,7 @@ func (a *App) runBackupCopyNow(jobID string) {
 				if len(run.Artifacts) > 0 {
 					preserved = fmt.Sprintf("\n\n%d completed immutable copy artifact(s) from this batch remain recorded.", len(run.Artifacts))
 				}
-				a.ShowAlert(fmt.Sprintf("%s Copy failed:\n\n%s\n\nLast phase: %s — %s%s", iconFail, tview.Escape(err.Error()), tview.Escape(nonEmptyOr(last.Phase, "unknown")), tview.Escape(nonEmptyOr(last.Message, "no progress detail")), preserved), pageBackupCopies)
+				a.showBackupOutcome(fmt.Sprintf("%s Copy failed\n\nCompleted copies, if any, are kept. Open Details for the cause.", iconFail), fmt.Sprintf("%s Copy failed:\n\n%s\n\nLast phase: %s — %s%s", iconFail, tview.Escape(err.Error()), tview.Escape(nonEmptyOr(last.Phase, "unknown")), tview.Escape(nonEmptyOr(last.Message, "no progress detail")), preserved), pageBackupCopies)
 				return
 			}
 			bytesCopied := run.BytesCopied
@@ -1133,7 +1139,11 @@ func (a *App) runBackupCopyNow(jobID string) {
 			if len(run.Warnings) > 0 || strings.TrimSpace(run.RetentionError) != "" {
 				result += "\nWarnings: " + copyWarningsLabel(backupcore.CopyJob{}, run, true, time.Now())
 			}
-			a.ShowAlert(fmt.Sprintf("%s Copy run complete\n\n%s", iconSuccess, tview.Escape(result)), pageBackupCopies)
+			summary := fmt.Sprintf("%s Copy run complete\n\n%d new verified copies\n%d already present", iconSuccess, len(run.Artifacts), run.AlreadyPresent)
+			if len(run.Warnings) > 0 || run.RetentionError != "" {
+				summary += "\n\nWarnings: see Details."
+			}
+			a.showBackupOutcome(summary, fmt.Sprintf("%s Copy run complete\n\n%s", iconSuccess, tview.Escape(result)), pageBackupCopies)
 		})
 	}()
 }
@@ -1219,6 +1229,7 @@ func (a *App) showBackupCopyForm(existing *backupcore.CopyJob) *tview.Form {
 		Schedule:     backupcore.Schedule{Kind: backupcore.ScheduleManual, TimeOfDay: "02:30", TimesOfDay: []string{"02:30"}, Timezone: "Local", RunMissedOnWake: true},
 		Verification: backupcore.CopyVerificationSHA256Format, Retention: backupcore.Retention{KeepLast: 14}, TimeoutMinutes: backupcore.DefaultTimeoutMinutes,
 	}
+	job.MaxAttempts, job.RetryInitialSeconds, job.RetryMaxSeconds = 3, 2, 60
 	topology := copyTopologyLocalLocal
 	if existing != nil {
 		job = *existing
@@ -1241,6 +1252,15 @@ func (a *App) showBackupCopyForm(existing *backupcore.CopyJob) *tview.Form {
 	if job.TimeoutMinutes <= 0 {
 		job.TimeoutMinutes = backupcore.DefaultTimeoutMinutes
 	}
+	if job.MaxAttempts == 0 {
+		job.MaxAttempts = 3
+	}
+	if job.RetryInitialSeconds == 0 {
+		job.RetryInitialSeconds = 2
+	}
+	if job.RetryMaxSeconds == 0 {
+		job.RetryMaxSeconds = 60
+	}
 	if job.Notification.Policy == "" {
 		job.Notification.Policy = backupcore.NotificationNever
 	}
@@ -1262,6 +1282,7 @@ func (a *App) showBackupCopyForm(existing *backupcore.CopyJob) *tview.Form {
 		everyMinutes: strconv.Itoa(max(5, job.Schedule.EveryMinutes)), wallClockTimes: backupScheduleTimesInput(job.Schedule),
 		weekdays: weekdayText(job.Schedule.Weekdays), timezone: nonEmptyOr(job.Schedule.Timezone, "Local"),
 		freshnessMinutes: strconv.Itoa(job.ExpectedFreshnessMinutes), keepLatest: strconv.Itoa(job.Retention.KeepLast), timeoutMinutes: strconv.Itoa(job.TimeoutMinutes),
+		maxAttempts: strconv.Itoa(job.MaxAttempts), retryInitial: strconv.Itoa(job.RetryInitialSeconds), retryMax: strconv.Itoa(job.RetryMaxSeconds),
 		volumeSentinelFile: ".dbterm-volume-id", volumeWarmupSeconds: "0", volumeCooldownSeconds: "0",
 		smtpPort: strconv.Itoa(job.Notification.SMTPPort), recipients: strings.Join(job.Notification.Recipients, ", "),
 	}
@@ -1318,6 +1339,31 @@ func (a *App) showBackupCopyForm(existing *backupcore.CopyJob) *tview.Form {
 	container := tview.NewFlex().SetDirection(tview.FlexRow)
 	var renderForm func(string)
 	var currentForm *tview.Form
+	chooseFolder := func(label string, value *string) {
+		initial := *value
+		ctx, cancel := context.WithCancel(context.Background())
+		token := a.showLoadingModal("Opening the system folder chooser...", withLoadingCancelOutcome("Press Esc to keep the current folder.", cancel))
+		go func() {
+			selected, err := folderpicker.Choose(ctx, initial)
+			cancel()
+			a.app.QueueUpdateDraw(func() {
+				if !a.finishLoadingModal(token) || !a.pages.HasPage(pageBackupCopyForm) {
+					return
+				}
+				if err != nil {
+					if !errors.Is(err, folderpicker.ErrCancelled) && !errors.Is(err, context.Canceled) {
+						a.ShowAlert(fmt.Sprintf("%s Could not open a folder chooser:\n\n%v\n\nType or paste a folder path instead.", iconInfo, err), pageBackupCopyForm)
+					}
+					return
+				}
+				*value = selected
+				renderForm(label)
+			})
+		}()
+	}
+	addFolder := func(form *tview.Form, label string, value *string) {
+		form.AddFormItem(newBackupFolderField(label, *value, 44, func(selected string) { *value = selected }, func() { chooseFolder(label, value) }))
+	}
 	closeForm := func() {
 		a.pages.RemovePage(pageBackupCopyForm)
 		a.pages.ShowPage(pageBackupCopies)
@@ -1399,6 +1445,10 @@ func (a *App) showBackupCopyForm(existing *backupcore.CopyJob) *tview.Form {
 			return backupcore.CopyJob{}, err
 		}
 		candidate.TimeoutMinutes, err = parseBackupFormInt("Timeout minutes", draft.timeoutMinutes, 1, 24*60)
+		if err != nil {
+			return backupcore.CopyJob{}, err
+		}
+		candidate.MaxAttempts, candidate.RetryInitialSeconds, candidate.RetryMaxSeconds, err = parseBackupRetryFields(draft.maxAttempts, draft.retryInitial, draft.retryMax)
 		if err != nil {
 			return backupcore.CopyJob{}, err
 		}
@@ -1522,8 +1572,8 @@ func (a *App) showBackupCopyForm(existing *backupcore.CopyJob) *tview.Form {
 	footer := tview.NewTextView().SetDynamicColors(true).SetTextAlign(tview.AlignCenter)
 	footer.SetBackgroundColor(crust)
 	footer.SetText(footerTextThatFits(w,
-		" [yellow]Tab / Shift+Tab[-] Move · [yellow]Enter[-] Choose/save · [yellow]Esc[-] Cancel · Credentials stay as identity-file references ",
-		" [yellow]Tab[-] Move · [yellow]Enter[-] Choose/save · [yellow]Esc[-] Cancel ",
+		" [yellow]Tab / Shift+Tab[-] Move · [yellow]F2[-] Browse folder · [yellow]Enter[-] Choose/save · [yellow]Esc[-] Cancel ",
+		" [yellow]Tab[-] Move · [yellow]F2[-] Browse · [yellow]Enter[-] Choose/save · [yellow]Esc[-] Cancel ",
 		" [yellow]Tab[-] Move · [yellow]Esc[-] Cancel ",
 	))
 	renderForm = func(focusLabel string) {
@@ -1553,10 +1603,10 @@ func (a *App) showBackupCopyForm(existing *backupcore.CopyJob) *tview.Form {
 		})
 		switch draft.topology {
 		case copyTopologyLocalLocal:
-			form.AddInputField("Source Folder", draft.localSource, 44, nil, func(value string) { draft.localSource = value })
-			form.AddInputField("Destination Folder", draft.localDestination, 44, nil, func(value string) { draft.localDestination = value })
+			addFolder(form, "Source Folder", &draft.localSource)
+			addFolder(form, "Destination Folder", &draft.localDestination)
 		case copyTopologyLocalSFTP:
-			form.AddInputField("Source Folder", draft.localSource, 44, nil, func(value string) { draft.localSource = value })
+			addFolder(form, "Source Folder", &draft.localSource)
 			addBackupCopySFTPFields(form, &draft)
 		case copyTopologyBackupSFTP:
 			if len(backupJobs) == 0 {
@@ -1571,11 +1621,11 @@ func (a *App) showBackupCopyForm(existing *backupcore.CopyJob) *tview.Form {
 			addBackupCopySFTPFields(form, &draft)
 		case copyTopologySFTPLocal:
 			addBackupCopySFTPFields(form, &draft)
-			form.AddInputField("Destination Folder", draft.localDestination, 44, nil, func(value string) { draft.localDestination = value })
+			addFolder(form, "Destination Folder", &draft.localDestination)
 		case copyTopologyRcloneLocal:
 			form.AddInputField("rclone Source", draft.rcloneSource, 44, nil, func(value string) { draft.rcloneSource = value })
-			form.AddTextView("rclone Help", "[#a6adc8]Use rclone://remote/path. Pull is supported; rclone push is not offered.[-]", 0, 1, true, false)
-			form.AddInputField("Destination Folder", draft.localDestination, 44, nil, func(value string) { draft.localDestination = value })
+			form.AddTextView("rclone Help", "[#a6adc8]rclone://remote/path (pull only).[-]", 0, 1, true, false)
+			addFolder(form, "Destination Folder", &draft.localDestination)
 		}
 		if backupCopyHasLocalDestination(draft.topology) {
 			addBackupFormSection(form, "DESTINATION VOLUME", "Optional positive identity prevents writes to a missing mount")
@@ -1587,9 +1637,9 @@ func (a *App) showBackupCopyForm(existing *backupcore.CopyJob) *tview.Form {
 				renderForm("Destination Volume")
 			})
 			if draft.volumeMode == "" {
-				form.AddTextView("Volume Safety", "[#a6adc8]dbterm treats the destination as an ordinary local folder and does not mount or unmount it.[-]", 0, 2, true, false)
+				form.AddTextView("Volume Safety", "[#a6adc8]Uses this folder without mounting.[-]", 0, 1, true, false)
 			} else {
-				form.AddInputField("Volume Mount Point", draft.volumeMountPoint, 44, nil, func(value string) { draft.volumeMountPoint = value })
+				addFolder(form, "Volume Mount Point", &draft.volumeMountPoint)
 				form.AddInputField("Sentinel File", draft.volumeSentinelFile, 30, nil, func(value string) { draft.volumeSentinelFile = value })
 				form.AddInputField("Volume Identity", draft.volumeIdentity, 40, nil, func(value string) { draft.volumeIdentity = value })
 				if draft.volumeMode == backupcore.CopyVolumeManagedLinuxBlockDevice {
@@ -1666,6 +1716,7 @@ func (a *App) showBackupCopyForm(existing *backupcore.CopyJob) *tview.Form {
 			}
 		})
 		form.AddInputField("Expected Freshness Minutes (0 = off)", draft.freshnessMinutes, 10, func(value string, _ rune) bool { return digitsOnly(value) }, func(value string) { draft.freshnessMinutes = value })
+		addBackupRetryFields(form, &draft.maxAttempts, &draft.retryInitial, &draft.retryMax)
 
 		addBackupFormSection(form, "FILTER & RETENTION", "Portable manifest identity decides what is complete")
 		if draft.topology != copyTopologyBackupSFTP {
@@ -1679,7 +1730,7 @@ func (a *App) showBackupCopyForm(existing *backupcore.CopyJob) *tview.Form {
 			}
 		}
 		form.AddInputField("Timeout Minutes", draft.timeoutMinutes, 8, func(value string, _ rune) bool { return digitsOnly(value) }, func(value string) { draft.timeoutMinutes = value })
-		form.AddTextView("Safety", "[#a6adc8]Sidecar manifest required · immutable final names · partial files never count as recovery-ready.[-]", 0, 2, true, false)
+		form.AddTextView("Safety", "[#a6adc8]Completion manifest required.\nPartial files are not recovery-ready.[-]", 0, 2, true, false)
 
 		addBackupFormSection(form, "EMAIL ALERTS", "Copy validity stays independent from SMTP delivery")
 		notificationOptions := []string{"Never", "Failures only", "Success only", "Success and failure"}
@@ -1706,14 +1757,29 @@ func (a *App) showBackupCopyForm(existing *backupcore.CopyJob) *tview.Form {
 			form.AddInputField("SMTP Username", draft.job.Notification.Username, 34, nil, func(value string) { draft.job.Notification.Username = value })
 			form.AddPasswordField("SMTP App Password", draft.job.Notification.Password, 32, '•', func(value string) { draft.job.Notification.Password = value })
 			form.AddInputField("From Address", draft.job.Notification.From, 34, nil, func(value string) { draft.job.Notification.From = value })
-			form.AddTextView("Email Test", "[#a6adc8]Send a test before saving; no copy or backup is created or changed.[-]", 0, 1, true, false)
+			form.AddTextView("Email Test", "[#a6adc8]Sends email only; no backup runs.[-]", 0, 1, true, false)
 		}
 		form.AddButton("Save Copy", save)
 		if draft.job.Notification.Policy != backupcore.NotificationNever {
 			form.AddButton("Send Test Email", testEmail)
 		}
 		form.AddButton("Cancel", closeForm)
+		styleBackupFormControls(form)
 		form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+			if event.Key() == tcell.KeyF2 {
+				if index, _ := form.GetFocusedItemIndex(); index >= 0 {
+					if field, ok := form.GetFormItem(index).(*backupFolderField); ok {
+						field.browse.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(p tview.Primitive) { a.app.SetFocus(p) })
+						return nil
+					}
+				}
+				if backupCopyHasLocalDestination(draft.topology) {
+					chooseFolder("Destination Folder", &draft.localDestination)
+				} else if draft.topology == copyTopologyLocalSFTP {
+					chooseFolder("Source Folder", &draft.localSource)
+				}
+				return nil
+			}
 			if event.Key() == tcell.KeyEscape {
 				closeForm()
 				return nil
@@ -1763,5 +1829,5 @@ func addBackupCopySFTPFields(form *tview.Form, draft *backupCopyFormDraft) {
 	form.AddInputField("SFTP Location", draft.sftpLocation, 44, nil, func(value string) { draft.sftpLocation = value })
 	form.AddInputField("Private Identity File", draft.identityPath, 44, nil, func(value string) { draft.identityPath = value })
 	form.AddInputField("Pinned Host Key (SHA256:...)", draft.pinnedHostKey, 44, nil, func(value string) { draft.pinnedHostKey = value })
-	form.AddTextView("SFTP Help", "[#a6adc8]Use sftp://service-user@host/absolute/path. Password URLs and unpinned hosts are refused.[-]", 0, 2, true, false)
+	form.AddTextView("SFTP Help", "[#a6adc8]Use sftp://user@host/absolute/path.\nIdentity file + pinned host needed.\nPassword URLs are refused.[-]", 0, 3, true, false)
 }

@@ -209,18 +209,19 @@ func (a *App) showBackupFileSetForm(job backupcore.Job, index int, existing *bac
 		current = form
 		form.SetBorder(true).SetTitle(" Included Application Folder ").SetTitleColor(mauve).SetBorderColor(surface1)
 		form.SetBackgroundColor(bg)
+		form.SetItemPadding(0)
 		form.SetFieldBackgroundColor(mantle).SetFieldTextColor(text).SetLabelColor(text).SetButtonBackgroundColor(surface1).SetButtonTextColor(green)
 		addBackupFormSection(form, "FOLDER", "Captured beside the engine-native database payload")
 		form.AddInputField("Label", set.Label, 32, nil, func(value string) { set.Label = value })
-		form.AddInputField("Folder", set.Root, 54, nil, func(value string) { set.Root = value })
+		form.AddFormItem(newBackupFolderField("Folder", set.Root, 54, func(value string) { set.Root = value }, chooseFolder))
 		form.AddCheckbox("Required", set.Required, func(value bool) { set.Required = value })
 		form.AddInputField("Include (comma-separated)", includes, 54, nil, func(value string) { includes = value })
 		form.AddInputField("Exclude (comma-separated)", excludes, 54, nil, func(value string) { excludes = value })
-		form.AddTextView("Consistency", "[#a6adc8]Live folders use a private best-effort capture with change detection, not an atomic application or filesystem snapshot. A changed, unsafe, or missing required set fails the backup; an optional set is omitted with a warning.[-]", 0, 4, true, false)
-		form.AddTextView("Paths", "[#a6adc8]Use slash-separated globs. Symlinks, reparse points, non-regular files, and paths outside this root are refused. The absolute root is never stored in the artifact.[-]", 0, 3, true, false)
+		form.AddTextView("Consistency", "[#a6adc8]Best-effort capture, not an atomic snapshot.\nChanged, unsafe or missing required folders fail.\nOptional folders are skipped with a warning.[-]", 0, 4, true, false)
+		form.AddTextView("Paths", "[#a6adc8]Use slash-separated globs.\nNo symlinks, reparse points or special files.\nPaths must stay inside this folder.\nAbsolute roots are not stored in artifacts.[-]", 0, 4, true, false)
 		form.AddButton("Save Folder", save)
-		form.AddButton("Browse...", chooseFolder)
 		form.AddButton("Cancel", closeForm)
+		styleBackupFormControls(form)
 		form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 			if event.Key() == tcell.KeyF2 {
 				chooseFolder()

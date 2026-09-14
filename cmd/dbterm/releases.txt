@@ -10,6 +10,7 @@
 # 5) If that tag already exists, the workflow skips release creation safely.
 #
 # Newest entry first:
+0.11.2|Ganga|Improve Backup Center with focused creation forms and desktop folder browsing, combined searchable activity, following agent logs, configurable transient generation retries, visible recovery details, and reliable Windows backup-agent task registration.
 0.11.1|Ganga|Protect Microsoft Store installations from self-update, self-uninstall and version-bound backup service registration; add verified MSIX packaging and release automation.
 0.11.0|Ganga|Portable backup manifests, guarded application-file bundles, verified local and SFTP push/pull copies, multi-time scheduling, managed volumes, and remote recovery inspection.
 0.10.1|Parvati|Resizable Tables sidebar and object-only type-ahead with direct keyboard navigation across matching tables, views, and database objects.

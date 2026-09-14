@@ -1085,6 +1085,11 @@ func (a *App) setupKeyBindings() {
 			return nil
 		}
 
+		// Backup views own their refresh, filter, and navigation keys.
+		if page == pageBackupCenter || page == "backupActivity" || page == "backupAgentLogs" || page == "backupRunDetails" {
+			return event
+		}
+
 		// F5 — Refresh currently selected table results (preserve selection/sort)
 		// Ctrl+F5 — Full refresh (reload table list + results)
 		if event.Key() == tcell.KeyF5 {

@@ -880,12 +880,12 @@ func TestBackupJobFormStartsWithEssentialsOnly(t *testing.T) {
 	if form == nil {
 		t.Fatal("backup form was not created")
 	}
-	for _, label := range []string{"Database", backupFormLabelDestination, "Schedule", "Run At (comma-separated HH:MM)", "Enable Schedule", "Included", backupFormLabelAdvanced} {
+	for _, label := range []string{"Database", backupFormLabelDestination, "Schedule", "At (HH:MM)", "Schedule active", backupFormLabelAdvanced} {
 		if form.GetFormItemByLabel(label) == nil {
 			t.Errorf("essential form is missing %q", label)
 		}
 	}
-	for _, label := range []string{backupFormLabelConnection, "Backup Name", "Timezone", "Filename Template", "SMTP Host", "Disk Space"} {
+	for _, label := range []string{"Backup Name", "Timezone", "Filename Template", "SMTP Host", "Disk Space", "Included", "Destination Help", "Timeout Minutes"} {
 		if form.GetFormItemByLabel(label) != nil {
 			t.Errorf("advanced field %q is visible in the essential form", label)
 		}
@@ -911,7 +911,7 @@ func TestBackupJobFormShowsExistingPluralTimesWithoutLegacyOverride(t *testing.T
 		Retention: backupcore.Retention{KeepLast: 14}, TimeoutMinutes: 30,
 	}
 	form := app.showBackupJobFormForConnection(&job, "")
-	field, ok := form.GetFormItemByLabel("Run At (comma-separated HH:MM)").(*tview.InputField)
+	field, ok := form.GetFormItemByLabel("At (HH:MM)").(*tview.InputField)
 	if !ok {
 		t.Fatal("plural run-time field was not created")
 	}
@@ -1116,16 +1116,33 @@ func TestBackupCenterProtectionSummaryFitsCommonTerminalSizes(t *testing.T) {
 			application.ForceDraw()
 			rendered := backupSimulationScreenText(screen)
 			t.Logf("%dx%d Backup Center render:\n%s", test.width, test.height, rendered)
+			if !strings.Contains(rendered, "LOCAL BACKUP") || !strings.Contains(rendered, "BACKUP CENTER") {
+				t.Fatalf("home should show primary recovery health:\n%s", rendered)
+			}
+			list := application.GetFocus().(*tview.List)
+			list.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), func(p tview.Primitive) { application.SetFocus(p) })
+			detail, ok := application.GetFocus().(*tview.TextView)
+			if !ok {
+				t.Fatal("Tab did not focus scrollable backup detail")
+			}
+			// Full policy/path evidence is reachable through detail scrolling;
+			// long paths must not push primary health out of the initial viewport.
+			available := rendered + "\n" + detail.GetText(true)
 			for _, want := range []string{"Selected Backup", "1 copy job", "LOCAL BACKUP", test.wantProtection, test.wantKind, test.wantDetail, "LOCAL CHECK", test.wantCount, test.wantCopyDetail, "COPY JOBS", "1 configured", "Vault mirror", "COPY HEALTH", "1 never", "01:00, 13:00", "POLICY", "not encrypted"} {
 				if want == "" {
 					continue
 				}
-				if !strings.Contains(rendered, want) {
+				if !strings.Contains(available, want) {
 					t.Errorf("%dx%d render missing %q:\n%s", test.width, test.height, want, rendered)
 				}
 			}
+			detail.InputHandler()(tcell.NewEventKey(tcell.KeyEnd, 0, tcell.ModNone), func(p tview.Primitive) { application.SetFocus(p) })
+			application.ForceDraw()
+			if !strings.Contains(backupSimulationScreenText(screen), "RETRIES") {
+				t.Fatal("end of backup detail is unreachable")
+			}
 			for _, rejected := range test.reject {
-				if strings.Contains(rendered, rejected) {
+				if strings.Contains(available, rejected) {
 					t.Errorf("%dx%d render overstates verification with %q:\n%s", test.width, test.height, rejected, rendered)
 				}
 			}

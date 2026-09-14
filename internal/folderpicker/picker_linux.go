@@ -25,23 +25,23 @@ type lookPathFunc func(string) (string, error)
 
 func linuxPickerCandidates(initialFolder string, getenv getenvFunc, lookPath lookPathFunc) ([]pickerCommand, error) {
 	if strings.TrimSpace(getenv("DISPLAY")) == "" && strings.TrimSpace(getenv("WAYLAND_DISPLAY")) == "" {
-		return nil, fmt.Errorf("%w: no graphical display was detected; type the destination path instead", ErrUnavailable)
+		return nil, fmt.Errorf("%w: no graphical display was detected; type the folder path instead", ErrUnavailable)
 	}
 	initialFolder = cleanInitialFolder(initialFolder)
 	var candidates []pickerCommand
 	if executable, err := lookPath("zenity"); err == nil {
-		args := []string{"--file-selection", "--directory", "--title=Choose backup destination"}
+		args := []string{"--file-selection", "--directory", "--title=Choose a folder"}
 		if initialFolder != "" {
 			args = append(args, "--filename="+initialFolder+string(filepath.Separator))
 		}
 		candidates = append(candidates, pickerCommand{name: executable, args: args})
 	}
 	if executable, err := lookPath("kdialog"); err == nil {
-		args := []string{"--getexistingdirectory", initialFolder, "--title", "Choose backup destination"}
+		args := []string{"--getexistingdirectory", initialFolder, "--title", "Choose a folder"}
 		candidates = append(candidates, pickerCommand{name: executable, args: args})
 	}
 	if len(candidates) == 0 {
-		return nil, fmt.Errorf("%w: install zenity or kdialog, or type the destination path", ErrUnavailable)
+		return nil, fmt.Errorf("%w: install zenity or kdialog, or type the folder path", ErrUnavailable)
 	}
 	return candidates, nil
 }

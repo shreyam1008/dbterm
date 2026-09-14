@@ -103,25 +103,28 @@ const (
 // Job is a durable backup policy. It references a saved connection by its
 // stable ID so renaming or reordering dashboard entries cannot redirect it.
 type Job struct {
-	ID               string            `json:"id"`
-	Name             string            `json:"name"`
-	ConnectionID     string            `json:"connection_id"`
-	Enabled          bool              `json:"enabled"`
-	Destination      string            `json:"destination"`
-	FilenameTemplate string            `json:"filename_template"`
-	Compression      Compression       `json:"compression"`
-	CompressionLevel int               `json:"compression_level"`
-	Encryption       Encryption        `json:"encryption"`
-	AgeRecipient     string            `json:"age_recipient,omitempty"`
-	FileSets         []FileSet         `json:"file_sets,omitempty"`
-	Schedule         Schedule          `json:"schedule"`
-	Retention        Retention         `json:"retention"`
-	Notification     EmailNotification `json:"notification,omitempty"`
-	TimeoutMinutes   int               `json:"timeout_minutes"`
-	CreatedAt        time.Time         `json:"created_at"`
-	UpdatedAt        time.Time         `json:"updated_at"`
-	LastRunAt        time.Time         `json:"last_run_at,omitempty"`
-	NextRunAt        time.Time         `json:"next_run_at,omitempty"`
+	ID                  string            `json:"id"`
+	Name                string            `json:"name"`
+	ConnectionID        string            `json:"connection_id"`
+	Enabled             bool              `json:"enabled"`
+	Destination         string            `json:"destination"`
+	FilenameTemplate    string            `json:"filename_template"`
+	Compression         Compression       `json:"compression"`
+	CompressionLevel    int               `json:"compression_level"`
+	Encryption          Encryption        `json:"encryption"`
+	AgeRecipient        string            `json:"age_recipient,omitempty"`
+	FileSets            []FileSet         `json:"file_sets,omitempty"`
+	Schedule            Schedule          `json:"schedule"`
+	Retention           Retention         `json:"retention"`
+	Notification        EmailNotification `json:"notification,omitempty"`
+	TimeoutMinutes      int               `json:"timeout_minutes"`
+	MaxAttempts         int               `json:"max_attempts,omitempty"`
+	RetryInitialSeconds int               `json:"retry_initial_seconds,omitempty"`
+	RetryMaxSeconds     int               `json:"retry_max_seconds,omitempty"`
+	CreatedAt           time.Time         `json:"created_at"`
+	UpdatedAt           time.Time         `json:"updated_at"`
+	LastRunAt           time.Time         `json:"last_run_at,omitempty"`
+	NextRunAt           time.Time         `json:"next_run_at,omitempty"`
 }
 
 type Retention struct {
@@ -149,18 +152,29 @@ type Artifact struct {
 }
 
 type Run struct {
-	ID                    string    `json:"id"`
-	JobID                 string    `json:"job_id"`
-	Trigger               Trigger   `json:"trigger"`
-	Status                RunStatus `json:"status"`
-	StartedAt             time.Time `json:"started_at"`
-	FinishedAt            time.Time `json:"finished_at,omitempty"`
-	Artifact              Artifact  `json:"artifact,omitempty"`
-	Error                 string    `json:"error,omitempty"`
-	RetentionError        string    `json:"retention_error,omitempty"`
-	NotificationAttempted bool      `json:"notification_attempted,omitempty"`
-	NotificationSent      bool      `json:"notification_sent,omitempty"`
-	NotificationError     string    `json:"notification_error,omitempty"`
+	ID                    string          `json:"id"`
+	JobID                 string          `json:"job_id"`
+	Trigger               Trigger         `json:"trigger"`
+	Status                RunStatus       `json:"status"`
+	StartedAt             time.Time       `json:"started_at"`
+	FinishedAt            time.Time       `json:"finished_at,omitempty"`
+	Artifact              Artifact        `json:"artifact,omitempty"`
+	Error                 string          `json:"error,omitempty"`
+	Attempts              []BackupAttempt `json:"attempts,omitempty"`
+	RetentionError        string          `json:"retention_error,omitempty"`
+	NotificationAttempted bool            `json:"notification_attempted,omitempty"`
+	NotificationSent      bool            `json:"notification_sent,omitempty"`
+	NotificationError     string          `json:"notification_error,omitempty"`
+}
+
+// BackupAttempt records generation attempts within one leased run. Older runs
+// have no attempt details. Errors have already passed connection redaction.
+type BackupAttempt struct {
+	Number     int       `json:"number"`
+	StartedAt  time.Time `json:"started_at"`
+	FinishedAt time.Time `json:"finished_at"`
+	Phase      string    `json:"phase"`
+	Error      string    `json:"error,omitempty"`
 }
 
 func NewID(prefix string) (string, error) {
@@ -208,6 +222,16 @@ func (j *Job) ApplyDefaults(now time.Time) error {
 	if j.TimeoutMinutes <= 0 {
 		j.TimeoutMinutes = DefaultTimeoutMinutes
 	}
+	// Existing plans retain their single-attempt behavior until explicitly edited.
+	if j.MaxAttempts == 0 {
+		j.MaxAttempts = 1
+	}
+	if j.RetryInitialSeconds == 0 {
+		j.RetryInitialSeconds = 2
+	}
+	if j.RetryMaxSeconds == 0 {
+		j.RetryMaxSeconds = 60
+	}
 	if j.Retention.KeepLast == 0 && j.Retention.MaxAgeDays == 0 && j.Retention.MaxTotalBytes == 0 {
 		j.Retention.KeepLast = 14
 	}
@@ -220,6 +244,16 @@ func (j *Job) ApplyDefaults(now time.Time) error {
 }
 
 func (j Job) Validate() error {
+	if j.MaxAttempts < 0 || j.MaxAttempts > 10 {
+		return fmt.Errorf("backup max attempts must be between 1 and 10 (0 preserves the legacy single attempt)")
+	}
+	if j.RetryInitialSeconds < 0 || j.RetryInitialSeconds > 3600 || j.RetryMaxSeconds < 0 || j.RetryMaxSeconds > 86400 {
+		return fmt.Errorf("backup retry delays must start within 3600 seconds and cap within 86400 seconds")
+	}
+	initial, maximum := backupRetrySettings(j)
+	if maximum < initial {
+		return fmt.Errorf("backup maximum retry delay must be at least the initial delay")
+	}
 	if strings.TrimSpace(j.Name) == "" {
 		return fmt.Errorf("job name is required")
 	}

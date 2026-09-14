@@ -376,7 +376,9 @@ func executeClaimedJobWithPostProcessing(parent context.Context, store *Store, c
 		timeout := time.Duration(job.TimeoutMinutes) * time.Minute
 		ctx, cancel := context.WithTimeout(parent, timeout)
 		reportEvent(ProgressEvent{Phase: "preflight", Message: fmt.Sprintf("starting %q for %s", job.Name, cfg.Name)})
-		artifact, runErr = (Runner{Progress: reportEvent}).Run(ctx, job, cfg, run.ID)
+		artifact, run.Attempts, runErr = runBackupAttempts(ctx, job, reportEvent, func(attemptContext context.Context, attemptProgress ProgressFunc) (Artifact, error) {
+			return (Runner{Progress: attemptProgress}).Run(attemptContext, job, cfg, run.ID)
+		}, waitBackupRetry)
 		cancel()
 	}
 	run.FinishedAt = time.Now().UTC()
