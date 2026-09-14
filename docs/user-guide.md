@@ -332,7 +332,7 @@ The portable `.dbterm.json` sidecar is the completion signal for independent cop
 
 ### Durable plans
 
-The selected plan panel shows local recovery evidence, copy health, schedule and policy. `Tab` focuses its scrollable details. `H` opens combined Activity with search and a failure filter; `L` opens agent logs with filtering and follow. Creation forms provide **Browse…** for desktop folder selection and keep paths editable for headless use. `F4` opens one advanced category at a time, including retries and timeout. Database plans default to one attempt; enable additional attempts explicitly. The [backup guide](backup.md) explains retry limits and available controls.
+The selected plan panel shows local recovery evidence, copy health, schedule and policy. `Tab` focuses its scrollable details. `H` opens combined Activity with search and a failure filter; `L` opens agent logs with filtering and follow. Creation forms provide **Browse…** for desktop folder selection and keep paths editable for headless use. `F4` opens one advanced category at a time, including retries and timeout. Database plans default to one attempt; enable additional attempts explicitly. The [backup guide](https://dbterm.shreyam1008.com.np/backup.md) explains retry limits and available controls.
 
 Open Backup Center with `Alt+K` or Dashboard `B`. Press `N` to select a saved database or add one; Dashboard `Ctrl+B` starts with its highlighted connection, and `Ctrl+N` adds another connection from inside the plan form.
 
