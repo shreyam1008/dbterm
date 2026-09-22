@@ -2,7 +2,11 @@ module github.com/shreyam1008/dbterm
 
 go 1.26.0
 
+// tcell/tview need Indic-aware grapheme segmentation for terminal cell layout.
+replace github.com/rivo/uniseg => ./internal/uniseg
+
 require (
+	github.com/SCKelemen/unicode/v6 v6.2.0
 	filippo.io/age v1.3.2
 	github.com/gdamore/tcell/v2 v2.13.8
 	github.com/go-sql-driver/mysql v1.9.3
@@ -11,6 +15,7 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.7.0
 	github.com/peterheb/cfd1 v0.3.14
 	github.com/pkg/sftp v1.13.11
+	github.com/rivo/uniseg v0.4.7
 	github.com/rivo/tview v0.42.0
 	github.com/tursodatabase/libsql-client-go v0.0.0-20251219100830-236aa1ff8acc
 	golang.org/x/crypto v0.55.0
@@ -32,7 +37,6 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/segmentio/asm v1.1.3 // indirect
 	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect

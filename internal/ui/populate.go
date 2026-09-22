@@ -6,10 +6,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+	"github.com/rivo/uniseg"
 )
 
 const (
@@ -165,11 +165,11 @@ func resultCellDisplayIsTruncated(value any, databaseType string) bool {
 	switch typed := value.(type) {
 	case []byte:
 		if databaseByteValueIsText(databaseType) {
-			return utf8.RuneCount(typed) > maxCellPreviewRunes
+			return uniseg.GraphemeClusterCount(string(typed)) > maxCellPreviewRunes
 		}
 		return len(typed) > maxBinaryPreviewLen
 	case string:
-		return utf8.RuneCountInString(typed) > maxCellPreviewRunes
+		return uniseg.GraphemeClusterCount(typed) > maxCellPreviewRunes
 	default:
 		return false
 	}
@@ -341,15 +341,21 @@ func truncateForDisplay(value string, maxRunes int) string {
 	if maxRunes <= 0 || value == "" {
 		return ""
 	}
-	if utf8.RuneCountInString(value) <= maxRunes {
+	if uniseg.GraphemeClusterCount(value) <= maxRunes {
 		return value
 	}
 
-	runes := []rune(value)
-	if maxRunes <= 3 {
-		return string(runes[:maxRunes])
+	clusters := make([]string, 0, uniseg.GraphemeClusterCount(value))
+	remaining := value
+	for len(remaining) > 0 {
+		cluster, rest, _, _ := uniseg.FirstGraphemeClusterInString(remaining, -1)
+		clusters = append(clusters, cluster)
+		remaining = rest
 	}
-	return string(runes[:maxRunes-3]) + "..."
+	if maxRunes <= 3 {
+		return strings.Join(clusters[:maxRunes], "")
+	}
+	return strings.Join(clusters[:maxRunes-3], "") + "..."
 }
 
 func isLikelyCompactColumn(columnName string) bool {
