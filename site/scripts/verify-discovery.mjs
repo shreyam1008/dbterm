@@ -171,6 +171,8 @@ for (const [relativePath, markers] of documentMarkers) {
 }
 
 const indexHtml = await readDist("index.html");
+assert(indexHtml.includes('href="https://apps.microsoft.com/detail/9P0RG2ZJ47M8"'), "home must link the live dbterm Microsoft Store listing");
+assert(!indexHtml.includes("Microsoft Store is not published yet"), "home still claims the Microsoft Store listing is unpublished");
 assert(indexHtml.includes(`"softwareVersion":"${releaseVersion}"`), "home structured data version differs from the release manifest");
 assert(indexHtml.includes(releaseUrl), "home release URL differs from the release manifest");
 assert(indexHtml.split(releaseLabel).length - 1 >= 3, "home release labels differ from the release manifest");
