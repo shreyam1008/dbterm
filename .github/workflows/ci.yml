@@ -61,15 +61,20 @@ jobs:
     env:
       GOFLAGS: -mod=readonly
       DBTERM_TEST_SCM: "1"
-      # The image's default TEMP uses an 8.3 user alias (RUNNER~1). Backup
-      # containment deliberately requires canonical paths, so use runner temp.
-      TEMP: ${{ runner.temp }}
-      TMP: ${{ runner.temp }}
     steps:
       - name: Keep source line endings for formatting checks
         run: git config --global core.autocrlf false
 
       - uses: actions/checkout@v7
+
+      # The image's default TEMP uses an 8.3 user alias (RUNNER~1). Backup
+      # containment deliberately requires canonical paths, so use runner temp.
+      - name: Use canonical runner temporary directory
+        shell: pwsh
+        run: |
+          $tempDirectory = (Resolve-Path -LiteralPath $env:RUNNER_TEMP).Path
+          "TEMP=$tempDirectory" >> $env:GITHUB_ENV
+          "TMP=$tempDirectory" >> $env:GITHUB_ENV
 
       - name: Set up Go
         uses: actions/setup-go@v7
