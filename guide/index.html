@@ -117,6 +117,7 @@
 <li>Optional default database.</li>
 </ul>
 <p>Ubuntu’s MySQL <code>root</code> account often uses socket authentication and may not work over TCP. Create or use a TCP-capable MySQL account; the Linux sudo password is not a database password.</p>
+<p>On Windows, <strong>Services</strong> detects MySQL/MariaDB and PostgreSQL through the Windows service manager, including versioned and custom service names. Client tools do not need to be on PATH for service detection. Start and stop use the detected Windows service; if Windows denies access, use <strong>Services</strong> (<code>services.msc</code>) with administrator approval. Servers in Docker, WSL or started manually can still be connected through <strong>Services → Connect</strong> by entering their endpoint and database credentials.</p>
 <h3 id="sqlite">SQLite</h3>
 <p>Provide the path to the local SQLite database file. SQLite does not need a username, password, port, or local service manager.</p>
 <h3 id="turso--libsql">Turso / LibSQL</h3>
