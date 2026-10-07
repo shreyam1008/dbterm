@@ -54,3 +54,39 @@ jobs:
       # canonical six-platform recipe used for publication too.
       - name: Compile six release binaries
         run: make release-core VERSION=ci COMMIT="${GITHUB_SHA::7}"
+
+  windows:
+    name: Windows Tests, Vet & Build
+    runs-on: windows-latest
+    env:
+      GOFLAGS: -mod=readonly
+      DBTERM_TEST_SCM: "1"
+    steps:
+      - name: Keep source line endings for formatting checks
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Test including disposable Windows service lifecycle
+        run: go test ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Check Go formatting
+        shell: pwsh
+        run: |
+          $files = @(git ls-files '*.go' | Where-Object { $_ -notlike 'internal/uniseg/*' })
+          $unformatted = @(gofmt -l $files)
+          if ($LASTEXITCODE -ne 0) { throw 'gofmt failed' }
+          if ($unformatted.Count -gt 0) { throw "Unformatted Go files: $($unformatted -join ', ')" }
+
+      - name: Build
+        run: go build ./...
