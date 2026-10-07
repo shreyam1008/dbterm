@@ -269,7 +269,9 @@ func TestRestoreTargetFormDisplaysCompleteSQLiteConfirmation(t *testing.T) {
 	application.SetRoot(pages, true)
 	target := config.ConnectionConfig{
 		ID: "restore_target", Name: "Restore target", Type: config.SQLite,
-		FilePath: "orders.sqlite3",
+		// Keep the display fixture independent of the checkout directory length.
+		// This form-only test never accesses the destination file.
+		FilePath: filepath.Join(string(filepath.Separator), "dbterm-test", "orders.sqlite3"),
 	}
 	app := &App{
 		app: application, pages: pages, store: &config.Store{Connections: []config.ConnectionConfig{target}},

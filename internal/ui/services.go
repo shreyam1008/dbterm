@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -19,15 +20,17 @@ import (
 
 // serviceInfo holds detected info about a database service
 type serviceInfo struct {
-	name      string // "MySQL" or "PostgreSQL"
-	installed bool
-	active    bool   // systemctl is-active
-	port      string // from ss -tlnp
-	pid       string // from systemctl show
-	ram       string // from /proc/<pid>/status VmRSS
-	version   string // from mysql --version / psql --version
-	user      string // default user
-	unit      string // systemd unit name
+	probeError string
+	state      string
+	name       string // "MySQL" or "PostgreSQL"
+	installed  bool
+	active     bool   // systemctl is-active
+	port       string // from ss -tlnp
+	pid        string // from systemctl show
+	ram        string // from /proc/<pid>/status VmRSS
+	version    string // from mysql --version / psql --version
+	user       string // default user
+	unit       string // systemd unit name
 }
 
 // showServiceDashboard displays the DB services status panel
@@ -161,15 +164,24 @@ func servicesFooterText(width int) string {
 func writeServiceSection(sb *strings.Builder, info *serviceInfo) {
 	// Icon and status
 	var statusIcon, statusText string
-	if !info.installed {
+	if info.probeError != "" {
+		statusIcon = "[yellow]?[-]"
+		statusText = "[yellow]Status unavailable[-]"
+	} else if !info.installed {
 		statusIcon = "[#6c7086]○[-]"
 		statusText = "[#6c7086]Not Installed[-]"
+		if runtime.GOOS == "windows" {
+			statusText = "[#6c7086]Not registered[-]"
+		}
 	} else if info.active {
 		statusIcon = "[green]●[-]"
 		statusText = "[green]Active[-]"
 	} else {
 		statusIcon = "[red]○[-]"
 		statusText = "[red]Inactive[-]"
+	}
+	if info.probeError == "" && info.state != "" {
+		statusText = "[#a6adc8]" + tview.Escape(info.state) + "[-]"
 	}
 
 	var nameColor string
@@ -181,9 +193,13 @@ func writeServiceSection(sb *strings.Builder, info *serviceInfo) {
 	}
 
 	sb.WriteString(fmt.Sprintf("\n  %s  [::b][%s]%s[-][-]  %s\n", statusIcon, nameColor, info.name, statusText))
+	if info.probeError != "" {
+		sb.WriteString("     " + tview.Escape(info.probeError) + "\n")
+		return
+	}
 
 	if !info.installed {
-		sb.WriteString(fmt.Sprintf("     [#6c7086]Not found. Install with: sudo apt install %s[-]\n", serviceInstallPackage(info.name)))
+		sb.WriteString("     [#6c7086]" + serviceInstallHint(info.name) + "[-]\n")
 		return
 	}
 
@@ -211,8 +227,18 @@ func serviceInstallPackage(serviceName string) string {
 	return "mysql-server"
 }
 
+func serviceInstallHint(name string) string {
+	if runtime.GOOS == "windows" {
+		return "No Windows service found. Install " + name + " with its Windows installer. Servers in Docker, WSL or started manually can still be connected using C."
+	}
+	return "Not found. Install with: sudo apt install " + serviceInstallPackage(name)
+}
+
 // getServiceInfo gathers information about a database service
 func getServiceInfo(displayName, cmdName, processName, unitName string) *serviceInfo {
+	if info := getPlatformServiceInfo(displayName); info != nil {
+		return info
+	}
 	info := &serviceInfo{
 		name: displayName,
 		unit: unitName,
@@ -478,16 +504,28 @@ func readVmRSS(pid string) uint64 {
 
 // toggleService starts or stops a database service
 func (a *App) toggleService(info *serviceInfo) {
+	if info.probeError != "" {
+		a.ShowAlert(info.probeError, "services")
+		return
+	}
+	if info.state != "" && info.state != "Running" && info.state != "Stopped" {
+		a.ShowAlert("Service is "+info.state+". Refresh after the transition completes. Paused services can be resumed in Services (services.msc).", "services")
+		return
+	}
 	if !info.installed {
-		a.ShowAlert(fmt.Sprintf("%s %s is not installed.\n\nInstall it first:\n  sudo apt install %s",
+		a.ShowAlert(fmt.Sprintf("%s %s\n\n%s",
 			iconWarn,
-			info.name, serviceInstallPackage(info.name)), "services")
+			info.name, serviceInstallHint(info.name)), "services")
 		return
 	}
 
 	action := "start"
 	if info.active {
 		action = "stop"
+	}
+	if runtime.GOOS == "windows" {
+		a.confirmAndRunServiceCmd(action, info, "")
+		return
 	}
 
 	// 1. Try non-interactive sudo first (in case of cached credentials or NOPASSWD)
@@ -563,9 +601,13 @@ func (a *App) showSudoPasswordPrompt(action string, info *serviceInfo) {
 // confirmAndRunServiceCmd shows confirmation if no password needed, then runs
 func (a *App) confirmAndRunServiceCmd(action string, info *serviceInfo, password string) {
 	actionTitle := strings.ToUpper(action[:1]) + action[1:]
+	command := fmt.Sprintf("sudo systemctl %s %s", action, info.unit)
+	if runtime.GOOS == "windows" {
+		command = fmt.Sprintf("Windows service: %s (%s)", info.unit, action)
+	}
 	modal := tview.NewModal().
-		SetText(fmt.Sprintf("%s %s %s?\n\nThis will run:\n  sudo systemctl %s %s",
-			iconServices, actionTitle, info.name, action, info.unit)).
+		SetText(fmt.Sprintf("%s %s %s?\n\n%s",
+			iconServices, actionTitle, info.name, command)).
 		AddButtons([]string{"  Yes  ", "  No  "}).
 		SetDoneFunc(func(buttonIndex int, buttonLabel string) {
 			a.pages.RemovePage("serviceConfirm")
@@ -599,17 +641,7 @@ func (a *App) runServiceCmdWithSudo(action string, info *serviceInfo, password s
 	go func() {
 		defer cancel()
 
-		var cmd *exec.Cmd
-		if password != "" {
-			// Use -p "" to suppress prompts and keep output cleaner for error handling.
-			cmd = exec.CommandContext(ctx, "sudo", "-S", "-k", "-p", "", "systemctl", action, info.unit)
-			cmd.Stdin = strings.NewReader(password + "\n")
-		} else {
-			cmd = exec.CommandContext(ctx, "sudo", "-n", "systemctl", action, info.unit)
-		}
-
-		// Capture output for error reporting
-		out, err := cmd.CombinedOutput()
+		out, err := runPlatformServiceCmd(ctx, action, info.unit, password)
 		outStr := strings.TrimSpace(string(out))
 
 		// Update UI on main thread
@@ -626,7 +658,7 @@ func (a *App) runServiceCmdWithSudo(action string, info *serviceInfo, password s
 			if err != nil {
 				errMsg := err.Error()
 				if ctx.Err() == context.DeadlineExceeded {
-					errMsg = "Timed out while waiting for sudo/systemctl"
+					errMsg = "Timed out while waiting for the service"
 				}
 				if strings.Contains(outStr, "incorrect password") || strings.Contains(outStr, "try again") {
 					errMsg = "Incorrect password"
@@ -838,6 +870,23 @@ func runServiceProbeCmd(name string, args ...string) string {
 
 // getQuickStatus returns a short colored status string for the dashboard header
 func getQuickStatus(unitName string) string {
+	if runtime.GOOS == "windows" {
+		name := "MySQL"
+		if unitName == "postgresql" {
+			name = "PostgreSQL"
+		}
+		info := getPlatformServiceInfo(name)
+		if info.probeError != "" {
+			return "[yellow]? " + name + " (status unavailable)[-]"
+		}
+		if info.active {
+			return "[green]●[-] " + name
+		}
+		if info.installed {
+			return "[red]○[-] " + name
+		}
+		return "[#6c7086]○ " + name + " (n/a)[-]"
+	}
 	probe := probeSystemdUnits(getUnitNames(unitName))
 	name := strings.ToUpper(unitName[:1]) + unitName[1:]
 	if probe.active {

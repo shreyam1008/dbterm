@@ -114,6 +114,8 @@ Provide either a MySQL DSN or the structured fields:
 
 Ubuntu's MySQL `root` account often uses socket authentication and may not work over TCP. Create or use a TCP-capable MySQL account; the Linux sudo password is not a database password.
 
+On Windows, **Services** detects MySQL/MariaDB and PostgreSQL through the Windows service manager, including versioned and custom service names. Client tools do not need to be on PATH for service detection. Start and stop use the detected Windows service; if Windows denies access, use **Services** (`services.msc`) with administrator approval. Servers in Docker, WSL or started manually can still be connected through **Services → Connect** by entering their endpoint and database credentials.
+
 ### SQLite
 
 Provide the path to the local SQLite database file. SQLite does not need a username, password, port, or local service manager.

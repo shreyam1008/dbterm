@@ -2,6 +2,7 @@ package ui
 
 import (
 	"errors"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -65,6 +66,22 @@ func TestServiceInstallPackageUsesPlatformPackageNames(t *testing.T) {
 	}
 	if got := serviceInstallPackage("MySQL"); got != "mysql-server" {
 		t.Fatalf("MySQL package = %q", got)
+	}
+}
+
+func TestServiceInstallHintAndUnavailableStatus(t *testing.T) {
+	hint := serviceInstallHint("PostgreSQL")
+	if runtime.GOOS == "windows" {
+		if !strings.Contains(hint, "Windows") || strings.Contains(hint, "sudo") || strings.Contains(hint, "apt") {
+			t.Fatalf("Windows install hint = %q", hint)
+		}
+	} else if !strings.Contains(hint, "sudo apt install postgresql") {
+		t.Fatalf("existing installation hint changed: %q", hint)
+	}
+	var rendered strings.Builder
+	writeServiceSection(&rendered, &serviceInfo{name: "MySQL", probeError: "Access denied"})
+	if !strings.Contains(rendered.String(), "Status unavailable") || !strings.Contains(rendered.String(), "Access denied") || strings.Contains(rendered.String(), "Not Installed") {
+		t.Fatalf("failed probe mislabeled as missing server: %s", rendered.String())
 	}
 }
 
