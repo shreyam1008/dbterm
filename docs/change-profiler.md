@@ -15,6 +15,8 @@ The loader reports phase, table position, row count, bytes processed, elapsed ti
 
 Exact portable mode must still read every selected row at capture and scan time. Compression reduces local I/O and storage but cannot remove that source read.
 
+If an older SQLite-family anchor used a nullable declared primary key, dbterm stops comparison and marks that anchor failed while preserving its baseline and last successful report. The connection is then free for a new anchor. This prevents the corrected row identity from making an unchanged table appear deleted and reinserted. The old report remains readable; deleting the old anchor later removes its local data.
+
 ## Why database logs are not the universal default
 
 - PostgreSQL logical decoding requires logical WAL, replication privileges, and a persistent slot. An abandoned slot can retain WAL and consume server storage.

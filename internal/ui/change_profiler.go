@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"math"
@@ -9,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -22,7 +24,8 @@ const (
 	pageProfilerTableReview = "changeProfilerTableReview"
 	pageProfilerReport      = "changeProfilerReport"
 	pageProfilerDiffDetail  = "changeProfilerDiffDetail"
-	profilerReportRowLimit  = 5000
+	pageProfilerCellDetail  = "changeProfilerCellDetail"
+	profilerReportPageSize  = 200
 )
 
 func (a *App) ensureProfilerStore() error {
@@ -544,27 +547,44 @@ func (a *App) showProfilerReport(anchor profiler.Anchor) {
 		list.AddItem("  [green]No changes[-]", "  The latest comparison matches the anchor baseline.", 0, nil)
 	}
 	grid := tview.NewTable().SetBorders(true).SetSelectable(true, false).SetFixed(1, 0)
-	grid.SetBorder(true).SetTitle(fmt.Sprintf(" Row and Cell Changes (up to %d) ", profilerReportRowLimit)).SetTitleColor(mauve).SetBorderColor(surface1)
+	grid.SetSelectedStyle(tcell.StyleDefault.Background(blue).Foreground(crust))
+	grid.SetBorder(true).SetTitle(" Row and Cell Changes ").SetTitleColor(mauve).SetBorderColor(surface1)
 	footer := tview.NewTextView().SetDynamicColors(true).SetTextAlign(tview.AlignCenter)
 	footer.SetBackgroundColor(crust)
 	screenW, _ := a.getScreenSize()
 	footer.SetText(profilerReportFooterText(screenW))
 	var diffRows []profiler.DiffRow
-	loadTable := func(index int) {
+	selectedTable, offset, hasMore := 0, 0, false
+	loadPage := func() {
 		grid.Clear()
 		diffRows = nil
+		hasMore = false
+		grid.SetOffset(0, 0)
+		grid.Select(1, 0)
 		for col, title := range []string{"CHANGE", "KEY", "CHANGED COLUMNS", "BEFORE → AFTER"} {
 			grid.SetCell(0, col, tview.NewTableCell(title).SetTextColor(peach).SetSelectable(false).SetBackgroundColor(mantle))
 		}
-		if index < 0 || index >= len(summaries) {
+		if selectedTable < 0 || selectedTable >= len(summaries) {
+			grid.SetCell(1, 0, tview.NewTableCell("No recorded changes").SetTextColor(subtext0).SetSelectable(false))
 			return
 		}
-		rows, err := a.profilerStore.ListDiffRows(context.Background(), anchor.ID, summaries[index].Name, profilerReportRowLimit)
+		summary := summaries[selectedTable]
+		rows, err := a.profilerStore.ListDiffRowsPage(context.Background(), anchor.ID, summary.Name, offset, profilerReportPageSize+1)
 		if err != nil {
-			grid.SetCell(1, 0, tview.NewTableCell("Could not load changes: "+err.Error()).SetTextColor(red))
+			grid.SetCell(1, 0, tview.NewTableCell(tview.Escape("Could not load changes: "+err.Error())).SetTextColor(red).SetSelectable(false))
 			return
+		}
+		hasMore = len(rows) > profilerReportPageSize
+		if hasMore {
+			rows = rows[:profilerReportPageSize]
 		}
 		diffRows = rows
+		total := summary.Inserted + summary.Updated + summary.Deleted
+		first := offset + 1
+		if len(rows) == 0 {
+			first = 0
+		}
+		grid.SetTitle(fmt.Sprintf(" Row Changes · %d–%d of %d ", first, offset+len(rows), total))
 		for rowIndex, row := range rows {
 			color, background, label := profilerDiffStyle(row.Kind)
 			changed := strings.Join(row.ChangedColumns, ", ")
@@ -572,9 +592,10 @@ func (a *App) showProfilerReport(anchor profiler.Anchor) {
 				changed = "all values"
 			}
 			preview := profilerDiffPreview(row)
-			values := []string{label, truncateForDisplay(row.Key, 38), changed, preview}
+			values := []string{label, profilerReportKey(row, summary.KeyColumns), truncateForDisplay(changed, 80), preview}
 			for col, value := range values {
 				cell := tview.NewTableCell(tview.Escape(value)).SetTextColor(color).SetBackgroundColor(background)
+				cell.SetMaxWidth([]int{9, 28, 26, 80}[col])
 				if col == 3 {
 					cell.SetExpansion(1)
 				}
@@ -585,27 +606,44 @@ func (a *App) showProfilerReport(anchor profiler.Anchor) {
 			grid.SetCell(1, 0, tview.NewTableCell("Structure changed; no row values changed").SetTextColor(mauve))
 		}
 	}
-	list.SetChangedFunc(func(index int, _, _ string, _ rune) { loadTable(index) })
+	list.SetChangedFunc(func(index int, _, _ string, _ rune) {
+		selectedTable, offset = index, 0
+		loadPage()
+	})
 	grid.SetSelectedFunc(func(row, _ int) {
 		if row > 0 && row-1 < len(diffRows) {
 			a.showProfilerDiffDetail(diffRows[row-1])
 		}
 	})
-	grid.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	handleReportKey := func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEscape {
 			a.pages.RemovePage(pageProfilerReport)
 			a.showChangeProfiler()
 			return nil
 		}
-		return event
-	})
-	list.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEscape {
-			a.pages.RemovePage(pageProfilerReport)
-			a.showChangeProfiler()
+		if event.Key() == tcell.KeyTab || event.Key() == tcell.KeyBacktab {
+			if a.app.GetFocus() == grid {
+				a.app.SetFocus(list)
+			} else {
+				a.app.SetFocus(grid)
+			}
 			return nil
 		}
-		if event.Key() == tcell.KeyEnter {
+		if matchesPlainShortcut(event, ']') {
+			if hasMore {
+				offset += profilerReportPageSize
+				loadPage()
+			}
+			return nil
+		}
+		if matchesPlainShortcut(event, '[') {
+			if offset > 0 {
+				offset = max(0, offset-profilerReportPageSize)
+				loadPage()
+			}
+			return nil
+		}
+		if event.Key() == tcell.KeyEnter && a.app.GetFocus() == list {
 			a.app.SetFocus(grid)
 			if grid.GetRowCount() > 1 {
 				grid.Select(1, 0)
@@ -613,10 +651,22 @@ func (a *App) showProfilerReport(anchor profiler.Anchor) {
 			return nil
 		}
 		return event
+	}
+	grid.SetInputCapture(handleReportKey)
+	list.SetInputCapture(handleReportKey)
+	loadPage()
+	body := tview.NewFlex().AddItem(list, 0, 2, true).AddItem(grid, 0, 5, false)
+	body.SetDrawFunc(func(_ tcell.Screen, x, y, width, height int) (int, int, int, int) {
+		if width < 100 {
+			body.SetDirection(tview.FlexRow).ResizeItem(list, min(8, max(6, height/4)), 0).ResizeItem(grid, 0, 1)
+		} else {
+			body.SetDirection(tview.FlexColumn).ResizeItem(list, 0, 2).ResizeItem(grid, 0, 5)
+		}
+		footer.SetText(profilerReportFooterText(width))
+		return x, y, width, height
 	})
-	loadTable(0)
 	container := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(tview.NewFlex().AddItem(list, 0, 2, true).AddItem(grid, 0, 5, false), 0, 1, true).
+		AddItem(body, 0, 1, true).
 		AddItem(footer, 1, 0, false)
 	a.pages.AddPage(pageProfilerReport, container, true, true)
 	a.app.SetFocus(list)
@@ -637,11 +687,16 @@ func (a *App) showProfilerDiffDetail(row profiler.DiffRow) {
 		}
 	}
 	sort.Strings(names)
+	modalW, modalH := a.modalSize(82, 130, 18, 38)
+	labelWidth := min(20, max(10, modalW/4))
+	valueWidth := max(6, (modalW-labelWidth-6)/2)
 	changed := make(map[string]bool, len(row.ChangedColumns))
 	for _, name := range row.ChangedColumns {
 		changed[name] = true
 	}
 	table := tview.NewTable().SetBorders(true).SetSelectable(true, true).SetFixed(1, 0)
+	table.SetSelectedStyle(tcell.StyleDefault.Background(blue).Foreground(crust))
+	table.SetBackgroundColor(mantle)
 	for col, title := range []string{"COLUMN", "BEFORE", "AFTER"} {
 		table.SetCell(0, col, tview.NewTableCell(title).SetTextColor(peach).SetSelectable(false).SetBackgroundColor(mantle))
 	}
@@ -651,22 +706,177 @@ func (a *App) showProfilerDiffDetail(row profiler.DiffRow) {
 		if changed[name] || row.Kind != profiler.DiffUpdated {
 			_, background, _ = profilerDiffStyle(row.Kind)
 		}
-		table.SetCell(index+1, 0, tview.NewTableCell(name).SetTextColor(blue).SetBackgroundColor(background))
-		table.SetCell(index+1, 1, tview.NewTableCell(before.Text).SetTextColor(text).SetBackgroundColor(background).SetExpansion(1))
-		table.SetCell(index+1, 2, tview.NewTableCell(after.Text).SetTextColor(text).SetBackgroundColor(background).SetExpansion(1))
+		values := []string{name, profilerDetailValue(before, row.Before, name), profilerDetailValue(after, row.After, name)}
+		for column, value := range values {
+			color := text
+			var reference any = value
+			if column == 0 {
+				color = blue
+			} else {
+				original, exists := row.Before[name]
+				if column == 2 {
+					original, exists = row.After[name]
+				}
+				reference = nil
+				if exists && !original.Null {
+					reference = original.Text
+				}
+			}
+			cell := tview.NewTableCell(tview.Escape(truncateForDisplay(value, maxCellPreviewRunes))).
+				SetReference(reference).SetTextColor(color).SetBackgroundColor(background)
+			if column > 0 {
+				cell.SetExpansion(1).SetMaxWidth(valueWidth)
+			} else {
+				cell.SetMaxWidth(labelWidth)
+			}
+			table.SetCell(index+1, column, cell)
+		}
 	}
-	table.SetBorder(true).SetTitle(fmt.Sprintf(" %s row — full before / after [yellow](Esc/Enter close)[-] ", row.Kind)).SetTitleColor(mauve).SetBorderColor(surface1)
+	table.SetBorder(true).SetTitle(fmt.Sprintf(" %s row · Enter full cell · Esc back ", row.Kind)).SetTitleColor(mauve).SetBorderColor(surface1)
+	table.Select(1, 1)
+	grid := tview.NewGrid().SetColumns(0, modalW, 0).SetRows(0, modalH, 0).AddItem(table, 1, 1, 1, 1, 0, 0, true)
+	returnFocus := a.app.GetFocus()
+	a.pages.AddPage(pageProfilerDiffDetail, grid, true, true)
 	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEscape || event.Key() == tcell.KeyEnter {
+		if event.Key() == tcell.KeyEscape {
 			a.pages.RemovePage(pageProfilerDiffDetail)
+			if returnFocus != nil {
+				a.app.SetFocus(returnFocus)
+			}
+			return nil
+		}
+		if event.Key() == tcell.KeyEnter {
+			selectedRow, selectedColumn := table.GetSelection()
+			if cell := table.GetCell(selectedRow, selectedColumn); selectedRow > 0 && cell != nil {
+				if value, ok := cell.GetReference().(string); ok {
+					a.showProfilerCellDetail(value, table)
+				}
+			}
 			return nil
 		}
 		return event
 	})
-	modalW, modalH := a.modalSize(82, 130, 18, 38)
-	grid := tview.NewGrid().SetColumns(0, modalW, 0).SetRows(0, modalH, 0).AddItem(table, 1, 1, 1, 1, 0, 0, true)
-	a.pages.AddPage(pageProfilerDiffDetail, grid, true, true)
 	a.app.SetFocus(table)
+}
+
+func (a *App) showProfilerCellDetail(value string, returnFocus tview.Primitive) {
+	view := tview.NewTextView().SetDynamicColors(false).SetWrap(true).SetWordWrap(false)
+	view.SetBorder(true).
+		SetTitleColor(mauve).SetBorderColor(surface1).SetBackgroundColor(mantle)
+	starts, page, end := []int{0}, 0, 0
+	loadPage := func() {
+		start := starts[page]
+		var content string
+		content, end = profilerCellPage(value, start)
+		first := start + 1
+		if len(value) == 0 {
+			first = 0
+		}
+		view.SetText(content).ScrollToBeginning()
+		view.SetTitle(fmt.Sprintf(" Value %d–%d/%d B · [/] page · C copy all · Esc back ", first, end, len(value)))
+	}
+	loadPage()
+	view.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEscape {
+			a.pages.RemovePage(pageProfilerCellDetail)
+			a.app.SetFocus(returnFocus)
+			return nil
+		}
+		if matchesPlainShortcut(event, ']') {
+			if end < len(value) {
+				if page+1 == len(starts) {
+					starts = append(starts, end)
+				}
+				page++
+				loadPage()
+			}
+			return nil
+		}
+		if matchesPlainShortcut(event, '[') {
+			if page > 0 {
+				page--
+				loadPage()
+			}
+			return nil
+		}
+		if matchesPlainShortcut(event, 'c') {
+			a.copyValueAsync(value, nil)
+			view.SetTitle(" Full value copied in dbterm · [/] page · Esc back ")
+			return nil
+		}
+		return event
+	})
+	a.pages.AddPage(pageProfilerCellDetail, view, true, true)
+	a.app.SetFocus(view)
+}
+
+// Bound the text given to tview as well as the table preview. Rendering a whole
+// multi-megabyte value in TextView invokes the same expensive Unicode layout as
+// the grid. Byte windows also bound a pathological single combining cluster.
+// Ordinary page boundaries preserve complete graphemes; the hard byte ceiling
+// preserves UTF-8 code points even when a cluster alone exceeds that ceiling.
+func profilerCellPage(value string, start int) (string, int) {
+	start = max(0, min(start, len(value)))
+	end := min(start+4096, len(value))
+	for end < len(value) && end > start && !utf8.RuneStart(value[end]) {
+		end--
+	}
+	if end == start && start < len(value) {
+		// Malformed continuation bytes still need to remain reachable.
+		end = min(start+4096, len(value))
+	}
+	preview, truncated := resultTextPreview(value[start:end], 259)
+	if truncated {
+		preview = preview[:len(preview)-3]
+		end = start + len(preview)
+	}
+	return preview, end
+}
+
+func profilerDetailValue(value profiler.Value, values map[string]profiler.Value, name string) string {
+	if _, exists := values[name]; !exists {
+		return "— (absent)"
+	}
+	if value.Null {
+		return "NULL (SQL)"
+	}
+	if value.Text == "" {
+		return "\"\" (empty)"
+	}
+	return value.Text
+}
+
+func profilerReportKey(row profiler.DiffRow, keyColumns []string) string {
+	values := row.After
+	if row.Kind == profiler.DiffDeleted {
+		values = row.Before
+	}
+	parts := make([]string, 0, len(keyColumns))
+	for _, name := range keyColumns {
+		value, exists := values[name]
+		if !exists {
+			continue
+		}
+		label := value.Text
+		if value.Null {
+			label = "NULL"
+		} else if value.Kind == "text" {
+			label = fmt.Sprintf("%q", truncateForDisplay(label, 24))
+		} else {
+			label = truncateForDisplay(label, 24)
+		}
+		if name == "__dbterm_rowid" {
+			name = "rowid"
+		}
+		parts = append(parts, name+"="+label)
+	}
+	if len(parts) == 0 {
+		// A keyless row has no human-readable stable key. Keep its fingerprint
+		// short; the full values remain available in row details.
+		hash := sha256.Sum256([]byte(row.Key))
+		return fmt.Sprintf("row %x", hash[:6])
+	}
+	return truncateForDisplay(strings.Join(parts, " · "), 80)
 }
 
 func (a *App) profilerConnectionLabel() string {
@@ -714,9 +924,9 @@ func profilerTableReviewFooterText(width int) string {
 }
 
 func profilerReportFooterText(width int) string {
-	full := " [yellow]↑/↓[-] Table  │  [yellow]Enter[-] Full before/after row  │  [yellow]Esc[-] Anchors "
-	short := " [yellow]↑/↓[-] Table  │  [yellow]Enter[-] Row detail  │  [yellow]Esc[-] Anchors "
-	minimal := " [yellow]Enter[-] Detail  │  [yellow]Esc[-] Anchors "
+	full := " [yellow]Tab[-] Switch panel  │  [yellow][ / ][-] Previous/next page  │  [yellow]Enter[-] Row detail  │  [yellow]Esc[-] Anchors "
+	short := " [yellow]Tab[-] Panel  │  [yellow][ / ][-] Page  │  [yellow]Enter[-] Detail  │  [yellow]Esc[-] Back "
+	minimal := " [yellow]Tab[-] Panel  [yellow][ / ][-] Page  [yellow]Enter[-] Detail  [yellow]Esc[-] Back "
 	return footerTextThatFits(width, full, short, minimal)
 }
 

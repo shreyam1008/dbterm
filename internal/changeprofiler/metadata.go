@@ -191,7 +191,10 @@ func inspectSQLiteTable(ctx context.Context, db Queryer, engine config.DBType, t
 			_ = rows.Close()
 			return plan, err
 		}
-		column.Nullable = notNull == 0 && pk == 0
+		// Ordinary SQLite PRIMARY KEY columns can contain multiple NULLs.
+		// Only a rowid alias (checked below), NOT NULL, STRICT, and WITHOUT
+		// ROWID primary keys guarantee a non-null identity.
+		column.Nullable = notNull == 0
 		column.Default = defaultValue.String
 		column.PrimaryPos = pk
 		plan.Columns = append(plan.Columns, column)
@@ -208,13 +211,39 @@ func inspectSQLiteTable(ctx context.Context, db Queryer, engine config.DBType, t
 			primary = append(primary, column.Name)
 		}
 	}
-	if len(primary) > 0 {
+	indexes, err := sqliteIndexes(ctx, db, table)
+	if err != nil {
+		return plan, err
+	}
+	primaryIsStable := len(primary) > 0
+	for _, name := range primary {
+		if !columnNullable(plan.Columns, name) {
+			continue
+		}
+		rowIDAlias := len(primary) == 1
+		for _, index := range indexes {
+			if index.origin == "pk" {
+				rowIDAlias = false
+			}
+		}
+		for columnIndex := range plan.Columns {
+			column := &plan.Columns[columnIndex]
+			if column.Name == name {
+				rowIDAlias = rowIDAlias && strings.EqualFold(column.Type, "INTEGER")
+				if rowIDAlias {
+					column.Nullable = false
+				}
+			}
+		}
+		primaryIsStable = primaryIsStable && rowIDAlias
+	}
+	if primaryIsStable {
 		sort.SliceStable(primary, func(i, j int) bool {
 			return columnPrimaryPos(plan.Columns, primary[i]) < columnPrimaryPos(plan.Columns, primary[j])
 		})
 		plan.KeyKind, plan.KeyColumns = KeyPrimary, primary
 	} else {
-		unique, err := sqliteUniqueKey(ctx, db, table, plan.Columns)
+		unique, err := sqliteUniqueKey(ctx, db, indexes, plan.Columns)
 		if err != nil {
 			return plan, err
 		}
@@ -223,7 +252,7 @@ func inspectSQLiteTable(ctx context.Context, db Queryer, engine config.DBType, t
 		} else {
 			var createSQL sql.NullString
 			if err := db.QueryRowContext(ctx, `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&createSQL); err == nil &&
-				!strings.Contains(strings.ToUpper(createSQL.String), "WITHOUT ROWID") {
+				!strings.Contains(strings.ToUpper(createSQL.String), "WITHOUT ROWID") && sqliteRowIDAlias(plan.Columns) != "" && !hasColumn(plan.Columns, "__dbterm_rowid") {
 				plan.KeyKind, plan.KeyColumns = KeyRowID, []string{"__dbterm_rowid"}
 			}
 		}
@@ -238,12 +267,18 @@ func inspectSQLiteTable(ctx context.Context, db Queryer, engine config.DBType, t
 			}
 		}
 	}
-	if plan.EstimatedRows == 0 {
+	if rowID := sqliteRowIDAlias(plan.Columns); plan.EstimatedRows == 0 && rowID != "" {
 		// Ordinary SQLite rowids are indexed, so MIN/MAX provides a fast range
 		// estimate without an extra COUNT(*) scan. Gaps make this approximate,
 		// which the progress UI labels honestly with '~'. WITHOUT ROWID tables
 		// simply reject the query and retain table-level progress.
-		_ = db.QueryRowContext(ctx, fmt.Sprintf(`SELECT COALESCE(MAX(_rowid_) - MIN(_rowid_) + 1, 0) FROM %s`, quoteIdentifier(config.SQLite, table))).
+		// Combining MIN and MAX in one aggregate disables SQLite's single-
+		// boundary optimization and walks the whole table. Independent indexed
+		// boundary lookups keep preflight independent of table size.
+		quoted := quoteIdentifier(config.SQLite, table)
+		_ = db.QueryRowContext(ctx, fmt.Sprintf(`SELECT COALESCE(
+			(SELECT %[1]s FROM %[2]s ORDER BY %[1]s DESC LIMIT 1) -
+			(SELECT %[1]s FROM %[2]s ORDER BY %[1]s ASC LIMIT 1) + 1, 0)`, rowID, quoted)).
 			Scan(&plan.EstimatedRows)
 	}
 	return plan, nil
@@ -331,13 +366,17 @@ func chooseKey(plan *TablePlan, candidates []keyCandidate) {
 	}
 }
 
-func sqliteUniqueKey(ctx context.Context, db Queryer, table string, columns []Column) ([]string, error) {
+type sqliteIndex struct {
+	name   string
+	origin string
+}
+
+func sqliteIndexes(ctx context.Context, db Queryer, table string) ([]sqliteIndex, error) {
 	rows, err := db.QueryContext(ctx, fmt.Sprintf("PRAGMA index_list(%s)", quoteIdentifier(config.SQLite, table)))
 	if err != nil {
 		return nil, err
 	}
-	type indexRow struct{ name string }
-	var indexes []indexRow
+	var indexes []sqliteIndex
 	for rows.Next() {
 		var seq, unique, partial int
 		var name, origin string
@@ -348,12 +387,16 @@ func sqliteUniqueKey(ctx context.Context, db Queryer, table string, columns []Co
 		// Partial unique indexes and expression indexes cannot identify every
 		// row in a table, so neither is safe as an anchor identity.
 		if unique != 0 && partial == 0 {
-			indexes = append(indexes, indexRow{name: name})
+			indexes = append(indexes, sqliteIndex{name: name, origin: origin})
 		}
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
 	}
+	return indexes, rows.Err()
+}
+
+func sqliteUniqueKey(ctx context.Context, db Queryer, indexes []sqliteIndex, columns []Column) ([]string, error) {
 	for _, index := range indexes {
 		info, err := db.QueryContext(ctx, fmt.Sprintf("PRAGMA index_info(%s)", quoteIdentifier(config.SQLite, index.name)))
 		if err != nil {
@@ -410,16 +453,42 @@ func splitQualified(value, fallbackSchema string) (string, string) {
 }
 
 func quoteIdentifier(engine config.DBType, identifier string) string {
-	parts := strings.Split(identifier, ".")
+	parts := []string{identifier}
+	if engine == config.PostgreSQL {
+		parts = strings.SplitN(identifier, ".", 2)
+	}
 	quoted := make([]string, 0, len(parts))
 	for _, part := range parts {
-		if engine == config.MySQL {
-			quoted = append(quoted, "`"+strings.ReplaceAll(part, "`", "``")+"`")
-		} else {
-			quoted = append(quoted, `"`+strings.ReplaceAll(part, `"`, `""`)+`"`)
-		}
+		quoted = append(quoted, quoteName(engine, part))
 	}
 	return strings.Join(quoted, ".")
+}
+
+func quoteName(engine config.DBType, name string) string {
+	if engine == config.MySQL {
+		return "`" + strings.ReplaceAll(name, "`", "``") + "`"
+	}
+	return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
+}
+
+func hasColumn(columns []Column, name string) bool {
+	for _, column := range columns {
+		if strings.EqualFold(column.Name, name) {
+			return true
+		}
+	}
+	return false
+}
+
+// SQLite exposes three spellings of its hidden rowid. A user column can shadow
+// any of them, so use an unshadowed spelling or report that none is available.
+func sqliteRowIDAlias(columns []Column) string {
+	for _, name := range []string{"rowid", "_rowid_", "oid"} {
+		if !hasColumn(columns, name) {
+			return name
+		}
+	}
+	return ""
 }
 
 func columnNullable(columns []Column, name string) bool {

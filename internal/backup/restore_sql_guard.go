@@ -3,6 +3,7 @@ package backup
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -19,7 +20,7 @@ const (
 // validatePostgresSQLForRestore blocks psql client commands that can escape
 // the selected database or access the local machine. pg_dump's \restrict,
 // \unrestrict and COPY-data terminator commands remain supported.
-func validatePostgresSQLForRestore(path, targetDatabase string) error {
+func validatePostgresSQLForRestore(ctx context.Context, path, targetDatabase string) error {
 	file, err := os.Open(path)
 	if err != nil {
 		return fmt.Errorf("open PostgreSQL SQL backup for safety scan: %w", err)
@@ -27,12 +28,16 @@ func validatePostgresSQLForRestore(path, targetDatabase string) error {
 	defer file.Close()
 
 	scanner := postgresSQLSafetyScanner{
-		reader:             bufio.NewReaderSize(file, restoreSQLBufferSize),
+		reader:             bufio.NewReaderSize(&contextReader{ctx: ctx, reader: file}, restoreSQLBufferSize),
 		targetDatabase:     targetDatabase,
 		line:               1,
 		lineOnlyWhitespace: true,
 	}
-	return scanner.scan()
+	err = scanner.scan()
+	if ctx.Err() != nil {
+		return fmt.Errorf("PostgreSQL SQL safety scan stopped: %w", ctx.Err())
+	}
+	return err
 }
 
 type postgresSQLLexState uint8
@@ -466,13 +471,17 @@ func isPostgresTokenByte(character byte) bool {
 		character >= '0' && character <= '9' || character == '_' || character >= 0x80
 }
 
-func validateMySQLSQLForRestore(path, targetDatabase string) error {
+func validateMySQLSQLForRestore(ctx context.Context, path, targetDatabase string) error {
 	file, err := os.Open(path)
 	if err != nil {
 		return fmt.Errorf("open MySQL SQL backup for safety scan: %w", err)
 	}
 	defer file.Close()
-	if err := scanMySQLDirectives(bufio.NewReaderSize(file, restoreSQLBufferSize), targetDatabase); err != nil {
+	err = scanMySQLDirectives(bufio.NewReaderSize(&contextReader{ctx: ctx, reader: file}, restoreSQLBufferSize), targetDatabase)
+	if ctx.Err() != nil {
+		return fmt.Errorf("MySQL SQL safety scan stopped: %w", ctx.Err())
+	}
+	if err != nil {
 		return fmt.Errorf("MySQL SQL safety scan failed: %w", err)
 	}
 	return nil

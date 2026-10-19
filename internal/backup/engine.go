@@ -637,6 +637,9 @@ func writeSQLiteCompatibleDump(ctx context.Context, db logicalDumpQueryer, dbTyp
 			return fail(err)
 		}
 	}
+	if err := logicalDumpSequences(ctx, db, writer, dbType); err != nil {
+		return fail(err)
+	}
 	objects, err := logicalDumpExtraObjects(ctx, db)
 	if err != nil {
 		return fail(err)
@@ -670,7 +673,7 @@ type logicalDumpTable struct {
 
 func logicalDumpTables(ctx context.Context, db logicalDumpQueryer, dbType config.DBType) ([]logicalDumpTable, error) {
 	rows, err := db.QueryContext(ctx, `SELECT name, sql FROM sqlite_master
-WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND sql IS NOT NULL ORDER BY name`)
+WHERE type = 'table' AND substr(name, 1, 7) <> 'sqlite_' COLLATE NOCASE AND sql IS NOT NULL ORDER BY name`)
 	if err != nil {
 		return nil, fmt.Errorf("read logical backup tables: %w", err)
 	}
@@ -734,7 +737,10 @@ func logicalDumpTableData(ctx context.Context, db logicalDumpQueryer, writer *bu
 	columns := make([]string, len(table.columns))
 	for i, column := range table.columns {
 		quoted := quoteSQLiteIdentifier(column)
-		selects[i] = "quote(" + quoted + ")"
+		// SQLite's quote() silently truncates TEXT at the first NUL. Encode only
+		// those values as a hex literal cast back to TEXT so the dump retains
+		// every byte without inflating ordinary text or changing BLOB types.
+		selects[i] = fmt.Sprintf("CASE WHEN typeof(%[1]s) = 'text' AND instr(%[1]s, char(0)) > 0 THEN 'CAST(X''' || hex(CAST(%[1]s AS BLOB)) || ''' AS TEXT)' ELSE quote(%[1]s) END", quoted)
 		columns[i] = quoted
 	}
 	rows, err := db.QueryContext(ctx, fmt.Sprintf("SELECT %s FROM %s", strings.Join(selects, ", "), quoteSQLiteIdentifier(table.name)))
@@ -767,9 +773,55 @@ func logicalDumpTableData(ctx context.Context, db logicalDumpQueryer, writer *bu
 	return rows.Err()
 }
 
+func logicalDumpSequences(ctx context.Context, db logicalDumpQueryer, writer *bufio.Writer, dbType config.DBType) error {
+	found, err := logicalDumpHasRows(ctx, db, `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'sqlite_sequence'`)
+	if err != nil {
+		return fmt.Errorf("check logical backup AUTOINCREMENT sequences: %w", err)
+	}
+	if !found {
+		return nil
+	}
+	// SQLite keeps an empty sqlite_sequence after its last AUTOINCREMENT table
+	// is dropped. Such a dump recreates no sequence table, so it must not emit
+	// a DELETE (or any other reference) to that absent internal table.
+	found, err = logicalDumpHasRows(ctx, db, `SELECT name FROM sqlite_sequence LIMIT 1`)
+	if err != nil {
+		return fmt.Errorf("read logical backup AUTOINCREMENT sequences: %w", err)
+	}
+	if !found {
+		return nil
+	}
+	// Replaying rows advances sequences only to the largest surviving row ID.
+	// Preserve deleted IDs' high-water marks so AUTOINCREMENT never reuses one
+	// after restore. CREATE TABLE statements above create sqlite_sequence.
+	if err := writeLine(writer, "DELETE FROM sqlite_sequence;"); err != nil {
+		return err
+	}
+	return logicalDumpTableData(ctx, db, writer, dbType, logicalDumpTable{
+		name: "sqlite_sequence", columns: []string{"name", "seq"},
+	})
+}
+
+func logicalDumpHasRows(ctx context.Context, db logicalDumpQueryer, query string) (bool, error) {
+	rows, err := db.QueryContext(ctx, query)
+	if err != nil {
+		return false, err
+	}
+	found := rows.Next()
+	rowsErr := rows.Err()
+	closeErr := rows.Close()
+	if rowsErr != nil {
+		return false, rowsErr
+	}
+	if closeErr != nil {
+		return false, closeErr
+	}
+	return found, nil
+}
+
 func logicalDumpExtraObjects(ctx context.Context, db logicalDumpQueryer) ([]string, error) {
 	rows, err := db.QueryContext(ctx, `SELECT sql FROM sqlite_master
-WHERE type IN ('view', 'index', 'trigger') AND name NOT LIKE 'sqlite_%' AND sql IS NOT NULL
+WHERE type IN ('view', 'index', 'trigger') AND substr(name, 1, 7) <> 'sqlite_' COLLATE NOCASE AND sql IS NOT NULL
 ORDER BY CASE type WHEN 'view' THEN 0 WHEN 'index' THEN 1 WHEN 'trigger' THEN 2 ELSE 3 END, name`)
 	if err != nil {
 		return nil, fmt.Errorf("read logical backup objects: %w", err)

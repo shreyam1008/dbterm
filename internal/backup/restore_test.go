@@ -204,7 +204,7 @@ func TestRestoreSQLGuards(t *testing.T) {
 	t.Run("MySQL allows selected target and ignores strings and comments", func(t *testing.T) {
 		data := []byte("-- USE other\nCREATE TABLE notes(v text);\nINSERT INTO notes VALUES ('USE other; CREATE DATABASE wrong;');\nUSE `target_db`;\nCREATE DATABASE IF NOT EXISTS target_db;\n")
 		path := writeInspectionFixture(t, "safe.sql", data)
-		if err := validateMySQLSQLForRestore(path, "target_db"); err != nil {
+		if err := validateMySQLSQLForRestore(context.Background(), path, "target_db"); err != nil {
 			t.Fatalf("validateMySQLSQLForRestore() error = %v", err)
 		}
 	})
@@ -227,7 +227,7 @@ func TestRestoreSQLGuards(t *testing.T) {
 
 	t.Run("MySQL allows MariaDB sandbox header", func(t *testing.T) {
 		path := writeInspectionFixture(t, "mariadb.sql", []byte("/*M!999999\\- enable the sandbox mode */\nCREATE TABLE t(id int);\n"))
-		if err := validateMySQLSQLForRestore(path, "target_db"); err != nil {
+		if err := validateMySQLSQLForRestore(context.Background(), path, "target_db"); err != nil {
 			t.Fatalf("validateMySQLSQLForRestore() error = %v", err)
 		}
 	})
@@ -236,7 +236,7 @@ func TestRestoreSQLGuards(t *testing.T) {
 		t.Run("MySQL blocks "+test.name, func(t *testing.T) {
 			t.Parallel()
 			path := writeInspectionFixture(t, "blocked.sql", []byte(test.sql))
-			err := validateMySQLSQLForRestore(path, "target_db")
+			err := validateMySQLSQLForRestore(context.Background(), path, "target_db")
 			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("validation error = %v, want %q", err, test.want)
 			}
@@ -246,7 +246,7 @@ func TestRestoreSQLGuards(t *testing.T) {
 	t.Run("PostgreSQL allows pg_dump guards and COPY data", func(t *testing.T) {
 		data := []byte("--\n-- PostgreSQL database dump\n--\n\\restrict key\nCOPY public.t (v) FROM stdin;\n\\connect is data here\n\\.\n\\unrestrict key\n")
 		path := writeInspectionFixture(t, "safe.sql", data)
-		if err := validatePostgresSQLForRestore(path, "target"); err != nil {
+		if err := validatePostgresSQLForRestore(context.Background(), path, "target"); err != nil {
 			t.Fatalf("validatePostgresSQLForRestore() error = %v", err)
 		}
 	})
@@ -265,7 +265,7 @@ func TestRestoreSQLGuards(t *testing.T) {
 		t.Run("PostgreSQL blocks "+command, func(t *testing.T) {
 			t.Parallel()
 			path := writeInspectionFixture(t, "blocked.sql", []byte(command+"\n"))
-			if err := validatePostgresSQLForRestore(path, "target"); err == nil || !strings.Contains(err.Error(), "blocked") {
+			if err := validatePostgresSQLForRestore(context.Background(), path, "target"); err == nil || !strings.Contains(err.Error(), "blocked") {
 				t.Fatalf("validation error = %v", err)
 			}
 		})
@@ -283,7 +283,7 @@ func TestRestoreSQLGuards(t *testing.T) {
 		test := test
 		t.Run("PostgreSQL blocks "+test.name, func(t *testing.T) {
 			path := writeInspectionFixture(t, "blocked-inline.sql", []byte(test.sql))
-			if err := validatePostgresSQLForRestore(path, "target"); err == nil || !strings.Contains(err.Error(), "blocked") {
+			if err := validatePostgresSQLForRestore(context.Background(), path, "target"); err == nil || !strings.Contains(err.Error(), "blocked") {
 				t.Fatalf("validation error = %v", err)
 			}
 		})
@@ -294,7 +294,7 @@ func TestRestoreSQLGuards(t *testing.T) {
 			"SELECT '\\g |not-a-command', \"\\!identifier\", $$\\lo_export 1 /tmp/x$$;\n" +
 			"/* \\connect elsewhere */\n"
 		path := writeInspectionFixture(t, "safe-lexical.sql", []byte(data))
-		if err := validatePostgresSQLForRestore(path, "target"); err != nil {
+		if err := validatePostgresSQLForRestore(context.Background(), path, "target"); err != nil {
 			t.Fatalf("validatePostgresSQLForRestore() error = %v", err)
 		}
 	})
@@ -889,7 +889,7 @@ func TestSQLiteSQLSafetyScanBlocksFilesystemEscapes(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			path := writeInspectionFixture(t, "unsafe.sql", []byte(test.sql))
-			err := validateSQLiteSQLForRestore(path)
+			err := validateSQLiteSQLForRestore(context.Background(), path)
 			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("validateSQLiteSQLForRestore() error = %v, want %q", err, test.want)
 			}
@@ -910,7 +910,7 @@ func TestSQLiteSQLSafetyScanAllowsDataAndBuiltInVirtualTables(t *testing.T) {
 		"VACUUM;\n" +
 		"SELECT .5;\n"
 	path := writeInspectionFixture(t, "safe.sql", []byte(data))
-	if err := validateSQLiteSQLForRestore(path); err != nil {
+	if err := validateSQLiteSQLForRestore(context.Background(), path); err != nil {
 		t.Fatalf("validateSQLiteSQLForRestore() error = %v", err)
 	}
 }

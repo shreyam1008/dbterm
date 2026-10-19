@@ -201,18 +201,7 @@ func (s *Store) captureBaselineTable(ctx context.Context, source Queryer, anchor
 		if err := rows.Scan(pointers...); err != nil {
 			return 0, err
 		}
-		rowBlob, rowHash, err := encodeScannedRow(names, types, values)
-		if err != nil {
-			return 0, err
-		}
-		occurrence := 0
-		if plan.KeyKind == KeyFullRow {
-			var key [sha256.Size]byte
-			copy(key[:], rowHash)
-			occurrence = occurrences[key]
-			occurrences[key]++
-		}
-		keyBlob, keyHash, err := encodeKey(rowBlob, plan.KeyColumns, plan.KeyKind, occurrence)
+		rowBlob, rowHash, keyBlob, keyHash, err := encodeScannedIdentity(names, types, values, plan.KeyColumns, plan.KeyKind, occurrences)
 		if err != nil {
 			return 0, err
 		}
@@ -242,19 +231,19 @@ func (s *Store) captureBaselineTable(ctx context.Context, source Queryer, anchor
 func queryTableRows(ctx context.Context, source Queryer, engine config.DBType, plan TablePlan) (*sql.Rows, []string, []string, error) {
 	selectColumns := make([]string, 0, len(plan.Columns)+1)
 	if plan.KeyKind == KeyRowID {
-		selectColumns = append(selectColumns, `rowid AS "__dbterm_rowid"`)
+		selectColumns = append(selectColumns, sqliteRowIDAlias(plan.Columns)+` AS "__dbterm_rowid"`)
 	}
 	for _, column := range plan.Columns {
-		selectColumns = append(selectColumns, quoteIdentifier(engine, column.Name))
+		selectColumns = append(selectColumns, quoteName(engine, column.Name))
 	}
 	query := fmt.Sprintf("SELECT %s FROM %s", strings.Join(selectColumns, ", "), quoteIdentifier(engine, plan.Name))
 	if plan.KeyKind != KeyFullRow && len(plan.KeyColumns) > 0 {
 		order := make([]string, len(plan.KeyColumns))
 		for index, column := range plan.KeyColumns {
-			if column == "__dbterm_rowid" {
-				order[index] = "rowid"
+			if plan.KeyKind == KeyRowID && column == "__dbterm_rowid" {
+				order[index] = sqliteRowIDAlias(plan.Columns)
 			} else {
-				order[index] = quoteIdentifier(engine, column)
+				order[index] = quoteName(engine, column)
 			}
 		}
 		query += " ORDER BY " + strings.Join(order, ", ")

@@ -20,7 +20,7 @@ WHERE table_type = 'BASE TABLE'
   AND table_schema = DATABASE()
 ORDER BY table_name`
 	case config.SQLite, config.Turso, config.CloudflareD1:
-		return `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name`
+		return `SELECT name FROM sqlite_master WHERE type='table' AND substr(name, 1, 7) <> 'sqlite_' COLLATE NOCASE ORDER BY name`
 	default:
 		return ""
 	}

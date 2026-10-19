@@ -43,6 +43,11 @@ type encodedRow struct {
 }
 
 func encodeScannedRow(columnNames, databaseTypes []string, values []any) ([]byte, []byte, error) {
+	row := normalizedRow(columnNames, databaseTypes, values)
+	return encodeRow(row)
+}
+
+func normalizedRow(columnNames, databaseTypes []string, values []any) encodedRow {
 	row := encodedRow{Cells: make([]encodedCell, len(columnNames))}
 	for index, name := range columnNames {
 		databaseType := ""
@@ -51,12 +56,36 @@ func encodeScannedRow(columnNames, databaseTypes []string, values []any) ([]byte
 		}
 		row.Cells[index] = normalizeCell(name, databaseType, values[index])
 	}
+	return row
+}
+
+func encodeRow(row encodedRow) ([]byte, []byte, error) {
 	payload, err := json.Marshal(row)
 	if err != nil {
 		return nil, nil, err
 	}
 	hash := sha256.Sum256(payload)
 	return payload, hash[:], nil
+}
+
+// encodeScannedIdentity shares normalized cells between the row and its key.
+// In particular, a tiny primary key must not require JSON-decoding an entire
+// wide row after it has just been encoded.
+func encodeScannedIdentity(columnNames, databaseTypes []string, values []any, keyColumns []string, kind KeyKind, occurrences map[[sha256.Size]byte]int) (rowBlob, rowHash, keyBlob, keyHash []byte, err error) {
+	row := normalizedRow(columnNames, databaseTypes, values)
+	rowBlob, rowHash, err = encodeRow(row)
+	if err != nil {
+		return
+	}
+	occurrence := 0
+	if kind == KeyFullRow {
+		var hash [sha256.Size]byte
+		copy(hash[:], rowHash)
+		occurrence = occurrences[hash]
+		occurrences[hash]++
+	}
+	keyBlob, keyHash, err = encodeRowKey(row, keyColumns, kind, occurrence)
+	return
 }
 
 // packRow keeps exact before/after values while substantially reducing the
@@ -113,6 +142,10 @@ func encodeKey(rowPayload []byte, keyColumns []string, kind KeyKind, occurrence 
 	if err := json.Unmarshal(rowPayload, &row); err != nil {
 		return nil, nil, err
 	}
+	return encodeRowKey(row, keyColumns, kind, occurrence)
+}
+
+func encodeRowKey(row encodedRow, keyColumns []string, kind KeyKind, occurrence int) ([]byte, []byte, error) {
 	wanted := make(map[string]bool, len(keyColumns))
 	for _, column := range keyColumns {
 		wanted[column] = true

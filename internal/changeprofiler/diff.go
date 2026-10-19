@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/shreyam1008/dbterm/internal/config"
 )
 
 func (s *Store) Scan(ctx context.Context, source *sql.DB, anchorID string, finish bool, progress ProgressFunc) (_ Anchor, returnErr error) {
@@ -57,6 +59,19 @@ func (s *Store) Scan(ctx context.Context, source *sql.DB, anchorID string, finis
 	for _, table := range excluded {
 		delete(currentByName, table)
 	}
+	if anchor.Engine == config.SQLite || anchor.Engine == config.Turso || anchor.Engine == config.CloudflareD1 {
+		for _, baseline := range baselinePlans {
+			if current, exists := currentByName[baseline.Name]; exists && legacySQLiteIdentityNeedsRecapture(baseline, current) {
+				incompatible := fmt.Errorf("anchor %q uses a legacy primary-key identity for table %q that permits NULL values and cannot be upgraded safely. This anchor is marked failed; its baseline and previous report are preserved. Create a new anchor to capture a fresh baseline", anchor.Name, baseline.Name)
+				// Release the one-active-anchor slot without deleting historical
+				// values. Ordinary scan failures still return to active below.
+				if _, err := s.db.ExecContext(ctx, `UPDATE profiler_anchors SET status='failed',error=? WHERE id=? AND status='comparing'`, incompatible.Error(), anchorID); err != nil {
+					return Anchor{}, err
+				}
+				return Anchor{}, incompatible
+			}
+		}
+	}
 	baselineNames := make(map[string]bool, len(baselinePlans))
 	workPlans := append([]TablePlan(nil), baselinePlans...)
 	for _, plan := range baselinePlans {
@@ -81,6 +96,7 @@ func (s *Store) Scan(ctx context.Context, source *sql.DB, anchorID string, finis
 		`DELETE FROM profiler_seen_rows WHERE anchor_id = ?`,
 		`DELETE FROM profiler_diff_rows WHERE anchor_id = ?`,
 		`DELETE FROM profiler_schema_events WHERE anchor_id = ?`,
+		`DELETE FROM profiler_tables WHERE anchor_id = ? AND baseline_present = 0`,
 		`UPDATE profiler_tables SET inserted_count=0, updated_count=0, deleted_count=0, schema_changed=0 WHERE anchor_id = ?`,
 	} {
 		if _, err := tx.ExecContext(ctx, statement, anchorID); err != nil {
@@ -145,8 +161,8 @@ func (s *Store) Scan(ctx context.Context, source *sql.DB, anchorID string, finis
 		keys, _ := json.Marshal(current.KeyColumns)
 		_, schemaHash, _ := tableSchemaPayload(current)
 		if _, err := tx.ExecContext(ctx, `INSERT INTO profiler_tables
-			(anchor_id,table_name,columns_json,key_columns_json,key_kind,schema_hash,included,schema_changed)
-			VALUES(?,?,?,?,?,?,1,1)`, anchorID, current.Name, columns, keys, current.KeyKind, schemaHash); err != nil {
+			(anchor_id,table_name,columns_json,key_columns_json,key_kind,schema_hash,included,schema_changed,baseline_present)
+			VALUES(?,?,?,?,?,?,1,1,0)`, anchorID, current.Name, columns, keys, current.KeyKind, schemaHash); err != nil {
 			return Anchor{}, err
 		}
 		if err := recordSchemaEvent(ctx, tx, anchorID, current.Name, "table_created", "Table was created after the anchor"); err != nil {
@@ -202,7 +218,7 @@ func (s *Store) Scan(ctx context.Context, source *sql.DB, anchorID string, finis
 
 func (s *Store) loadPlans(ctx context.Context, anchorID string) ([]TablePlan, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT table_name, columns_json, key_columns_json, key_kind, risk, baseline_rows
-		FROM profiler_tables WHERE anchor_id=? AND included=1 ORDER BY table_name`, anchorID)
+		FROM profiler_tables WHERE anchor_id=? AND included=1 AND baseline_present=1 ORDER BY table_name`, anchorID)
 	if err != nil {
 		return nil, err
 	}
@@ -249,12 +265,18 @@ func scanCurrentTable(ctx context.Context, source Queryer, tx *sql.Tx, anchor An
 		return err
 	}
 	defer rows.Close()
-	lookup, err := tx.PrepareContext(ctx, `SELECT row_hash,row_blob FROM profiler_baseline_rows
+	lookup, err := tx.PrepareContext(ctx, `SELECT row_hash FROM profiler_baseline_rows
 		WHERE anchor_id=? AND table_name=? AND key_hash=? AND key_blob=?`)
 	if err != nil {
 		return err
 	}
 	defer lookup.Close()
+	beforeValues, err := tx.PrepareContext(ctx, `SELECT row_blob FROM profiler_baseline_rows
+		WHERE anchor_id=? AND table_name=? AND key_hash=? AND key_blob=?`)
+	if err != nil {
+		return err
+	}
+	defer beforeValues.Close()
 	seen, err := tx.PrepareContext(ctx, `INSERT OR IGNORE INTO profiler_seen_rows(anchor_id,table_name,key_hash,key_blob) VALUES(?,?,?,?)`)
 	if err != nil {
 		return err
@@ -281,25 +303,14 @@ func scanCurrentTable(ctx context.Context, source Queryer, tx *sql.Tx, anchor An
 		if err := rows.Scan(pointers...); err != nil {
 			return err
 		}
-		rowBlob, rowHash, err := encodeScannedRow(names, types, values)
-		if err != nil {
-			return err
-		}
-		occurrence := 0
-		if plan.KeyKind == KeyFullRow {
-			var key [sha256.Size]byte
-			copy(key[:], rowHash)
-			occurrence = occurrences[key]
-			occurrences[key]++
-		}
-		keyBlob, keyHash, err := encodeKey(rowBlob, plan.KeyColumns, plan.KeyKind, occurrence)
+		rowBlob, rowHash, keyBlob, keyHash, err := encodeScannedIdentity(names, types, values, plan.KeyColumns, plan.KeyKind, occurrences)
 		if err != nil {
 			return err
 		}
 		var beforeHash, beforeBlob []byte
 		lookupErr := sql.ErrNoRows
 		if pairBaseline {
-			lookupErr = lookup.QueryRowContext(ctx, anchor.ID, plan.Name, keyHash, keyBlob).Scan(&beforeHash, &beforeBlob)
+			lookupErr = lookup.QueryRowContext(ctx, anchor.ID, plan.Name, keyHash, keyBlob).Scan(&beforeHash)
 		}
 		switch {
 		case lookupErr == nil:
@@ -307,6 +318,9 @@ func scanCurrentTable(ctx context.Context, source Queryer, tx *sql.Tx, anchor An
 				return err
 			}
 			if !equalBytes(beforeHash, rowHash) {
+				if err := beforeValues.QueryRowContext(ctx, anchor.ID, plan.Name, keyHash, keyBlob).Scan(&beforeBlob); err != nil {
+					return err
+				}
 				beforeRow, err := unpackRow(beforeBlob)
 				if err != nil {
 					return err
@@ -376,6 +390,29 @@ func sameKey(left, right TablePlan) bool {
 		}
 	}
 	return true
+}
+
+// Older captures treated every declared SQLite PRIMARY KEY as NOT NULL, even
+// though ordinary rowid tables allow nullable text/composite/descending keys.
+// A metadata correction must not manufacture a schema change and replace every
+// row's identity on the next scan. The original captured identities cannot be
+// safely rewritten without reading the source at the original point in time.
+func legacySQLiteIdentityNeedsRecapture(baseline, current TablePlan) bool {
+	if baseline.KeyKind != KeyPrimary || sameKey(baseline, current) || len(baseline.Columns) != len(current.Columns) {
+		return false
+	}
+	correctedNullableKey := false
+	for index, before := range baseline.Columns {
+		after := current.Columns[index]
+		if before.PrimaryPos > 0 && !before.Nullable && after.Nullable {
+			correctedNullableKey = true
+			after.Nullable = before.Nullable
+		}
+		if before != after {
+			return false
+		}
+	}
+	return correctedNullableKey
 }
 
 func columnsContain(columns []Column, names []string) bool {

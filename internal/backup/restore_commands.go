@@ -46,7 +46,7 @@ func executePostgresArchiveRestore(ctx context.Context, plan *RestorePlan, paylo
 }
 
 func executePostgresSQLRestore(ctx context.Context, plan *RestorePlan, payloadPath string, emit func(string)) error {
-	if err := validatePostgresSQLForRestore(payloadPath, plan.Target.Database); err != nil {
+	if err := validatePostgresSQLForRestore(ctx, payloadPath, plan.Target.Database); err != nil {
 		return err
 	}
 	tool, err := requireClientTool("psql")
@@ -68,7 +68,7 @@ func executePostgresSQLRestore(ctx context.Context, plan *RestorePlan, payloadPa
 }
 
 func executeMySQLRestore(ctx context.Context, plan *RestorePlan, payloadPath string, emit func(string)) error {
-	if err := validateMySQLSQLForRestore(payloadPath, plan.Target.Database); err != nil {
+	if err := validateMySQLSQLForRestore(ctx, payloadPath, plan.Target.Database); err != nil {
 		return err
 	}
 	tool, err := requireClientTool("mysql")
