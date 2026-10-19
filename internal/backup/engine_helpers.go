@@ -39,6 +39,9 @@ func verifyNativeBackup(ctx context.Context, cfg *config.ConnectionConfig, path 
 		if !bytes.HasPrefix(prefix, []byte("PGDMP")) {
 			return fmt.Errorf("PostgreSQL backup validation failed: pg_dump output is not a custom archive")
 		}
+		if err := checkPostgresBackupJournals(ctx, path); err != nil {
+			return err
+		}
 	case config.SQLite:
 		if err := validateSQLiteHeader(prefix, info.Size()); err != nil {
 			return fmt.Errorf("SQLite backup validation failed: snapshot header is invalid: %w", err)
@@ -46,10 +49,16 @@ func verifyNativeBackup(ctx context.Context, cfg *config.ConnectionConfig, path 
 		if err := validateSQLiteDatabaseFile(ctx, path); err != nil {
 			return fmt.Errorf("SQLite backup validation failed: %w", err)
 		}
+		if err := checkSQLiteBackupJournals(ctx, path); err != nil {
+			return err
+		}
 	case config.MySQL:
 		format, engine, _, _, _ := detectSQL(prefix)
 		if format != FormatMySQLSQL || engine != config.MySQL {
 			return fmt.Errorf("MySQL backup validation failed: output does not contain a recognizable mysqldump/MariaDB SQL header")
+		}
+		if err := checkMySQLBackupJournals(ctx, path, cfg.Database); err != nil {
+			return err
 		}
 	case config.Turso:
 		format, engine, _, _, _ := detectSQL(prefix)

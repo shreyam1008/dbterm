@@ -38,9 +38,9 @@ SQLite snapshot backups are built in. PostgreSQL and MySQL backups need their na
 
 ## 4. Set a checkpoint
 
-Press `Alt+W` to open Change Profiler, then `N` to create an anchor. Call it **Before task update**, include the `tasks` table in the plan, and capture the baseline.
+Press `Alt+W` to open Change Profiler, then `N` to create a checkpoint. Call it **Before task update**, keep **Incremental journal**, include `tasks`, and confirm **Start journal**. This adds private journal tables/triggers to the disposable demo database.
 
-An anchor is your reference point for comparing data. Keep this first one small: capture and scan both read the selected rows.
+A checkpoint records committed writes after Start. Existing rows are not copied. Choose **Snapshot comparison** instead if you want the full-read baseline workflow without source objects.
 
 ## 5. Make a change and check it
 
@@ -54,9 +54,9 @@ UPDATE tasks SET status = 'done' WHERE id = 1;
 INSERT INTO tasks VALUES (4, 'Record the demo', 'todo');
 ```
 
-Open Change Profiler again with `Alt+W`. Select your anchor and press `S` to scan. Open the report with `Enter`.
+Open Change Profiler again with `Alt+W`. Select your checkpoint and press `F` to stop recording and build its report. Open it with `Enter`.
 
-You should find one updated row—task 1 changed from `todo` to `done`—and one inserted row, task 4. The other two tasks should be unchanged. Use `Tab` to focus the row list, select the updated row with the arrow keys, and press `Enter` to see its full before/after values. Close that view and return to the anchor list with `Esc`, then press `F` for the final scan and to finish the anchor; the compact report stays available.
+You should find one updated row—task 1 changed from `todo` to `done`—and one inserted row, task 4. The other two tasks should be unchanged. Use `Tab` to focus the row list, select the updated row with the arrow keys, and press `Enter` to see its full before/after values. Stop removes the source journal after saving the compact report, which stays available.
 
 The report shows observed changes, not who made them. It isn't an undo button or a continuous audit log. Your backup is the separate recovery artifact.
 

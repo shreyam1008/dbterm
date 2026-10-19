@@ -220,9 +220,9 @@ The Tables sidebar reuses that local catalog as a searchable schema tree. Right 
 
 ## Change Profiler
 
-Press `Alt+W`, then `N`, to create a named before/after anchor. The review screen estimates known table sizes, keeps risky tables excluded until explicitly selected, and lets `A` include the whole database in one step. Capture and scan loaders show the current phase, table position, rows, bytes, elapsed time, rate, approximate percentage, and table ETA when row estimates are available.
+Press `Alt+W`, then `N`, to start a named checkpoint. **Incremental journal** records committed row changes without copying existing tables; press `F` to stop and see the net diff. It installs private source tables/triggers after confirmation. PostgreSQL/MySQL require the connection to stay open and hold schema/metadata guards until Stop; SQLite recording survives closing dbterm. Reports page through changes and open exact before/after values in bounded viewers.
 
-The portable engine works across every supported database without installing triggers or server objects. It streams rows, compares stable-key hashes, and adaptively compresses exact before-values in the private local profiler store. PostgreSQL/MySQL use a consistent repeatable-read snapshot, SQLite/Turso use a transaction, and Cloudflare D1 is reported as best-effort. Database-native WAL/binlog capture is intentionally not enabled automatically because it requires engine-specific privileges/configuration and can retain server logs when a consumer stops.
+Choose **Snapshot comparison (full reads)** for read-only connections, unsupported tables, schema comparisons, or Cloudflare D1. It installs no source objects and supports repeated `S` scans, but capture/comparison read every selected row. Neither mode enables database-native WAL/binlog streaming. See the [checkpoint guide](docs/change-profiler.md) for engine restrictions, source-journal disk use and recovery.
 
 ## Backup Center
 

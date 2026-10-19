@@ -50,7 +50,9 @@ func inspectAllTablesWithProgress(ctx context.Context, db Queryer, engine config
 			_ = rows.Close()
 			return nil, err
 		}
-		names = append(names, name)
+		if !database.IsCheckpointJournalTable(engine, name) {
+			names = append(names, name)
+		}
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -179,17 +181,20 @@ FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 
 
 func inspectSQLiteTable(ctx context.Context, db Queryer, engine config.DBType, table string) (TablePlan, error) {
 	plan := TablePlan{Name: table, KeyKind: KeyFullRow}
-	rows, err := db.QueryContext(ctx, fmt.Sprintf("PRAGMA table_info(%s)", quoteIdentifier(config.SQLite, table)))
+	rows, err := db.QueryContext(ctx, fmt.Sprintf("PRAGMA table_xinfo(%s)", quoteIdentifier(config.SQLite, table)))
 	if err != nil {
 		return plan, err
 	}
 	for rows.Next() {
-		var cid, notNull, pk int
+		var cid, notNull, pk, hidden int
 		var column Column
 		var defaultValue sql.NullString
-		if err := rows.Scan(&cid, &column.Name, &column.Type, &notNull, &defaultValue, &pk); err != nil {
+		if err := rows.Scan(&cid, &column.Name, &column.Type, &notNull, &defaultValue, &pk, &hidden); err != nil {
 			_ = rows.Close()
 			return plan, err
+		}
+		if hidden == 1 {
+			continue
 		}
 		// Ordinary SQLite PRIMARY KEY columns can contain multiple NULLs.
 		// Only a rowid alias (checked below), NOT NULL, STRICT, and WITHOUT

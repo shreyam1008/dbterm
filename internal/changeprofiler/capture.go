@@ -21,6 +21,12 @@ func (s *Store) Start(ctx context.Context, source *sql.DB, request StartRequest,
 	if source == nil {
 		return Anchor{}, fmt.Errorf("source database is required")
 	}
+	if request.Mode == CaptureJournal {
+		return s.startJournal(ctx, source, request, progress)
+	}
+	if request.Mode != "" && request.Mode != CaptureSnapshot {
+		return Anchor{}, fmt.Errorf("unknown checkpoint capture mode %q", request.Mode)
+	}
 	request.Name = strings.TrimSpace(request.Name)
 	if request.Name == "" || strings.TrimSpace(request.ConnectionKey) == "" {
 		return Anchor{}, fmt.Errorf("anchor name and connection identity are required")

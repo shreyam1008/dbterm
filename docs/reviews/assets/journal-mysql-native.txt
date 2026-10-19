@@ -1,0 +1,31 @@
+=== RUN   TestMySQLJournalExactImagesAndTransactions
+--- PASS: TestMySQLJournalExactImagesAndTransactions (0.17s)
+=== RUN   TestMySQLJournalStopWaitsForCommit
+--- PASS: TestMySQLJournalStopWaitsForCommit (0.29s)
+=== RUN   TestMySQLJournalPreventsUncapturedDDL
+--- PASS: TestMySQLJournalPreventsUncapturedDDL (0.57s)
+=== RUN   TestMySQLJournalRejectsLostMetadataGuard
+[mysql] 2026/10/19 09:36:15 packets.go:58 unexpected EOF
+--- PASS: TestMySQLJournalRejectsLostMetadataGuard (0.13s)
+=== RUN   TestMySQLJournalDisconnectReleasesMetadataLocks
+--- PASS: TestMySQLJournalDisconnectReleasesMetadataLocks (0.14s)
+=== RUN   TestMySQLJournalRejectsUnobservableCascade
+--- PASS: TestMySQLJournalRejectsUnobservableCascade (0.04s)
+=== RUN   TestMySQLJournalMillionRowStartRecordsOnlyChanges
+    journal_mysql_test.go:235: Start on 1,000,000 existing rows: 58.352048ms
+    journal_mysql_test.go:248: Stop and read 3 changes: 33.387336ms
+--- PASS: TestMySQLJournalMillionRowStartRecordsOnlyChanges (3.80s)
+=== RUN   TestMySQLJournalUnusualTypesAndReplace
+--- PASS: TestMySQLJournalUnusualTypesAndReplace (0.22s)
+=== RUN   TestMySQLJournalCleanupRejectsTamperedObjectNames
+--- PASS: TestMySQLJournalCleanupRejectsTamperedObjectNames (0.16s)
+=== RUN   TestMySQLJournalCleanupPreservesReplacementTable
+--- PASS: TestMySQLJournalCleanupPreservesReplacementTable (0.16s)
+=== RUN   TestMySQLJournalCleanupPreservesReplacementTrigger
+--- PASS: TestMySQLJournalCleanupPreservesReplacementTrigger (0.13s)
+=== RUN   TestMySQLJournalCleanupRecoversPreHashInstallation
+--- PASS: TestMySQLJournalCleanupRecoversPreHashInstallation (0.13s)
+=== RUN   TestMySQLJournalCleanupPreservesChangedOwnedDefinition
+--- PASS: TestMySQLJournalCleanupPreservesChangedOwnedDefinition (0.14s)
+PASS
+ok  	github.com/shreyam1008/dbterm/mysqlcheck	7.071s

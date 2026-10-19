@@ -1,0 +1,28 @@
+{
+  "scope": "Exact-source isolated harnesses; full application build remains blocked by unavailable pinned modules. See review for bridge, codec and fixture boundaries.",
+  "source_sha256": {
+    "internal/changeprofiler/journal.go": "16b9e30ef008294d45d360394c1d4bc48e66cf83e05f919ef2ffd3aef294f692",
+    "internal/changeprofiler/journal_lock.go": "e5cff71a44b46d1d469c16d3940ab0724901a246f9c738a44459bd66c609686b",
+    "internal/changeprofiler/journal_lock_test.go": "85da86d11687b06a9d68d04b2b5eda2ba2157f7facd2bb97087b84bba6d695ef",
+    "internal/changeprofiler/journal_lock_unix.go": "66ebf23e5e27f5fc0b28238bb65fb1e197c850333c7d42e830fb47223356d253",
+    "internal/changeprofiler/journal_lock_windows.go": "101f3acfc2d0f976179d6f1d2e821d5cb708f55b679a7cf5679189dcf8c4e686",
+    "internal/changeprofiler/journal_mysql.go": "94fd97d7c4f66dd8e94a109de5a27bfff14a6f1392d6099de7dc213ba816bd7a",
+    "internal/changeprofiler/journal_mysql_ownership.go": "490e159bea2bf17acf5dca7437fac6164961e30ced322dea0af17b259acc13eb",
+    "internal/changeprofiler/journal_mysql_test.go": "cb14d2015957017b13ff14dfefcb061ecf973c91f7de0ce496bd40e3f4798d73",
+    "internal/changeprofiler/journal_postgres.go": "09677cc0481e557a115d9bfef5f3f9553e84d1c7ae32084b78117b953032a2ec",
+    "internal/changeprofiler/journal_postgres_test.go": "edd37d84bf27fb243c2cd58f31fe61739b8824190d387d39c857acb531b025bb",
+    "internal/changeprofiler/journal_reduce.go": "ebb85bf3914c545452323bd454519a28b3a14d8934ad1a4ac025729a47e7e400",
+    "internal/changeprofiler/journal_reduce_test.go": "763e164c307de5b2ec7930436a69917e97c73a7dafec2db501b0c6fb59619a93",
+    "internal/changeprofiler/journal_sqlite.go": "590165045b4141d758d7dbb426fa64a55dc13f9a9c988ac1fbb187e5f67624de",
+    "internal/changeprofiler/journal_sqlite_test.go": "8b9a123d4532932aee9e686e4fb59d99a64397a7999c2d9eb8d9d98b329abde8",
+    "internal/changeprofiler/journal_store.go": "d0152a14f11e3ffa309e8e4a4a24561fe297814419d8176eb3bf36a9a0c8c02e",
+    "internal/changeprofiler/journal_store_test.go": "e88aa588b72286ce253440c89572d88a629a587a74fc78f942ec5e2153bbddf8",
+    "internal/backup/checkpoint_guard.go": "2abaa3bd853e7abc95aebbb91f70d02ce7fbd9725bfec2548907414f17590b91",
+    "internal/backup/checkpoint_guard_test.go": "2a6f4c3f233ff638f813171bcdf644ee9a537d9048d54f374d91242ca6825158",
+    "internal/ui/change_profiler_capture_ui_test.go": "ff9acc6f13b3a23e2b0f4b313cd08cca40486becddae7214a1ce8af62332c67d"
+  },
+  "native_postgresql_tests": 15,
+  "native_mysql_tests": 13,
+  "sqlite_bridge_adapter_tests": 14,
+  "race_detection": true
+}

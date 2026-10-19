@@ -265,21 +265,21 @@ All-matching export streams from the database instead of forcing every row into 
 
 ## Compare changes with Change Profiler
 
-Press `Alt+W` to open Change Profiler. It creates portable, named before/after anchors without installing triggers or server objects.
+Press `Alt+W` to open Change Profiler and create a named checkpoint. Choose **Incremental journal** to record committed row changes without copying existing rows, or **Snapshot comparison (full reads)** for the portable baseline workflow.
 
-1. Press `N`, name the anchor, and review the table plan.
+1. Press `N`, name the checkpoint, choose its capture mode, and review the table plan.
 2. Use Space to toggle one table or `A` to explicitly include/exclude the whole database.
-3. Capture the baseline, perform the operation you want to observe, then press `S` to scan without stopping or `F` for the final scan and finish.
+3. For journal mode, confirm installation of private source tables/triggers. Perform your operation, then press `F` to stop and build the net diff. Snapshot mode captures a baseline and supports `S` to scan repeatedly or `F` to finish.
 4. Press `Enter` on a report to inspect changed tables, inserted/updated/deleted rows, schema changes, columns, and complete before/after values.
-5. `E` renames and `D` permanently deletes a local anchor/report.
+5. `E` renames and `D` deletes a checkpoint/report. A retained source journal must be removed successfully on the original connection before its local recovery metadata can be deleted.
 
 Reports load 200 changes at a time. Use `[` and `]` for previous/next pages, and `Tab` or `Shift+Tab` to switch between the table list and row grid. The title shows the displayed range and total. On narrow terminals the table list sits above the rows. `Enter` opens a row's before/after details; `Enter` on a value opens a bounded viewer with the same page keys and `C` to copy the complete value. `Esc` returns to the previous panel. SQL NULL, empty text, and absent columns have distinct labels in row details.
 
-Risky, keyless, or very large tables start excluded and require explicit opt-in. Loaders show phase, table, rows, bytes, rate, elapsed time, approximate percent, and ETA when estimates are meaningful. Baselines are adaptively compressed in private local state.
+Journal mode needs stable keys and source-object permissions. It captures external writers too, excludes rollbacks, and cancels changes that leave a row unchanged at Stop. Storage depends on recorded writes and row-image sizes; keep checkpoints short. PostgreSQL/MySQL require the connection to stay open and block DDL/`TRUNCATE`; PostgreSQL also blocks autovacuum/ANALYZE on tracked tables and may require repeatable-read/serializable writers to retry at Start/Stop. A lost guard prevents a complete report. SQLite recording can continue while dbterm is closed, but schema changes invalidate coverage. `F` retries a failed Stop/cleanup; `D` discards a journal. See the [engine and recovery details](change-profiler.md).
 
-PostgreSQL/MySQL use a consistent repeatable-read snapshot; SQLite/Turso use a transaction; D1 is reported as best-effort. A scan must use the original connection. Cancellation preserves the last successful report and removes partial capture state.
+Snapshot mode installs no source objects. Risky, keyless, or very large tables start excluded until explicitly selected. PostgreSQL/MySQL use a consistent repeatable-read snapshot; SQLite/Turso use a transaction; D1 is best-effort. Capture and comparison read all selected rows, with progress estimates and compressed local baselines. Existing anchors retain this behavior. Both modes require the original connection to finish; cancellation preserves the last successful report and any recovery state still needed.
 
-Change Profiler shows observed differences. The connection and dbterm activity are evidence, but the writer remains **Unknown** unless the database has its own audit trail. Database-native WAL/binlog tracking is not enabled automatically because it needs engine-specific privileges/configuration and can retain server logs when a consumer stops.
+Change Profiler shows observed differences; the writer remains **Unknown** without a database audit trail. Journal mode uses transactional SQL triggers, not native WAL/binlog streaming. Backups remain separate recovery artifacts. Finish/discard checkpoints and complete source cleanup before backing up; dbterm refuses captured recorder objects to prevent orphan triggers after restore. Journal reports and sidebar counts are authoritative; ordinary Results-cell highlighting is disabled for this mode because source/driver value encodings can differ.
 
 ## Operate local PostgreSQL and MySQL services
 

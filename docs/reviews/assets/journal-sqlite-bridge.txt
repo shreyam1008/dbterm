@@ -1,0 +1,47 @@
+=== RUN   TestSQLiteJournalCapturesExternalCommittedWritesAndReplacementConflicts
+--- PASS: TestSQLiteJournalCapturesExternalCommittedWritesAndReplacementConflicts (0.09s)
+=== RUN   TestSQLiteJournalFailsClosedAfterTriggerDropAndRecreate
+--- PASS: TestSQLiteJournalFailsClosedAfterTriggerDropAndRecreate (0.04s)
+=== RUN   TestSQLiteJournalRejectsUnsafeUniqueIndexesAndLeavesNoObjects
+=== RUN   TestSQLiteJournalRejectsUnsafeUniqueIndexesAndLeavesNoObjects/CREATE_UNIQUE_INDEX_special_ON_items(lower(value))
+=== RUN   TestSQLiteJournalRejectsUnsafeUniqueIndexesAndLeavesNoObjects/CREATE_UNIQUE_INDEX_special_ON_items(value)_WHERE_id>0
+--- PASS: TestSQLiteJournalRejectsUnsafeUniqueIndexesAndLeavesNoObjects (0.04s)
+    --- PASS: TestSQLiteJournalRejectsUnsafeUniqueIndexesAndLeavesNoObjects/CREATE_UNIQUE_INDEX_special_ON_items(lower(value)) (0.02s)
+    --- PASS: TestSQLiteJournalRejectsUnsafeUniqueIndexesAndLeavesNoObjects/CREATE_UNIQUE_INDEX_special_ON_items(value)_WHERE_id>0 (0.02s)
+=== RUN   TestSQLiteJournalPreservesStorageClassesAndCleansOnlyOwnedObjects
+--- PASS: TestSQLiteJournalPreservesStorageClassesAndCleansOnlyOwnedObjects (0.05s)
+=== RUN   TestSQLiteJournalDecodeRejectsCorruptValues
+--- PASS: TestSQLiteJournalDecodeRejectsCorruptValues (0.00s)
+=== RUN   TestSQLiteJournalStopRetryKeepsOriginalBoundary
+--- PASS: TestSQLiteJournalStopRetryKeepsOriginalBoundary (0.05s)
+=== RUN   TestSQLiteJournalPreservesUnicodeInUTF16Databases
+=== RUN   TestSQLiteJournalPreservesUnicodeInUTF16Databases/UTF-16le
+=== RUN   TestSQLiteJournalPreservesUnicodeInUTF16Databases/UTF-16be
+--- PASS: TestSQLiteJournalPreservesUnicodeInUTF16Databases (0.08s)
+    --- PASS: TestSQLiteJournalPreservesUnicodeInUTF16Databases/UTF-16le (0.04s)
+    --- PASS: TestSQLiteJournalPreservesUnicodeInUTF16Databases/UTF-16be (0.04s)
+=== RUN   TestSQLiteJournalNetDiffMatchesIndependentSnapshotsAcrossConflictWrites
+--- PASS: TestSQLiteJournalNetDiffMatchesIndependentSnapshotsAcrossConflictWrites (0.19s)
+=== RUN   TestSQLiteJournalReplacementUsesUniqueIndexCollation
+--- PASS: TestSQLiteJournalReplacementUsesUniqueIndexCollation (0.05s)
+=== RUN   TestSQLiteJournalIncludesStoredAndVirtualGeneratedColumns
+--- PASS: TestSQLiteJournalIncludesStoredAndVirtualGeneratedColumns (0.04s)
+=== RUN   TestSQLiteJournalRejectsReceiptThatNamesUnrelatedSourceObjects
+--- PASS: TestSQLiteJournalRejectsReceiptThatNamesUnrelatedSourceObjects (0.03s)
+=== RUN   TestSQLiteJournalCleanupRemovesOwnedTriggersWhenJournalTableIsMissing
+--- PASS: TestSQLiteJournalCleanupRemovesOwnedTriggersWhenJournalTableIsMissing (0.04s)
+=== RUN   TestSQLiteJournalMissingTableCleanupPreservesReplacedTriggerCode
+--- PASS: TestSQLiteJournalMissingTableCleanupPreservesReplacedTriggerCode (0.04s)
+=== RUN   TestSQLiteJournalStartWorkDependsOnWrites
+=== RUN   TestSQLiteJournalStartWorkDependsOnWrites/1000
+    journal_sqlite_test.go:694: existing rows=1000 Start=7.397602ms Stop=8.749718ms journal events=1 net diffs=1
+=== RUN   TestSQLiteJournalStartWorkDependsOnWrites/100000
+    journal_sqlite_test.go:694: existing rows=100000 Start=8.695065ms Stop=10.533409ms journal events=1 net diffs=1
+=== RUN   TestSQLiteJournalStartWorkDependsOnWrites/1000000
+    journal_sqlite_test.go:694: existing rows=1000000 Start=7.165613ms Stop=10.807168ms journal events=1 net diffs=1
+--- PASS: TestSQLiteJournalStartWorkDependsOnWrites (1.12s)
+    --- PASS: TestSQLiteJournalStartWorkDependsOnWrites/1000 (0.05s)
+    --- PASS: TestSQLiteJournalStartWorkDependsOnWrites/100000 (0.14s)
+    --- PASS: TestSQLiteJournalStartWorkDependsOnWrites/1000000 (0.93s)
+PASS
+ok  	github.com/shreyam1008/dbterm	2.874s

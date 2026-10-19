@@ -5,8 +5,10 @@ This review uses synthetic data and compares against commit
 It covers checkpoint internals, result-table components, logical backup fidelity,
 and restore cancellation. It is **not a completed end-to-end UX audit**: the
 running cloud environment denies downloads of pinned SQLite/compression modules,
-so the complete application, native MySQL/PostgreSQL integrations, and full
-checkpoint/backup workflow benchmarks have not run.
+so the complete application and full checkpoint/backup workflows have not run.
+The incremental journal adapters were separately exercised against official
+PostgreSQL 17 and MySQL 8.4 containers, and SQLite through a standard-library
+Python SQLite bridge. Those results are described below with their scope limits.
 
 ## What was exercised
 
@@ -149,35 +151,122 @@ drawing its underlying report/detail layers as well took about 122–193 ms.
 | --- | --- | --- |
 | 1. Generate and validate varied databases | Passed | Seven fixtures, including 1M rows |
 | 2. Inspect mixed-value result table | Component reviewed | 80×24 and 120×28 cell captures; binary ambiguity confirmed |
-| 3. Create and scan an anchor | Full flow blocked | Helper/SQL evidence only; full package needs pinned modules |
-| 4. Browse checkpoint report and row details | Component checks passed; full flow pending | Exact-source fixture-store keyboard tests and captures; native-store regressions still blocked |
+| 3. Start/Stop a checkpoint | Adapters and local lifecycle passed; full TUI flow blocked | Live PostgreSQL/MySQL SQL journals; SQLite bridge, reducer and Store tests; full package needs pinned modules |
+| 4. Browse checkpoint report and row details | Component checks passed; full flow pending | Exact-source fixture-store keyboard tests and captures; pinned driver/compression still blocked |
 | 5. Run, inspect, and restore a backup | Full flow blocked | SQL-expression round trips and safety scanner tests only |
-| 6. Test native/cloud database integrations | Unrun | MySQL/PostgreSQL/Turso/D1 services were not exercised |
+| 6. Test native/cloud database integrations | PostgreSQL/MySQL journal adapters passed | Official disposable servers; hosted Turso/D1 and native backup/restore workflows unrun |
 
 Keyboard and contrast checks on these components do not establish screen-reader
 support or accessibility compliance. Color-only NULL distinctions in ordinary
 result grids, control-character visibility, and Unicode font fallback still
 need attention during a live-terminal pass.
 
-## How checkpoints and backup logs differ
+## Incremental Start → Stop checkpoints
 
-The current Change Profiler captures selected tables into a local baseline and
-compares later full reads against that baseline. It is not a consumer of database
-transaction logs. Matching rows is faster after these changes, but exact capture
-and comparison still read every selected row; keyless duplicate tracking also
-retains a map proportional to the distinct rows.
+![Journal and snapshot capture choice at 80×24](assets/checkpoint-journal-mode-80x24.png)
 
-Recorded dbterm write activity is contextual evidence, not an audit trail of all
-writers. Backup activity records runs and attempts. Agent logs are a bounded
-global diagnostic tail. None of these is PostgreSQL WAL or the MySQL binlog, and
-artifact verification is not proof that a recovery rehearsal succeeded.
+![Scrollable PostgreSQL source-object consent at 80×24](assets/checkpoint-journal-consent-80x24.png)
 
-The existing architecture already identifies opt-in native-log adapters as a
-future acceleration path. Such adapters need a consistent initial snapshot,
-durable cursors, gap detection, transaction handling, schema-change handling,
-and explicit ownership of replication resources. PostgreSQL slots can retain
-WAL; MySQL needs appropriate row logging and retained binlogs. SQLite WAL is
-not a portable semantic change feed. None of this patch consumes those logs.
+![Active journal with Start time and Stop guidance](assets/checkpoint-journal-active-120x32.png)
+
+These images use the production methods with a fixture Store/App shell and a
+tcell simulation screen. They validate component layout and keyboard behavior,
+not a running full application or live database connection.
+
+The default selectable journal mode now records committed row writes in private
+source tables using engine-specific transactional triggers. It never copies a
+full baseline. At Stop, the recorder establishes a durable boundary, reduces
+only its events and saves the report before source cleanup. The old full-read
+snapshot engine remains an explicit option for read-only/unsupported scopes and
+schema comparisons; existing anchors retain their behavior. This patch consumes
+SQL journals, not WAL/binlog replication feeds.
+
+The reducer keeps the earliest before-image and latest after-image for each
+changed identity. Insert/delete chains and reverted updates cancel out; key
+moves split into delete/insert. SQLite replacement-conflict probes resolve only
+affected identities with indexed point lookups at Stop. Unsupported key or
+unique-index semantics fail visibly instead of silently falling back to a scan.
+
+| Disposable million-row fixture | Start | Stop / read | Evidence |
+| --- | ---: | ---: | --- |
+| SQLite | ~7.2 ms | ~10.8 ms | One event and one exact net diff; actual production SQL/adapter via Python SQLite bridge |
+| PostgreSQL 17 | ~34 ms | ~12 ms | Zero baseline rows, one event; actual adapter and production metadata helpers through lib/pq |
+| MySQL 8.4 | ~58 ms | ~33 ms | Zero baseline rows, three events; actual adapter plus ownership checks through go-sql-driver/mysql |
+
+These are single-container smoke timings under race detection, not full-app latency or general server
+performance claims. Fixtures were generated before the timed boundary. Table
+size is deliberately large while the write set is small. SQLite also exercised
+1,000 and 100,000 existing rows with approximately constant Start/Stop work.
+The permanent SQLite scale regression asserts zero baseline events and exactly
+one final diff for one update; it logs timings without flaky speed thresholds.
+Journal disk use depends on every recorded full row image; reducer memory depends
+on changed identities. High write volume and very large changed values remain
+material costs. The timings exclude TUI preflight, local compressed report
+publication, and final journal cleanup where not part of the adapter boundary.
+
+The final native runs passed 15 PostgreSQL tests and 13 MySQL tests with the Go
+race detector. Saved outputs: [PostgreSQL](assets/journal-postgres-native.txt),
+[MySQL](assets/journal-mysql-native.txt), [SQLite bridge](assets/journal-sqlite-bridge.txt),
+[local lifecycle/locks](assets/journal-store-bridge.txt),
+[reducer oracle tests](assets/journal-reducer.txt), and
+[checkpoint UI components](assets/journal-ui-components.txt). Validation includes external writers, transaction rollback, key moves,
+Unicode/BLOB/NUL values, large exact numerics, stable money/binary encodings
+across writer settings, wide rows, replacement conflicts,
+in-flight writes at Stop, frozen-boundary retry, lost-guard refusal, cancellation,
+and cleanup failures. Reducer tests compare seeded write streams against an
+independent final-snapshot oracle. Local Store tests cover consent, no baseline
+rows, report-before-cleanup ordering, preserved prior reports, retry, deletion
+protection and concurrent handles/processes. Store/SQLite tests use a Python
+SQLite driver bridge and a raw-envelope codec in place of the unavailable pinned
+SQLite/compression modules; they do not validate those modules or full linking.
+
+Independent review found and fixed three continuity/ownership defects:
+
+- PostgreSQL trigger disable/write/re-enable could hide writes while restoring
+  the same trigger identity. A retained `SHARE UPDATE EXCLUSIVE` transaction now
+  guards recording through the atomic frozen-gate commit. Tests prove trigger
+  disable, DDL and TRUNCATE block, and loss of the guard refuses a complete diff.
+- MySQL cleanup now re-derives names and verifies owner markers, exact table and
+  trigger definitions and fingerprints before dropping anything. Replaced source
+  objects remain untouched and recovery stays pending.
+- SQLite cleanup removes verified orphan triggers when the journal table is
+  missing; replacement trigger code is preserved and cleanup fails visibly.
+
+These guarantees have operational costs. PostgreSQL/MySQL require a live guard
+connection until Stop/discard and at least two pool connections. They block DDL
+and TRUNCATE; PostgreSQL also blocks autovacuum/ANALYZE and may require higher
+isolation writers to retry at Start/Stop. SQLite allows closing dbterm but rejects
+schema changes during capture. PostgreSQL partitions/inheritance/RLS, MySQL
+non-InnoDB/cascades, unsupported SQLite unique indexes and keyless scopes need an
+explicit snapshot alternative. Hosted Turso behavior and MariaDB compatibility
+were not established. The confirmation and [checkpoint guide](../change-profiler.md)
+explain these limits and retained source-journal cleanup.
+
+Backup review found another interaction: a full snapshot/dump can preserve
+active checkpoint triggers, which would keep recording after restore without
+local ownership metadata. Backup creation now refuses source journals and also
+checks the captured SQLite catalog, frozen Turso schema, streamed MySQL SQL
+(including split executable trigger comments), and PostgreSQL archive TOC before
+publication. Captured-artifact checks cover journals that appear/disappear
+between source preflight and completion; orphan triggers are checked too.
+No application tables or data are stripped from an artifact.
+
+Actual MySQL dumps with routines/events, strings resembling journal names and
+orphan trigger fragments were accepted or refused as intended; actual PostgreSQL
+archive TOCs were checked too. Exact snapshot/exporter/guard methods and all new
+backup guard regressions passed through the Go-to-Python SQLite bridge alongside
+NUL/AUTOINCREMENT/export/cancellation regressions. See the
+[backup bridge output](assets/journal-backup-bridge.txt) and
+[native dump parser output](assets/journal-backup-native-parsers.txt). These are
+component/adapter checks, not complete native backup/restore workflows with
+compression, encryption and publication. PostgreSQL backup now requires matching
+`pg_dump` and `pg_restore` tools for captured-archive inspection.
+
+Recorded dbterm write activity remains contextual evidence, not authenticated
+writer identity. Backup activity records runs and attempts; agent logs are a
+bounded diagnostic tail. These journals are temporary data-diff recorders and
+are not incremental backups or point-in-time recovery. Artifact verification
+also remains separate from proof that a recovery rehearsal succeeded.
 
 ## One feature proposal: recovery rehearsal receipts
 

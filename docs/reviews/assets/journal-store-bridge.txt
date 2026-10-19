@@ -1,0 +1,33 @@
+=== RUN   TestJournalLockSerializesHandlesAndRetainsLockFile
+--- PASS: TestJournalLockSerializesHandlesAndRetainsLockFile (0.00s)
+=== RUN   TestJournalLockResolvesCatalogSymlinks
+--- PASS: TestJournalLockResolvesCatalogSymlinks (0.00s)
+=== RUN   TestJournalLockResolvesSymlinkBeforeCatalogCreation
+--- PASS: TestJournalLockResolvesSymlinkBeforeCatalogCreation (0.00s)
+=== RUN   TestJournalLockFailureReleasesMutex
+--- PASS: TestJournalLockFailureReleasesMutex (0.00s)
+=== RUN   TestJournalLockIsSharedWithProcessesAndReleasedOnExit
+--- PASS: TestJournalLockIsSharedWithProcessesAndReleasedOnExit (2.03s)
+=== RUN   TestJournalLockProcessHelper
+    journal_lock_test.go:122: subprocess helper
+--- SKIP: TestJournalLockProcessHelper (0.00s)
+=== RUN   TestJournalStoreRequiresSourceObjectConsent
+--- PASS: TestJournalStoreRequiresSourceObjectConsent (0.08s)
+=== RUN   TestJournalStoreAllWritersNetDiffWithoutBaseline
+--- PASS: TestJournalStoreAllWritersNetDiffWithoutBaseline (0.14s)
+=== RUN   TestJournalStoreDeleteRequiresExplicitSourceCleanup
+--- PASS: TestJournalStoreDeleteRequiresExplicitSourceCleanup (0.08s)
+=== RUN   TestJournalStoreCanceledReductionRetainsFrozenJournalForRetry
+--- PASS: TestJournalStoreCanceledReductionRetainsFrozenJournalForRetry (0.12s)
+=== RUN   TestJournalStoreCleanupFailurePreservesCompletedDiffAndRetries
+--- PASS: TestJournalStoreCleanupFailurePreservesCompletedDiffAndRetries (0.13s)
+=== RUN   TestJournalStoreCoverageFailurePreservesExistingReport
+--- PASS: TestJournalStoreCoverageFailurePreservesExistingReport (0.07s)
+=== RUN   TestJournalStoreConcurrentFinishCannotReviveCleanedJournal
+--- PASS: TestJournalStoreConcurrentFinishCannotReviveCleanedJournal (0.19s)
+=== RUN   TestJournalStoreSeparateHandlesCannotRaceFinish
+--- PASS: TestJournalStoreSeparateHandlesCannotRaceFinish (0.13s)
+=== RUN   TestJournalStoreOpenCannotRecoverAnotherHandlesLiveOperation
+--- PASS: TestJournalStoreOpenCannotRecoverAnotherHandlesLiveOperation (0.07s)
+PASS
+ok  	github.com/shreyam1008/dbterm	4.055s

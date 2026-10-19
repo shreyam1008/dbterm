@@ -1,0 +1,110 @@
+=== RUN   TestJournalReducerNetChanges
+=== RUN   TestJournalReducerNetChanges/insert
+=== RUN   TestJournalReducerNetChanges/delete
+=== RUN   TestJournalReducerNetChanges/several_updates
+=== RUN   TestJournalReducerNetChanges/insert_then_update
+=== RUN   TestJournalReducerNetChanges/update_then_delete
+=== RUN   TestJournalReducerNetChanges/insert_delete_cancels
+=== RUN   TestJournalReducerNetChanges/return_to_original_cancels
+=== RUN   TestJournalReducerNetChanges/noop_cancels
+=== RUN   TestJournalReducerNetChanges/delete_same_reinsert_cancels
+=== RUN   TestJournalReducerNetChanges/delete_changed_reinsert_updates
+=== RUN   TestJournalReducerNetChanges/cancel_then_change_preserves_original
+=== RUN   TestJournalReducerNetChanges/primary_key_move
+=== RUN   TestJournalReducerNetChanges/primary_key_round_trip_cancels
+=== RUN   TestJournalReducerNetChanges/same_sequence_replay
+=== RUN   TestJournalReducerNetChanges/same_values_replay
+=== RUN   TestJournalReducerNetChanges/rollback_sequence_gaps_are_allowed
+--- PASS: TestJournalReducerNetChanges (0.00s)
+    --- PASS: TestJournalReducerNetChanges/insert (0.00s)
+    --- PASS: TestJournalReducerNetChanges/delete (0.00s)
+    --- PASS: TestJournalReducerNetChanges/several_updates (0.00s)
+    --- PASS: TestJournalReducerNetChanges/insert_then_update (0.00s)
+    --- PASS: TestJournalReducerNetChanges/update_then_delete (0.00s)
+    --- PASS: TestJournalReducerNetChanges/insert_delete_cancels (0.00s)
+    --- PASS: TestJournalReducerNetChanges/return_to_original_cancels (0.00s)
+    --- PASS: TestJournalReducerNetChanges/noop_cancels (0.00s)
+    --- PASS: TestJournalReducerNetChanges/delete_same_reinsert_cancels (0.00s)
+    --- PASS: TestJournalReducerNetChanges/delete_changed_reinsert_updates (0.00s)
+    --- PASS: TestJournalReducerNetChanges/cancel_then_change_preserves_original (0.00s)
+    --- PASS: TestJournalReducerNetChanges/primary_key_move (0.00s)
+    --- PASS: TestJournalReducerNetChanges/primary_key_round_trip_cancels (0.00s)
+    --- PASS: TestJournalReducerNetChanges/same_sequence_replay (0.00s)
+    --- PASS: TestJournalReducerNetChanges/same_values_replay (0.00s)
+    --- PASS: TestJournalReducerNetChanges/rollback_sequence_gaps_are_allowed (0.00s)
+=== RUN   TestJournalReducerConflictProbes
+=== RUN   TestJournalReducerConflictProbes/replace_hidden_deletion
+=== RUN   TestJournalReducerConflictProbes/probe_final_image_waits_for_normal_events
+=== RUN   TestJournalReducerConflictProbes/probe_without_real_change_cancels
+=== RUN   TestJournalReducerConflictProbes/upsert_ordinary_update_plus_probe
+=== RUN   TestJournalReducerConflictProbes/duplicate_candidate_observations
+=== RUN   TestJournalReducerConflictProbes/unique_conflict_evicts_other_key
+=== RUN   TestJournalReducerConflictProbes/later_probe_preserves_original
+=== RUN   TestJournalReducerConflictProbes/insert_then_hidden_deletion_cancels
+=== RUN   TestJournalReducerConflictProbes/collated_identity_move
+--- PASS: TestJournalReducerConflictProbes (0.00s)
+    --- PASS: TestJournalReducerConflictProbes/replace_hidden_deletion (0.00s)
+    --- PASS: TestJournalReducerConflictProbes/probe_final_image_waits_for_normal_events (0.00s)
+    --- PASS: TestJournalReducerConflictProbes/probe_without_real_change_cancels (0.00s)
+    --- PASS: TestJournalReducerConflictProbes/upsert_ordinary_update_plus_probe (0.00s)
+    --- PASS: TestJournalReducerConflictProbes/duplicate_candidate_observations (0.00s)
+    --- PASS: TestJournalReducerConflictProbes/unique_conflict_evicts_other_key (0.00s)
+    --- PASS: TestJournalReducerConflictProbes/later_probe_preserves_original (0.00s)
+    --- PASS: TestJournalReducerConflictProbes/insert_then_hidden_deletion_cancels (0.00s)
+    --- PASS: TestJournalReducerConflictProbes/collated_identity_move (0.00s)
+=== RUN   TestJournalReducerCanonicalRows
+--- PASS: TestJournalReducerCanonicalRows (0.00s)
+=== RUN   TestJournalReducerRowIDAndCompositeIdentity
+--- PASS: TestJournalReducerRowIDAndCompositeIdentity (0.00s)
+=== RUN   TestJournalReducerRejectsInvalidCoverage
+=== RUN   TestJournalReducerRejectsInvalidCoverage/causal_gap
+=== RUN   TestJournalReducerRejectsInvalidCoverage/out_of_order
+=== RUN   TestJournalReducerRejectsInvalidCoverage/sequence_reused
+=== RUN   TestJournalReducerRejectsInvalidCoverage/unknown_table
+=== RUN   TestJournalReducerRejectsInvalidCoverage/empty_event
+=== RUN   TestJournalReducerRejectsInvalidCoverage/invalid_JSON
+=== RUN   TestJournalReducerRejectsInvalidCoverage/missing_cells
+=== RUN   TestJournalReducerRejectsInvalidCoverage/duplicate_cells
+=== RUN   TestJournalReducerRejectsInvalidCoverage/NULL_identity
+=== RUN   TestJournalReducerRejectsInvalidCoverage/probe_without_candidate
+=== RUN   TestJournalReducerRejectsInvalidCoverage/probe_causal_gap
+=== RUN   TestJournalReducerRejectsInvalidCoverage/contradictory_final_lookups
+--- PASS: TestJournalReducerRejectsInvalidCoverage (0.00s)
+    --- PASS: TestJournalReducerRejectsInvalidCoverage/causal_gap (0.00s)
+    --- PASS: TestJournalReducerRejectsInvalidCoverage/out_of_order (0.00s)
+    --- PASS: TestJournalReducerRejectsInvalidCoverage/sequence_reused (0.00s)
+    --- PASS: TestJournalReducerRejectsInvalidCoverage/unknown_table (0.00s)
+    --- PASS: TestJournalReducerRejectsInvalidCoverage/empty_event (0.00s)
+    --- PASS: TestJournalReducerRejectsInvalidCoverage/invalid_JSON (0.00s)
+    --- PASS: TestJournalReducerRejectsInvalidCoverage/missing_cells (0.00s)
+    --- PASS: TestJournalReducerRejectsInvalidCoverage/duplicate_cells (0.00s)
+    --- PASS: TestJournalReducerRejectsInvalidCoverage/NULL_identity (0.00s)
+    --- PASS: TestJournalReducerRejectsInvalidCoverage/probe_without_candidate (0.00s)
+    --- PASS: TestJournalReducerRejectsInvalidCoverage/probe_causal_gap (0.00s)
+    --- PASS: TestJournalReducerRejectsInvalidCoverage/contradictory_final_lookups (0.00s)
+=== RUN   TestJournalReducerDeterminismAndCancellation
+--- PASS: TestJournalReducerDeterminismAndCancellation (0.00s)
+=== RUN   TestJournalReducerExactChangedColumns
+--- PASS: TestJournalReducerExactChangedColumns (0.01s)
+=== RUN   TestJournalReducerRandomizedNetSemantics
+=== RUN   TestJournalReducerRandomizedNetSemantics/1
+=== RUN   TestJournalReducerRandomizedNetSemantics/2
+=== RUN   TestJournalReducerRandomizedNetSemantics/3
+=== RUN   TestJournalReducerRandomizedNetSemantics/4
+=== RUN   TestJournalReducerRandomizedNetSemantics/5
+--- PASS: TestJournalReducerRandomizedNetSemantics (0.75s)
+    --- PASS: TestJournalReducerRandomizedNetSemantics/1 (0.16s)
+    --- PASS: TestJournalReducerRandomizedNetSemantics/2 (0.14s)
+    --- PASS: TestJournalReducerRandomizedNetSemantics/3 (0.15s)
+    --- PASS: TestJournalReducerRandomizedNetSemantics/4 (0.16s)
+    --- PASS: TestJournalReducerRandomizedNetSemantics/5 (0.14s)
+=== RUN   TestJournalReducerRandomizedConflictProbes
+=== RUN   TestJournalReducerRandomizedConflictProbes/1
+=== RUN   TestJournalReducerRandomizedConflictProbes/2
+=== RUN   TestJournalReducerRandomizedConflictProbes/3
+--- PASS: TestJournalReducerRandomizedConflictProbes (0.25s)
+    --- PASS: TestJournalReducerRandomizedConflictProbes/1 (0.08s)
+    --- PASS: TestJournalReducerRandomizedConflictProbes/2 (0.08s)
+    --- PASS: TestJournalReducerRandomizedConflictProbes/3 (0.09s)
+PASS
+ok  	journalreducer	2.026s

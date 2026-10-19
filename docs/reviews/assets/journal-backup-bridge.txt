@@ -1,0 +1,43 @@
+=== RUN   TestSQLiteBackupRejectsSourceCheckpointBeforeSnapshot
+--- PASS: TestSQLiteBackupRejectsSourceCheckpointBeforeSnapshot (0.04s)
+=== RUN   TestSQLiteBackupRejectsCheckpointInsideCapturedSnapshot
+--- PASS: TestSQLiteBackupRejectsCheckpointInsideCapturedSnapshot (0.07s)
+=== RUN   TestTursoLogicalBackupRejectsCheckpointInFrozenSchema
+--- PASS: TestTursoLogicalBackupRejectsCheckpointInFrozenSchema (0.02s)
+=== RUN   TestSQLiteBackupRejectsOrphanedCheckpointTrigger
+--- PASS: TestSQLiteBackupRejectsOrphanedCheckpointTrigger (0.02s)
+=== RUN   TestSQLiteBackupAllowsSimilarUserTableNames
+--- PASS: TestSQLiteBackupAllowsSimilarUserTableNames (0.02s)
+=== RUN   TestMySQLBackupDetectsCapturedCheckpointDeclarations
+--- PASS: TestMySQLBackupDetectsCapturedCheckpointDeclarations (0.00s)
+=== RUN   TestPostgresBackupDetectsCapturedCheckpointTOC
+--- PASS: TestPostgresBackupDetectsCapturedCheckpointTOC (0.00s)
+=== RUN   TestTursoLogicalDumpRejectsVirtualTablesAndRemovesStage
+--- PASS: TestTursoLogicalDumpRejectsVirtualTablesAndRemovesStage (0.02s)
+=== RUN   TestLogicalDumpClosesSchemaRowsBeforeColumnQueries
+--- PASS: TestLogicalDumpClosesSchemaRowsBeforeColumnQueries (0.02s)
+=== RUN   TestLogicalDumpRoundTripsMixedValuesIncludingNULText
+--- PASS: TestLogicalDumpRoundTripsMixedValuesIncludingNULText (0.05s)
+=== RUN   TestLogicalDumpPreservesAUTOINCREMENTAfterDeletedRows
+--- PASS: TestLogicalDumpPreservesAUTOINCREMENTAfterDeletedRows (0.05s)
+=== RUN   TestLogicalDumpRoundTripsAfterLastAUTOINCREMENTTableIsDropped
+--- PASS: TestLogicalDumpRoundTripsAfterLastAUTOINCREMENTTableIsDropped (0.06s)
+=== RUN   TestLogicalDumpRoundTripsUnusedAUTOINCREMENTTable
+--- PASS: TestLogicalDumpRoundTripsUnusedAUTOINCREMENTTable (0.05s)
+=== RUN   TestLogicalDumpPreservesUserObjectsStartingWithSQLite
+--- PASS: TestLogicalDumpPreservesUserObjectsStartingWithSQLite (0.05s)
+=== RUN   TestRestoreSQLSafetyScansHonorCancellation
+=== PAUSE TestRestoreSQLSafetyScansHonorCancellation
+=== CONT  TestRestoreSQLSafetyScansHonorCancellation
+=== RUN   TestRestoreSQLSafetyScansHonorCancellation/PostgreSQL
+=== RUN   TestRestoreSQLSafetyScansHonorCancellation/MySQL
+=== RUN   TestRestoreSQLSafetyScansHonorCancellation/SQLite
+--- PASS: TestRestoreSQLSafetyScansHonorCancellation (0.07s)
+    --- PASS: TestRestoreSQLSafetyScansHonorCancellation/PostgreSQL (0.03s)
+    --- PASS: TestRestoreSQLSafetyScansHonorCancellation/MySQL (0.02s)
+    --- PASS: TestRestoreSQLSafetyScansHonorCancellation/SQLite (0.02s)
+PASS
+ok  	github.com/shreyam1008/dbterm	1.553s
+?   	github.com/shreyam1008/dbterm/internal/config	[no test files]
+?   	github.com/shreyam1008/dbterm/internal/database	[no test files]
+?   	github.com/shreyam1008/dbterm/internal/privatefile	[no test files]

@@ -15,6 +15,19 @@ func (a *App) applyProfilerHighlightsToResults(table string) {
 	if a == nil || a.results == nil || a.profilerStore == nil || a.profilerAnchorID == "" {
 		return
 	}
+	for row := 1; row < a.results.GetRowCount(); row++ {
+		for col := 0; col < a.results.GetColumnCount(); col++ {
+			cell := a.results.GetCell(row, col)
+			if cell == nil {
+				continue
+			}
+			if ref, ok := cell.GetReference().(resultCellReference); ok && ref.profilerKind != "" {
+				ref.profilerKind, ref.profilerCell = "", false
+				cell.SetReference(ref)
+				a.restoreProfilerCellStyle(cell)
+			}
+		}
+	}
 	summary, ok := a.profilerTableChanges[table]
 	if !ok || len(summary.KeyColumns) == 0 || summary.KeyKind == profiler.KeyFullRow || summary.KeyKind == profiler.KeyRowID {
 		return

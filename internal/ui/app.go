@@ -1531,6 +1531,9 @@ func (a *App) cleanup() {
 	a.clearTableSessionState()
 	a.resultNavStack = nil
 	if a.db != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		profiler.ReleaseJournalConnections(ctx, a.db)
+		cancel()
 		a.db.Close()
 		a.db = nil
 	}
@@ -1582,6 +1585,11 @@ func (a *App) Run() error {
 	// The backup catalog is intentionally opened on first use. Keep this as a
 	// closure so a store opened after Run starts is still closed on exit.
 	defer func() {
+		if a.db != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			profiler.ReleaseJournalConnections(ctx, a.db)
+			cancel()
+		}
 		if a.backupStore != nil {
 			_ = a.backupStore.Close()
 		}

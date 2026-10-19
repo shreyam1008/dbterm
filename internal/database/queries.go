@@ -1,8 +1,53 @@
 package database
 
 import (
+	"strings"
+
 	"github.com/shreyam1008/dbterm/internal/config"
 )
+
+// IsCheckpointJournalTable recognizes the reserved, random checkpoint object
+// namespace. Similar user names outside that exact namespace remain visible.
+func IsCheckpointJournalTable(dbType config.DBType, name string) bool {
+	prefix, suffix := "", ""
+	switch dbType {
+	case config.SQLite, config.Turso:
+		prefix = "__dbterm_cp_"
+	case config.MySQL:
+		prefix = "_dbterm_cp_"
+		for _, candidate := range []string{"_events", "_gate"} {
+			if strings.HasSuffix(name, candidate) {
+				suffix = candidate
+				break
+			}
+		}
+		if suffix == "" {
+			return false
+		}
+	case config.PostgreSQL:
+		prefix = "dbterm_cp_"
+		for _, candidate := range []string{".events", ".tables", ".session"} {
+			if strings.HasSuffix(name, candidate) {
+				suffix = candidate
+				break
+			}
+		}
+		if suffix == "" {
+			return false
+		}
+	default:
+		return false
+	}
+	if !strings.HasPrefix(name, prefix) || len(name) != len(prefix)+24+len(suffix) {
+		return false
+	}
+	for _, char := range name[len(prefix) : len(prefix)+24] {
+		if !(char >= '0' && char <= '9' || char >= 'a' && char <= 'f') {
+			return false
+		}
+	}
+	return true
+}
 
 // ListTablesQuery returns the appropriate SQL to list user tables for a DB type
 func ListTablesQuery(dbType config.DBType) string {

@@ -18,6 +18,9 @@ func (s *Store) Scan(ctx context.Context, source *sql.DB, anchorID string, finis
 	if err != nil {
 		return Anchor{}, err
 	}
+	if anchor.CaptureMode == CaptureJournal {
+		return s.scanJournal(ctx, source, anchor, finish, progress)
+	}
 	if anchor.Status != StatusActive {
 		return Anchor{}, fmt.Errorf("anchor %q is %s, not active", anchor.Name, anchor.Status)
 	}

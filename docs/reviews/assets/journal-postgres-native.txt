@@ -1,0 +1,34 @@
+=== RUN   TestPostgresJournalCommittedWritesAndTypes
+--- PASS: TestPostgresJournalCommittedWritesAndTypes (0.10s)
+=== RUN   TestPostgresJournalTruncateWaitsForRecordingToStop
+--- PASS: TestPostgresJournalTruncateWaitsForRecordingToStop (0.19s)
+=== RUN   TestPostgresJournalSchemaChangesWaitForStop
+--- PASS: TestPostgresJournalSchemaChangesWaitForStop (0.18s)
+=== RUN   TestPostgresJournalStopWaitsForCommittedWriter
+--- PASS: TestPostgresJournalStopWaitsForCommittedWriter (0.19s)
+=== RUN   TestPostgresJournalWideRowsAndSQLNames
+--- PASS: TestPostgresJournalWideRowsAndSQLNames (0.00s)
+=== RUN   TestPostgresJournalTriggerDisableBlockedThroughoutRecording
+--- PASS: TestPostgresJournalTriggerDisableBlockedThroughoutRecording (0.19s)
+=== RUN   TestPostgresJournalPersistsIntentBeforeSourceChanges
+--- PASS: TestPostgresJournalPersistsIntentBeforeSourceChanges (0.04s)
+=== RUN   TestPostgresJournalMillionRowsRecordsOnlyWrites
+    journal_postgres_test.go:403: 1,000,000 PostgreSQL rows: Start 33.887864ms, Stop 11.704448ms; zero baseline rows, one journal event
+--- PASS: TestPostgresJournalMillionRowsRecordsOnlyWrites (2.41s)
+=== RUN   TestPostgresJournalAppWriterCannotReadPrivateImages
+--- PASS: TestPostgresJournalAppWriterCannotReadPrivateImages (0.14s)
+=== RUN   TestPostgresJournalLostGuardRejectsDisableUpdateReenableGap
+--- PASS: TestPostgresJournalLostGuardRejectsDisableUpdateReenableGap (0.12s)
+=== RUN   TestPostgresJournalStartContextDoesNotOwnGuardLifetime
+--- PASS: TestPostgresJournalStartContextDoesNotOwnGuardLifetime (0.18s)
+=== RUN   TestPostgresJournalPreStartRepeatableReadWriterMustRetry
+--- PASS: TestPostgresJournalPreStartRepeatableReadWriterMustRetry (0.10s)
+=== RUN   TestPostgresJournalWriterTimeoutRetainsGuardForRetry
+--- PASS: TestPostgresJournalWriterTimeoutRetainsGuardForRetry (5.20s)
+=== RUN   TestPostgresJournalKilledGuardCannotProduceCompleteReport
+--- PASS: TestPostgresJournalKilledGuardCannotProduceCompleteReport (0.07s)
+=== RUN   TestPostgresJournalMoneyAndByteaOutputIgnoreWriterFormatting
+    journal_postgres_test.go:701: writer monetary output differs: "$1,234.56" -> "1.234,56 €"
+--- PASS: TestPostgresJournalMoneyAndByteaOutputIgnoreWriterFormatting (0.11s)
+PASS
+ok  	github.com/shreyam1008/dbterm/.tmp/postgres-journal-validation	10.229s

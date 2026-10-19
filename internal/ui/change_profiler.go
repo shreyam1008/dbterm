@@ -15,6 +15,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	profiler "github.com/shreyam1008/dbterm/internal/changeprofiler"
+	"github.com/shreyam1008/dbterm/internal/config"
 	appformat "github.com/shreyam1008/dbterm/internal/format"
 )
 
@@ -67,7 +68,7 @@ func (a *App) showChangeProfiler() {
 			active++
 		}
 	}
-	header.SetText(fmt.Sprintf("\n[::b][#cba6f7]Change Profiler[-][-]\n[#a6adc8]%d named anchors  │  %d active  │  no polling or server-side objects[-]", len(anchors), active))
+	header.SetText(fmt.Sprintf("\n[::b][#cba6f7]Checkpoints[-][-]\n[#a6adc8]%d saved  │  %d active  │  incremental journals or explicit snapshots[-]", len(anchors), active))
 
 	list := tview.NewList().ShowSecondaryText(true)
 	list.SetBorder(true).SetTitle(fmt.Sprintf(" Anchors (%d) ", len(anchors))).SetTitleColor(mauve).SetBorderColor(surface1)
@@ -79,7 +80,7 @@ func (a *App) showChangeProfiler() {
 	} else {
 		for _, anchor := range anchors {
 			state := profilerStatusLabel(anchor.Status)
-			counts := fmt.Sprintf("+%d  ~%d  -%d  Δ%d", anchor.Inserted, anchor.Updated, anchor.Deleted, anchor.SchemaChanges)
+			counts := fmt.Sprintf("%s · +%d  ~%d  -%d  Δ%d", anchor.CaptureMode, anchor.Inserted, anchor.Updated, anchor.Deleted, anchor.SchemaChanges)
 			list.AddItem(fmt.Sprintf("  %s  [::b]%s[-]", state, tview.Escape(anchor.Name)),
 				fmt.Sprintf("  %s  │  %s  │  %s", tview.Escape(anchor.TargetLabel), anchor.StartedAt.Local().Format("02 Jan 15:04"), counts), 0, nil)
 		}
@@ -100,6 +101,10 @@ func (a *App) showChangeProfiler() {
 			return
 		}
 		anchor := anchors[index]
+		timeLabel := "BASELINE"
+		if anchor.CaptureMode == profiler.CaptureJournal {
+			timeLabel = "STARTED "
+		}
 		writer := "Unknown — no database audit trail"
 		activity, _ := a.profilerStore.ListActivity(context.Background(), anchor.ID, 3)
 		activityLabel := "none recorded"
@@ -107,10 +112,23 @@ func (a *App) showChangeProfiler() {
 			latest := activity[0]
 			activityLabel = fmt.Sprintf("latest of %d recorded: %s, %d rows — evidence only", len(activity), latest.OccurredAt.Local().Format("15:04:05"), latest.RowsAffected)
 		}
-		detail.SetText(fmt.Sprintf(" [#89b4fa]TARGET[-]      %s\n [#89b4fa]OBSERVED VIA[-] %s\n [#89b4fa]BASELINE[-]    %s\n [#89b4fa]CONSISTENCY[-] %s\n [#89b4fa]CHANGES[-]     [green]+%d[-]  [yellow]~%d[-]  [red]-%d[-]  [#cba6f7]Δ%d[-]\n [#89b4fa]DBTERM WRITES[-] %s\n [#89b4fa]WRITER[-]      %s",
+		detail.SetText(fmt.Sprintf(" [#89b4fa]TARGET[-]      %s\n [#89b4fa]OBSERVED VIA[-] %s\n [#89b4fa]%s[-]    %s\n [#89b4fa]CONSISTENCY[-] %s\n [#89b4fa]CHANGES[-]     [green]+%d[-]  [yellow]~%d[-]  [red]-%d[-]  [#cba6f7]Δ%d[-]\n [#89b4fa]DBTERM WRITES[-] %s\n [#89b4fa]WRITER[-]      %s",
 			tview.Escape(anchor.TargetLabel), tview.Escape(anchor.ConnectionLabel),
-			anchor.StartedAt.Local().Format("Mon 02 Jan 2006, 15:04:05 MST"), tview.Escape(string(anchor.Consistency)),
+			timeLabel, anchor.StartedAt.Local().Format("Mon 02 Jan 2006, 15:04:05 MST"), tview.Escape(string(anchor.Consistency)),
 			anchor.Inserted, anchor.Updated, anchor.Deleted, anchor.SchemaChanges, tview.Escape(activityLabel), writer))
+		if anchor.CaptureMode == profiler.CaptureJournal {
+			state := "stopped · committed changes only"
+			if anchor.CleanupPending {
+				state = "source journal retained · F stops/retries; D removes"
+				if anchor.Status == profiler.StatusActive && anchor.Error == "" {
+					state = "recording committed writes · F stops and builds diff; D discards"
+				}
+			}
+			fmt.Fprintf(detail, "\n [#89b4fa]MODE[-]        journal · no full-table baseline\n [#89b4fa]CAPTURE[-]     %s", state)
+		}
+		if anchor.Error != "" {
+			fmt.Fprintf(detail, "\n [yellow]ACTION[-]      %s", tview.Escape(anchor.Error))
+		}
 	}
 	list.SetChangedFunc(func(index int, _, _ string, _ rune) {
 		if index >= 0 && index < len(anchors) {
@@ -217,7 +235,22 @@ func (a *App) showProfilerNameForm(anchorID string) {
 	form.SetBackgroundColor(bg)
 	form.SetFieldBackgroundColor(mantle).SetFieldTextColor(text).SetLabelColor(text)
 	form.AddInputField("Name", defaultName, 48, nil, nil)
-	form.AddButton("Save", func() {
+	if anchorID == "" {
+		options := []string{"Snapshot comparison (full reads)"}
+		initialOption := 0
+		if profiler.SupportsJournal(a.dbType) {
+			options = []string{"Incremental journal (source objects)", "Snapshot comparison (full reads)"}
+			if cfg := a.currentConnectionConfig(); cfg != nil && cfg.ReadOnly {
+				initialOption = 1
+			}
+		}
+		form.AddDropDown("Capture", options, initialOption, nil)
+	}
+	submitLabel := "Save"
+	if anchorID == "" {
+		submitLabel = "Next"
+	}
+	form.AddButton(submitLabel, func() {
 		name := strings.TrimSpace(form.GetFormItemByLabel("Name").(*tview.InputField).GetText())
 		if name == "" {
 			a.ShowAlert(fmt.Sprintf("%s Anchor name is required.", iconWarn), pageProfilerName)
@@ -233,17 +266,82 @@ func (a *App) showProfilerNameForm(anchorID string) {
 			return
 		}
 		a.pages.RemovePage(pageProfilerName)
-		a.runProfilerPreflight(name)
+		mode := profiler.CaptureSnapshot
+		if profiler.SupportsJournal(a.dbType) {
+			index, _ := form.GetFormItemByLabel("Capture").(*tview.DropDown).GetCurrentOption()
+			if index == 0 {
+				mode = profiler.CaptureJournal
+			}
+		}
+		a.runProfilerPreflight(name, mode)
 	})
 	form.AddButton("Cancel", func() { a.pages.RemovePage(pageProfilerName); a.showChangeProfiler() })
 	form.SetCancelFunc(func() { a.pages.RemovePage(pageProfilerName); a.showChangeProfiler() })
-	modalW, modalH := a.modalSize(54, 76, 10, 14)
+	modalW, modalH := a.modalSize(62, 84, 12, 17)
 	grid := tview.NewGrid().SetColumns(0, modalW, 0).SetRows(0, modalH, 0).AddItem(form, 1, 1, 1, 1, 0, 0, true)
 	a.pages.AddPage(pageProfilerName, grid, true, true)
 	a.app.SetFocus(form)
 }
 
-func (a *App) runProfilerPreflight(name string) {
+func profilerJournalConsentText(engine config.DBType) string {
+	message := "Start incremental checkpoint?\n\nCreates private journal tables/triggers. Records committed row writes without copying existing rows. F stops and shows the net diff; D discards the journal. Journal data uses database disk until removed.\n\n"
+	switch engine {
+	case config.PostgreSQL:
+		return message + "Keep this connection open. Schema locks block DDL, TRUNCATE and autovacuum/ANALYZE on tracked tables. Repeatable-read/serializable writers may need retries at Start/Stop. Losing the connection guard prevents a complete report."
+	case config.MySQL:
+		return message + "Keep this connection open. Metadata locks block DDL/TRUNCATE. Requires InnoDB; cascading foreign-key writes are unsupported. Losing the connection guard prevents a complete report."
+	default:
+		return message + "Recording continues while dbterm is closed. Schema changes invalidate coverage. Requires supported stable keys and permission to install triggers."
+	}
+}
+
+func (a *App) showProfilerJournalConsent(message string, start, cancel func()) {
+	body := tview.NewTextView().SetWrap(true).SetWordWrap(true).SetScrollable(true).SetText(message)
+	body.SetBackgroundColor(bg)
+	body.SetTextColor(text)
+	buttons := tview.NewForm().SetButtonsAlign(tview.AlignCenter)
+	buttons.SetBackgroundColor(bg)
+	buttons.SetButtonBackgroundColor(surface1).SetButtonTextColor(green)
+	closeWith := func(action func()) {
+		a.pages.RemovePage("profilerJournalConsent")
+		action()
+	}
+	buttons.AddButton("Start journal", func() { closeWith(start) })
+	buttons.AddButton("Cancel", func() { closeWith(cancel) })
+	buttons.SetCancelFunc(func() { closeWith(cancel) })
+	footer := tview.NewTextView().SetTextAlign(tview.AlignCenter).SetText("↑/↓ scroll · Tab actions · Esc cancel")
+	footer.SetBackgroundColor(bg)
+	footer.SetTextColor(subtext0)
+	panel := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(body, 0, 1, true).AddItem(buttons, 3, 0, false).AddItem(footer, 1, 0, false)
+	panel.SetBorder(true).SetTitle(" Start incremental checkpoint ").SetTitleColor(mauve).SetBorderColor(surface1)
+	panel.SetBorderPadding(1, 0, 1, 1).SetBackgroundColor(bg)
+	panel.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEscape {
+			closeWith(cancel)
+			return nil
+		}
+		if event.Key() == tcell.KeyBacktab || event.Key() == tcell.KeyTab && body.HasFocus() {
+			if body.HasFocus() {
+				a.app.SetFocus(buttons)
+			} else {
+				a.app.SetFocus(body)
+			}
+			return nil
+		}
+		return event
+	})
+	width, height := a.modalSize(60, 90, 16, 24)
+	grid := tview.NewGrid().SetColumns(0, width, 0).SetRows(0, height, 0).AddItem(panel, 1, 1, 1, 1, 0, 0, true)
+	a.pages.AddPage("profilerJournalConsent", grid, true, true)
+	a.app.SetFocus(body)
+}
+
+func (a *App) runProfilerPreflight(name string, modes ...profiler.CaptureMode) {
+	mode := profiler.CaptureSnapshot
+	if len(modes) > 0 {
+		mode = modes[0]
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	const title = "Inspecting tables and stable row keys..."
 	const cancelText = "Press Esc to cancel table inspection."
@@ -262,7 +360,7 @@ func (a *App) runProfilerPreflight(name string) {
 		if err == nil && localPath != "" {
 			if info, statErr := os.Stat(localPath); statErr == nil {
 				sourceBytes = info.Size()
-				if sourceBytes >= 100<<20 {
+				if sourceBytes >= 100<<20 && mode != profiler.CaptureJournal {
 					for index := range plans {
 						if plans[index].EstimatedBytes == 0 {
 							plans[index].Risks = append(plans[index].Risks, profiler.RiskLargeDB)
@@ -270,6 +368,11 @@ func (a *App) runProfilerPreflight(name string) {
 						}
 					}
 				}
+			}
+		}
+		if err == nil && mode == profiler.CaptureJournal {
+			for index := range plans {
+				plans[index].Included = plans[index].KeyKind != profiler.KeyFullRow && len(plans[index].KeyColumns) > 0
 			}
 		}
 		a.queueUpdateDraw(func() {
@@ -284,12 +387,16 @@ func (a *App) runProfilerPreflight(name string) {
 				a.ShowAlert(fmt.Sprintf("%s Could not inspect tables:\n\n%v", iconWarn, err), pageChangeProfiler)
 				return
 			}
-			a.showProfilerTableReview(name, plans, sourceBytes)
+			a.showProfilerTableReview(name, plans, sourceBytes, mode)
 		})
 	}()
 }
 
-func (a *App) showProfilerTableReview(name string, plans []profiler.TablePlan, sourceBytes int64) {
+func (a *App) showProfilerTableReview(name string, plans []profiler.TablePlan, sourceBytes int64, modes ...profiler.CaptureMode) {
+	mode := profiler.CaptureSnapshot
+	if len(modes) > 0 {
+		mode = modes[0]
+	}
 	summary := tview.NewTextView().SetDynamicColors(true).SetTextAlign(tview.AlignCenter)
 	summary.SetBackgroundColor(mantle)
 	list := tview.NewList().ShowSecondaryText(true)
@@ -342,6 +449,9 @@ func (a *App) showProfilerTableReview(name string, plans []profiler.TablePlan, s
 			estimate = appformat.FormatBytes(uint64(sourceBytes)) + " database file · selected-table size unknown"
 		}
 		summary.SetText(fmt.Sprintf(" [::b]%d/%d tables selected[-] · %s · %d risky table(s)\n [#a6adc8]Exact before-values are stored locally with per-row adaptive compression.[-]", selected, len(plans), estimate, risky))
+		if mode == profiler.CaptureJournal {
+			summary.SetText(fmt.Sprintf(" [::b]%d/%d tables · INCREMENTAL JOURNAL[-]\n [#a6adc8]No row copy at Start. Captures committed writes in source objects; F stops and shows the net diff.[-]", selected, len(plans)))
+		}
 	}
 	refresh()
 	modalW, modalH := a.modalSize(76, 118, 16, 34)
@@ -360,7 +470,18 @@ func (a *App) showProfilerTableReview(name string, plans []profiler.TablePlan, s
 			return
 		}
 		a.pages.RemovePage(pageProfilerTableReview)
-		a.runProfilerStart(name, plans)
+		if mode == profiler.CaptureJournal {
+			if cfg := a.currentConnectionConfig(); cfg != nil && cfg.ReadOnly {
+				a.ShowAlert("Incremental capture needs permission to create journal objects. Use snapshot comparison for a read-only connection.", pageChangeProfiler)
+				return
+			}
+			message := profilerJournalConsentText(a.dbType)
+			a.showProfilerJournalConsent(message,
+				func() { a.runProfilerStart(name, plans, mode) },
+				func() { a.showProfilerTableReview(name, plans, sourceBytes, mode) })
+			return
+		}
+		a.runProfilerStart(name, plans, mode)
 	}
 	list.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEscape {
@@ -403,19 +524,27 @@ func (a *App) showProfilerTableReview(name string, plans []profiler.TablePlan, s
 	a.app.SetFocus(list)
 }
 
-func (a *App) runProfilerStart(name string, plans []profiler.TablePlan) {
+func (a *App) runProfilerStart(name string, plans []profiler.TablePlan, modes ...profiler.CaptureMode) {
+	mode := profiler.CaptureSnapshot
+	if len(modes) > 0 {
+		mode = modes[0]
+	}
 	connectionKey, ok := a.activeConnectionKey()
 	if !ok || a.db == nil {
 		a.ShowAlert(fmt.Sprintf("%s The active database connection is unavailable.", iconWarn), pageChangeProfiler)
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	const title = "Capturing compact anchor baseline..."
-	const cancelText = "Press Esc to cancel; partial baseline data will be removed."
+	title := "Capturing compact anchor baseline..."
+	cancelText := "Press Esc to cancel; partial baseline data will be removed."
+	if mode == profiler.CaptureJournal {
+		title = "Arming incremental checkpoint..."
+		cancelText = "Press Esc to cancel; source journal cleanup will be attempted."
+	}
 	token := a.showLoadingModal(title, withLoadingCancelOutcome(cancelText, cancel))
 	db, engine := a.db, a.dbType
 	request := profiler.StartRequest{Name: name, ConnectionKey: connectionKey, ConnectionLabel: a.profilerConnectionLabel(),
-		TargetLabel: a.profilerTargetLabel(), Engine: engine, Tables: plans}
+		TargetLabel: a.profilerTargetLabel(), Engine: engine, Tables: plans, Mode: mode, AllowSourceObjects: mode == profiler.CaptureJournal}
 	started := time.Now()
 	go func() {
 		anchor, err := a.profilerStore.Start(ctx, db, request, func(progress profiler.Progress) {
@@ -440,7 +569,11 @@ func (a *App) runProfilerStart(name string, plans []profiler.TablePlan) {
 }
 
 func (a *App) runProfilerScan(anchor profiler.Anchor, finish bool) {
-	if anchor.Status != profiler.StatusActive {
+	if anchor.CaptureMode == profiler.CaptureJournal && !finish {
+		a.ShowAlert("This checkpoint records changes continuously. Press F to stop capture and build the final diff from its journal.", pageChangeProfiler)
+		return
+	}
+	if anchor.Status != profiler.StatusActive && !(anchor.CaptureMode == profiler.CaptureJournal && anchor.CleanupPending) {
 		a.ShowAlert(fmt.Sprintf("%s Only an active anchor can be scanned or finished.", iconInfo), pageChangeProfiler)
 		return
 	}
@@ -452,6 +585,9 @@ func (a *App) runProfilerScan(anchor profiler.Anchor, finish bool) {
 	verb := "Scanning changes"
 	if finish {
 		verb = "Finishing anchor"
+		if anchor.CaptureMode == profiler.CaptureJournal {
+			verb = "Stopping checkpoint"
+		}
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	title := verb + "..."
@@ -472,7 +608,7 @@ func (a *App) runProfilerScan(anchor profiler.Anchor, finish bool) {
 					a.showChangeProfiler()
 					return
 				}
-				a.ShowAlert(fmt.Sprintf("%s Change scan failed:\n\n%v", iconWarn, err), pageChangeProfiler)
+				a.ShowAlert(fmt.Sprintf("%s Checkpoint operation needs attention:\n\n%v", iconWarn, err), pageChangeProfiler)
 				return
 			}
 			a.activateProfilerReport(updated.ID)
@@ -502,13 +638,51 @@ func (a *App) activateProfilerReport(anchorID string) {
 }
 
 func (a *App) confirmDeleteProfilerAnchor(anchor profiler.Anchor) {
-	modal := tview.NewModal().SetText(fmt.Sprintf("Delete local anchor %q?\n\nIts baseline and saved diff report will be permanently removed. The tracked database is not changed.", anchor.Name)).
+	message := fmt.Sprintf("Delete local anchor %q?\n\nIts baseline and saved diff report will be permanently removed. The tracked database is not changed.", anchor.Name)
+	if anchor.CleanupPending {
+		message = fmt.Sprintf("Remove checkpoint %q?\n\nStops and discards its source journal tables/triggers, then deletes the local report. Application tables and their data are preserved. Connect to the original database first.", anchor.Name)
+	}
+	modal := tview.NewModal().SetText(message).
 		AddButtons([]string{"Delete", "Cancel"})
 	modal.SetBackgroundColor(bg).SetTextColor(text).SetButtonBackgroundColor(surface1).SetButtonTextColor(green)
 	modal.SetDoneFunc(func(index int, _ string) {
 		a.pages.RemovePage("profilerDelete")
 		if index != 0 {
 			a.showChangeProfiler()
+			return
+		}
+		if anchor.CleanupPending {
+			connectionKey, ok := a.activeConnectionKey()
+			if !ok || a.db == nil || connectionKey != anchor.ConnectionKey {
+				a.ShowAlert("Connect to this checkpoint's original database to remove its source journal. Its local recovery metadata has been preserved.", pageChangeProfiler)
+				return
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			token := a.showLoadingModal("Removing checkpoint journal...", withLoadingCancelOutcome("Press Esc to cancel; recovery metadata is retained until cleanup succeeds.", cancel))
+			db := a.db
+			go func() {
+				defer cancel()
+				err := a.profilerStore.RemoveJournal(ctx, db, anchor.ID)
+				if err == nil {
+					err = a.profilerStore.DeleteAnchor(ctx, anchor.ID)
+				}
+				a.queueUpdateDraw(func() {
+					if !a.finishLoadingModal(token) {
+						return
+					}
+					if err != nil {
+						a.ShowAlert("Checkpoint cleanup needs attention:\n\n"+tview.Escape(err.Error()), pageChangeProfiler)
+						return
+					}
+					a.profilerSelectedAnchor = ""
+					if a.profilerAnchorID == anchor.ID {
+						a.profilerAnchorID = ""
+						a.profilerTableChanges = nil
+						a.refreshTableSidebarState()
+					}
+					a.showChangeProfiler()
+				})
+			}()
 			return
 		}
 		if err := a.profilerStore.DeleteAnchor(context.Background(), anchor.ID); err != nil {
