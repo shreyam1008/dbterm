@@ -2,11 +2,14 @@ package ui
 
 import (
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
+	"github.com/SCKelemen/unicode/v6/uax29"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	"github.com/rivo/uniseg"
@@ -14,7 +17,7 @@ import (
 
 const (
 	maxCellPreviewRunes = 100
-	maxBinaryPreviewLen = 100
+	maxBinaryPreviewLen = 32
 )
 
 // populateTable fills the tview.Table with rows from a sql.Rows result set.
@@ -165,11 +168,13 @@ func resultCellDisplayIsTruncated(value any, databaseType string) bool {
 	switch typed := value.(type) {
 	case []byte:
 		if databaseByteValueIsText(databaseType) {
-			return uniseg.GraphemeClusterCount(string(typed)) > maxCellPreviewRunes
+			_, truncated := resultTextPreview(string(typed), maxCellPreviewRunes)
+			return truncated
 		}
 		return len(typed) > maxBinaryPreviewLen
 	case string:
-		return uniseg.GraphemeClusterCount(typed) > maxCellPreviewRunes
+		_, truncated := resultTextPreview(typed, maxCellPreviewRunes)
+		return truncated
 	default:
 		return false
 	}
@@ -317,10 +322,14 @@ func formatCellValueForDatabaseType(val any, databaseType string) (string, tcell
 		if databaseByteValueIsText(databaseType) {
 			return truncateForDisplay(string(v), maxCellPreviewRunes), text
 		}
-		if len(v) > maxBinaryPreviewLen {
-			return string(v[:maxBinaryPreviewLen-3]) + "...", text
+		if len(v) == 0 {
+			return "BLOB 0 B (empty)", teal
 		}
-		return string(v), text
+		preview := fmt.Sprintf("BLOB %d B: 0x%s", len(v), hex.EncodeToString(v[:min(len(v), maxBinaryPreviewLen)]))
+		if len(v) > maxBinaryPreviewLen {
+			preview += "..."
+		}
+		return preview, teal
 	case string:
 		return truncateForDisplay(v, maxCellPreviewRunes), text
 	case bool:
@@ -338,24 +347,58 @@ func formatCellValueForDatabaseType(val any, databaseType string) (string, tcell
 }
 
 func truncateForDisplay(value string, maxRunes int) string {
+	preview, _ := resultTextPreview(value, maxRunes)
+	return preview
+}
+
+// resultTextPreview segments only enough of a valid string to decide whether
+// its preview is truncated. The local uniseg compatibility iterator segments
+// the entire remaining string on every step, so counting and collecting every
+// cluster made a single large TEXT/JSON value stall the result grid.
+func resultTextPreview(value string, maxRunes int) (string, bool) {
 	if maxRunes <= 0 || value == "" {
-		return ""
-	}
-	if uniseg.GraphemeClusterCount(value) <= maxRunes {
-		return value
+		return "", value != ""
 	}
 
-	clusters := make([]string, 0, uniseg.GraphemeClusterCount(value))
-	remaining := value
-	for len(remaining) > 0 {
-		cluster, rest, _, _ := uniseg.FirstGraphemeClusterInString(remaining, -1)
-		clusters = append(clusters, cluster)
-		remaining = rest
+	var boundaries []int
+	if !utf8.ValidString(value) {
+		// Preserve the compatibility iterator's malformed UTF-8 behavior, but
+		// stop after the first cluster beyond the preview instead of scanning
+		// and allocating a slice for every cluster in the value.
+		boundaries = []int{0}
+		remaining := value
+		for len(remaining) > 0 && len(boundaries)-1 <= maxRunes {
+			_, remaining, _, _ = uniseg.FirstGraphemeClusterInString(remaining, -1)
+			boundaries = append(boundaries, len(value)-len(remaining))
+		}
+		if len(boundaries)-1 <= maxRunes {
+			return value, false
+		}
+	} else {
+		prefixBytes := min(len(value), max(256, min(maxRunes, 256)*utf8.UTFMax))
+		for {
+			end := prefixBytes
+			for end < len(value) && !utf8.RuneStart(value[end]) {
+				end--
+			}
+			boundaries = uax29.FindGraphemeBreaks(value[:end])
+			if len(boundaries)-1 > maxRunes {
+				break
+			}
+			if end == len(value) {
+				return value, false
+			}
+			// The final boundary of an artificial prefix may fall inside a
+			// combining or ZWJ sequence. Expand until the needed boundary is
+			// inside the prefix, never use that artificial end as a cut point.
+			prefixBytes = min(len(value), prefixBytes+min(prefixBytes, len(value)-prefixBytes))
+		}
 	}
+
 	if maxRunes <= 3 {
-		return strings.Join(clusters[:maxRunes], "")
+		return value[:boundaries[maxRunes]], true
 	}
-	return strings.Join(clusters[:maxRunes-3], "") + "..."
+	return value[:boundaries[maxRunes-3]] + "...", true
 }
 
 func isLikelyCompactColumn(columnName string) bool {

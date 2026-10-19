@@ -19,13 +19,42 @@ func (a *App) applyProfilerHighlightsToResults(table string) {
 	if !ok || len(summary.KeyColumns) == 0 || summary.KeyKind == profiler.KeyFullRow || summary.KeyKind == profiler.KeyRowID {
 		return
 	}
-	diffs, err := a.profilerStore.ListDiffRows(context.Background(), a.profilerAnchorID, table, 5000)
+	columns := make(map[string]int, a.results.GetColumnCount())
+	names := make([]string, a.results.GetColumnCount())
+	types := make([]string, a.results.GetColumnCount())
+	for col := 0; col < a.results.GetColumnCount(); col++ {
+		names[col] = a.resultColumnName(col)
+		columns[names[col]] = col
+	}
+	var values [][]any
+	for row := 1; row < a.results.GetRowCount(); row++ {
+		rowValues := make([]any, len(names))
+		valid := true
+		for col := range names {
+			cell := a.results.GetCell(row, col)
+			if cell == nil {
+				valid = false
+				break
+			}
+			ref, ok := cell.GetReference().(resultCellReference)
+			if !ok {
+				valid = false
+				break
+			}
+			if !ref.isNull {
+				rowValues[col] = ref.rawValue
+			}
+			if types[col] == "" {
+				types[col] = ref.databaseType
+			}
+		}
+		if valid {
+			values = append(values, rowValues)
+		}
+	}
+	diffs, err := a.profilerStore.ListDiffRowsForValues(context.Background(), a.profilerAnchorID, table, names, types, values)
 	if err != nil {
 		return
-	}
-	columns := make(map[string]int, a.results.GetColumnCount())
-	for col := 0; col < a.results.GetColumnCount(); col++ {
-		columns[a.resultColumnName(col)] = col
 	}
 	byKey := make(map[string][]profiler.DiffRow, len(diffs))
 	for _, diff := range diffs {

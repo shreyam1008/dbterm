@@ -273,6 +273,8 @@ Press `Alt+W` to open Change Profiler. It creates portable, named before/after a
 4. Press `Enter` on a report to inspect changed tables, inserted/updated/deleted rows, schema changes, columns, and complete before/after values.
 5. `E` renames and `D` permanently deletes a local anchor/report.
 
+Reports load 200 changes at a time. Use `[` and `]` for previous/next pages, and `Tab` or `Shift+Tab` to switch between the table list and row grid. The title shows the displayed range and total. On narrow terminals the table list sits above the rows. `Enter` opens a row's before/after details; `Enter` on a value opens a bounded viewer with the same page keys and `C` to copy the complete value. `Esc` returns to the previous panel. SQL NULL, empty text, and absent columns have distinct labels in row details.
+
 Risky, keyless, or very large tables start excluded and require explicit opt-in. Loaders show phase, table, rows, bytes, rate, elapsed time, approximate percent, and ETA when estimates are meaningful. Baselines are adaptively compressed in private local state.
 
 PostgreSQL/MySQL use a consistent repeatable-read snapshot; SQLite/Turso use a transaction; D1 is reported as best-effort. A scan must use the original connection. Cancellation preserves the last successful report and removes partial capture state.

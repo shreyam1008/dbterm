@@ -40,7 +40,7 @@ func (a *App) showServiceDashboard() {
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignCenter)
 	header.SetBackgroundColor(bg)
-	header.SetText(fmt.Sprintf(" [::b][#cba6f7]%s Database Services[-][-]  [#a6adc8]System status & management[-]", iconServices))
+	header.SetText(fmt.Sprintf(" [::b][#cba6f7]%s Local Database Services[-][-]  [#a6adc8]Host OS status & controls[-]", iconServices))
 
 	// ── Content ──
 	content := tview.NewTextView().
@@ -145,7 +145,10 @@ func (a *App) showServiceDashboard() {
 			// PostgreSQL section
 			writeServiceSection(&sb, pInfo)
 
-			sb.WriteString("\n  [#6c7086]Database names are loaded only when you choose Connect, using the credentials you enter.[-]")
+			sb.WriteString("\n  [#a6adc8]Docker, WSL or remote server? Press C to connect using its host and port.[-]\n")
+			sb.WriteString("  [#6c7086]For Docker, use the published host port (3307:3306 means port 3307).[-]\n")
+			sb.WriteString("  [#6c7086]This screen probes local OS services; it does not discover containers or remote servers.[-]\n")
+			sb.WriteString("  [#6c7086]Database names are loaded after Connect, using the credentials you enter.[-]")
 
 			content.SetText(sb.String())
 		})
@@ -169,7 +172,7 @@ func writeServiceSection(sb *strings.Builder, info *serviceInfo) {
 		statusText = "[yellow]Status unavailable[-]"
 	} else if !info.installed {
 		statusIcon = "[#6c7086]○[-]"
-		statusText = "[#6c7086]Not Installed[-]"
+		statusText = "[#6c7086]Not detected locally[-]"
 		if runtime.GOOS == "windows" {
 			statusText = "[#6c7086]Not registered[-]"
 		}
@@ -229,9 +232,9 @@ func serviceInstallPackage(serviceName string) string {
 
 func serviceInstallHint(name string) string {
 	if runtime.GOOS == "windows" {
-		return "No Windows service found. Install " + name + " with its Windows installer. Servers in Docker, WSL or started manually can still be connected using C."
+		return "No Windows service found. Docker, WSL and manually started servers can still connect with C.\n     For a native Windows service, use the " + name + " installer."
 	}
-	return "Not found. Install with: sudo apt install " + serviceInstallPackage(name)
+	return "Local service not detected. Docker and remote servers can still connect with C.\n     For a native OS install: sudo apt install " + serviceInstallPackage(name)
 }
 
 // getServiceInfo gathers information about a database service

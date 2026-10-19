@@ -1,11 +1,42 @@
 package database
 
 import (
+	"database/sql"
 	"strings"
 	"testing"
 
 	"github.com/shreyam1008/dbterm/internal/config"
 )
+
+func TestSQLiteTableDiscoveryKeepsUserNamesBeginningWithSQLite(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`CREATE TABLE sqliteledger(id INTEGER PRIMARY KEY AUTOINCREMENT); CREATE TABLE normal(id INTEGER);`); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := db.Query(ListTablesQuery(config.SQLite))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var names []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			t.Fatal(err)
+		}
+		names = append(names, name)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(names, ","); got != "normal,sqliteledger" {
+		t.Fatalf("discovered tables = %q, want normal,sqliteledger without sqlite_sequence", got)
+	}
+}
 
 func TestMySQLMetadataQueriesStayInCurrentDatabase(t *testing.T) {
 	tests := []struct {

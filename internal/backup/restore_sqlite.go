@@ -112,7 +112,7 @@ func executeSQLiteDatabaseRestore(ctx context.Context, plan *RestorePlan, payloa
 }
 
 func executeSQLiteSQLRestore(ctx context.Context, plan *RestorePlan, payload *payloadSource, emit func(string)) error {
-	if err := validateSQLiteSQLForRestore(payload.path); err != nil {
+	if err := validateSQLiteSQLForRestore(ctx, payload.path); err != nil {
 		return err
 	}
 	tool, err := requireClientTool("sqlite3")

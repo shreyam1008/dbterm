@@ -2,6 +2,7 @@ package backup
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -37,13 +38,17 @@ var dangerousSQLitePragmas = map[string]struct{}{
 // validateSQLiteSQLForRestore performs a streaming lexical scan. The sqlite3
 // client still performs the authoritative parse, but constructs that could
 // escape the private staging database are rejected before the client starts.
-func validateSQLiteSQLForRestore(path string) error {
+func validateSQLiteSQLForRestore(ctx context.Context, path string) error {
 	file, err := os.Open(path)
 	if err != nil {
 		return fmt.Errorf("open SQLite SQL backup for safety scan: %w", err)
 	}
 	defer file.Close()
-	if err := scanSQLiteSQLSafety(bufio.NewReaderSize(file, restoreSQLBufferSize)); err != nil {
+	err = scanSQLiteSQLSafety(bufio.NewReaderSize(&contextReader{ctx: ctx, reader: file}, restoreSQLBufferSize))
+	if ctx.Err() != nil {
+		return fmt.Errorf("SQLite SQL safety scan stopped: %w", ctx.Err())
+	}
+	if err != nil {
 		return fmt.Errorf("SQLite SQL safety scan failed: %w", err)
 	}
 	return nil

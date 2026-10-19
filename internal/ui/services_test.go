@@ -71,6 +71,9 @@ func TestServiceInstallPackageUsesPlatformPackageNames(t *testing.T) {
 
 func TestServiceInstallHintAndUnavailableStatus(t *testing.T) {
 	hint := serviceInstallHint("PostgreSQL")
+	if !strings.Contains(hint, "Docker") || !strings.Contains(hint, "connect with C") {
+		t.Fatalf("missing service hint hides external connection path: %q", hint)
+	}
 	if runtime.GOOS == "windows" {
 		if !strings.Contains(hint, "Windows") || strings.Contains(hint, "sudo") || strings.Contains(hint, "apt") {
 			t.Fatalf("Windows install hint = %q", hint)
@@ -82,6 +85,24 @@ func TestServiceInstallHintAndUnavailableStatus(t *testing.T) {
 	writeServiceSection(&rendered, &serviceInfo{name: "MySQL", probeError: "Access denied"})
 	if !strings.Contains(rendered.String(), "Status unavailable") || !strings.Contains(rendered.String(), "Access denied") || strings.Contains(rendered.String(), "Not Installed") {
 		t.Fatalf("failed probe mislabeled as missing server: %s", rendered.String())
+	}
+}
+
+func TestUndetectedLocalServiceDoesNotClaimServerIsMissing(t *testing.T) {
+	var rendered strings.Builder
+	writeServiceSection(&rendered, &serviceInfo{name: "MySQL"})
+	content := rendered.String()
+	if strings.Contains(content, "Not Installed") {
+		t.Fatalf("local detection claimed no database was installed: %s", content)
+	}
+	wantStatus := "Not detected locally"
+	if runtime.GOOS == "windows" {
+		wantStatus = "Not registered"
+	}
+	for _, want := range []string{wantStatus, "Docker", "connect with C"} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("undetected service = %q, want %q", content, want)
+		}
 	}
 }
 
