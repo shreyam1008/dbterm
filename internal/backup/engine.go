@@ -171,9 +171,16 @@ func createNativeAtPath(ctx context.Context, cfg *config.ConnectionConfig, outpu
 	defer func() { stopProgress(err == nil) }()
 	switch cfg.Type {
 	case config.PostgreSQL:
-		return runPostgresDump(ctx, cfg, outputPath, options.PostgresCompression)
+		if _, err := requireClientTool("pg_restore"); err != nil {
+			return fmt.Errorf("PostgreSQL backup checkpoint validation requires pg_restore: %w", err)
+		}
+		return createServerBackupWithoutJournals(ctx, cfg, func() error {
+			return runPostgresDump(ctx, cfg, outputPath, options.PostgresCompression)
+		})
 	case config.MySQL:
-		return runMySQLDump(ctx, cfg, outputPath)
+		return createServerBackupWithoutJournals(ctx, cfg, func() error {
+			return runMySQLDump(ctx, cfg, outputPath)
+		})
 	case config.SQLite:
 		return runSQLiteSnapshot(ctx, cfg, outputPath)
 	case config.Turso:
@@ -342,6 +349,9 @@ func runSQLiteSnapshot(ctx context.Context, cfg *config.ConnectionConfig, output
 		return fmt.Errorf("connect to SQLite source: %w", err)
 	}
 	defer db.Close()
+	if err := checkBackupSourceJournals(ctx, db, config.SQLite); err != nil {
+		return err
+	}
 	if _, err := db.ExecContext(ctx, fmt.Sprintf("VACUUM INTO %s", sqliteLiteral(outputPath))); err != nil {
 		return fmt.Errorf("create consistent SQLite snapshot: %w", err)
 	}
@@ -702,6 +712,9 @@ WHERE type = 'table' AND substr(name, 1, 7) <> 'sqlite_' COLLATE NOCASE AND sql 
 	// Besides avoiding a second pooled connection, this keeps every Turso read
 	// on the single transaction-pinned remote session.
 	for index := range tables {
+		if database.IsCheckpointJournalTable(dbType, tables[index].name) {
+			return nil, checkpointBackupError(tables[index].name)
+		}
 		tables[index].columns, err = logicalDumpColumns(ctx, db, tables[index].name)
 		if err != nil {
 			return nil, err
@@ -820,7 +833,7 @@ func logicalDumpHasRows(ctx context.Context, db logicalDumpQueryer, query string
 }
 
 func logicalDumpExtraObjects(ctx context.Context, db logicalDumpQueryer) ([]string, error) {
-	rows, err := db.QueryContext(ctx, `SELECT sql FROM sqlite_master
+	rows, err := db.QueryContext(ctx, `SELECT name, sql FROM sqlite_master
 WHERE type IN ('view', 'index', 'trigger') AND substr(name, 1, 7) <> 'sqlite_' COLLATE NOCASE AND sql IS NOT NULL
 ORDER BY CASE type WHEN 'view' THEN 0 WHEN 'index' THEN 1 WHEN 'trigger' THEN 2 ELSE 3 END, name`)
 	if err != nil {
@@ -829,9 +842,12 @@ ORDER BY CASE type WHEN 'view' THEN 0 WHEN 'index' THEN 1 WHEN 'trigger' THEN 2 
 	defer rows.Close()
 	var objects []string
 	for rows.Next() {
-		var ddl string
-		if err := rows.Scan(&ddl); err != nil {
+		var name, ddl string
+		if err := rows.Scan(&name, &ddl); err != nil {
 			return nil, err
+		}
+		if isSQLiteCheckpointTrigger(name) {
+			return nil, checkpointBackupError(name)
 		}
 		objects = append(objects, ddl)
 	}

@@ -488,9 +488,22 @@ func validateMySQLSQLForRestore(ctx context.Context, path, targetDatabase string
 }
 
 func scanMySQLDirectives(reader *bufio.Reader, targetDatabase string) error {
+	return scanMySQLStatements(reader, targetDatabase, nil)
+}
+
+// inspect observes only bounded statement tokens, never a string embedded in
+// row data. Backup validation uses it to identify private checkpoint tables.
+func scanMySQLStatements(reader *bufio.Reader, targetDatabase string, inspect func([]string) error) error {
 	var tokens []string
 	var token strings.Builder
 	line := 1
+	validateTokens := func(tokens []string, line int) (bool, error) {
+		recognized, err := validateMySQLDirectiveTokens(tokens, targetDatabase, line)
+		if err == nil && inspect != nil {
+			err = inspect(tokens)
+		}
+		return recognized, err
+	}
 	flushToken := func() {
 		if token.Len() == 0 {
 			return
@@ -502,7 +515,7 @@ func scanMySQLDirectives(reader *bufio.Reader, targetDatabase string) error {
 	}
 	finishStatement := func() error {
 		flushToken()
-		_, err := validateMySQLDirectiveTokens(tokens, targetDatabase, line)
+		_, err := validateTokens(tokens, line)
 		tokens = tokens[:0]
 		return err
 	}
@@ -521,7 +534,7 @@ func scanMySQLDirectives(reader *bufio.Reader, targetDatabase string) error {
 		switch value {
 		case '\n':
 			flushToken()
-			if recognized, err := validateMySQLDirectiveTokens(tokens, targetDatabase, line); err != nil {
+			if recognized, err := validateTokens(tokens, line); err != nil {
 				return err
 			} else if recognized || firstTokenEqual(tokens, "delimiter") {
 				tokens = tokens[:0]
@@ -545,7 +558,7 @@ func scanMySQLDirectives(reader *bufio.Reader, targetDatabase string) error {
 			if err := skipMySQLLineComment(reader, &line); err != nil {
 				return err
 			}
-			if recognized, err := validateMySQLDirectiveTokens(tokens, targetDatabase, line-1); err != nil {
+			if recognized, err := validateTokens(tokens, line-1); err != nil {
 				return err
 			} else if recognized || firstTokenEqual(tokens, "delimiter") {
 				tokens = tokens[:0]
@@ -558,7 +571,7 @@ func scanMySQLDirectives(reader *bufio.Reader, targetDatabase string) error {
 				if err := skipMySQLLineComment(reader, &line); err != nil {
 					return err
 				}
-				if recognized, err := validateMySQLDirectiveTokens(tokens, targetDatabase, line-1); err != nil {
+				if recognized, err := validateTokens(tokens, line-1); err != nil {
 					return err
 				} else if recognized || firstTokenEqual(tokens, "delimiter") {
 					tokens = tokens[:0]
@@ -590,7 +603,7 @@ func scanMySQLDirectives(reader *bufio.Reader, targetDatabase string) error {
 					if strings.EqualFold(strings.TrimSpace(string(comment)), `\- enable the sandbox mode`) {
 						break
 					}
-					if err := scanMySQLDirectives(bufio.NewReader(bytes.NewReader(comment)), targetDatabase); err != nil {
+					if err := scanMySQLStatements(bufio.NewReader(bytes.NewReader(comment)), targetDatabase, inspect); err != nil {
 						return fmt.Errorf("unsafe executable MySQL comment: %w", err)
 					}
 				}

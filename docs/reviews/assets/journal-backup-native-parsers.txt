@@ -1,0 +1,174 @@
+=== RUN   TestRestoreSQLGuards
+=== PAUSE TestRestoreSQLGuards
+=== RUN   TestSQLiteSQLSafetyScanBlocksFilesystemEscapes
+=== PAUSE TestSQLiteSQLSafetyScanBlocksFilesystemEscapes
+=== RUN   TestSQLiteSQLSafetyScanAllowsDataAndBuiltInVirtualTables
+=== PAUSE TestSQLiteSQLSafetyScanAllowsDataAndBuiltInVirtualTables
+=== RUN   TestRestoreSQLSafetyScansHonorCancellation
+=== PAUSE TestRestoreSQLSafetyScansHonorCancellation
+=== RUN   TestMySQLBackupDetectsCapturedCheckpointDeclarations
+--- PASS: TestMySQLBackupDetectsCapturedCheckpointDeclarations (0.00s)
+=== RUN   TestPostgresBackupDetectsCapturedCheckpointTOC
+--- PASS: TestPostgresBackupDetectsCapturedCheckpointTOC (0.00s)
+=== RUN   TestActualNativeDumps
+=== RUN   TestActualNativeDumps/MySQL_normal
+=== RUN   TestActualNativeDumps/MySQL_active
+=== RUN   TestActualNativeDumps/MySQL_orphan_trigger
+=== RUN   TestActualNativeDumps/PostgreSQL_normal
+=== RUN   TestActualNativeDumps/PostgreSQL_active
+--- PASS: TestActualNativeDumps (0.00s)
+    --- PASS: TestActualNativeDumps/MySQL_normal (0.00s)
+    --- PASS: TestActualNativeDumps/MySQL_active (0.00s)
+    --- PASS: TestActualNativeDumps/MySQL_orphan_trigger (0.00s)
+    --- PASS: TestActualNativeDumps/PostgreSQL_normal (0.00s)
+    --- PASS: TestActualNativeDumps/PostgreSQL_active (0.00s)
+=== CONT  TestRestoreSQLSafetyScansHonorCancellation
+=== CONT  TestSQLiteSQLSafetyScanBlocksFilesystemEscapes
+=== CONT  TestSQLiteSQLSafetyScanAllowsDataAndBuiltInVirtualTables
+=== CONT  TestRestoreSQLGuards
+=== RUN   TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/dot_command
+=== PAUSE TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/dot_command
+=== RUN   TestRestoreSQLGuards/MySQL_allows_selected_target_and_ignores_strings_and_comments
+=== RUN   TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/dot_command_after_BOM
+=== PAUSE TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/dot_command_after_BOM
+=== RUN   TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/attach
+=== PAUSE TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/attach
+=== RUN   TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/detach
+=== PAUSE TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/detach
+--- PASS: TestSQLiteSQLSafetyScanAllowsDataAndBuiltInVirtualTables (0.00s)
+=== RUN   TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/vacuum_into
+=== PAUSE TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/vacuum_into
+=== RUN   TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/extension_load
+=== PAUSE TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/extension_load
+=== RUN   TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/quoted_extension_load
+=== PAUSE TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/quoted_extension_load
+=== RUN   TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/read_file
+=== PAUSE TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/read_file
+=== RUN   TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/write_file
+=== PAUSE TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/write_file
+=== RUN   TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/file_virtual_table
+=== PAUSE TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/file_virtual_table
+=== RUN   TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/filesystem_pragma
+=== PAUSE TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/filesystem_pragma
+=== RUN   TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/open_transaction
+=== PAUSE TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/open_transaction
+=== CONT  TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/dot_command_after_BOM
+=== RUN   TestRestoreSQLGuards/MySQL_allows_MariaDB_sandbox_header
+=== CONT  TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/open_transaction
+=== RUN   TestRestoreSQLGuards/MySQL_blocks_USE_elsewhere
+=== CONT  TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/extension_load
+=== PAUSE TestRestoreSQLGuards/MySQL_blocks_USE_elsewhere
+=== RUN   TestRestoreSQLGuards/MySQL_blocks_CREATE_elsewhere
+=== PAUSE TestRestoreSQLGuards/MySQL_blocks_CREATE_elsewhere
+=== RUN   TestRestoreSQLGuards/MySQL_blocks_ALTER_elsewhere
+=== PAUSE TestRestoreSQLGuards/MySQL_blocks_ALTER_elsewhere
+=== RUN   TestRestoreSQLGuards/MySQL_blocks_DROP_even_target
+=== PAUSE TestRestoreSQLGuards/MySQL_blocks_DROP_even_target
+=== RUN   TestRestoreSQLGuards/MySQL_blocks_executable_comment
+=== PAUSE TestRestoreSQLGuards/MySQL_blocks_executable_comment
+=== RUN   TestRestoreSQLGuards/MySQL_blocks_MariaDB_executable_comment
+=== PAUSE TestRestoreSQLGuards/MySQL_blocks_MariaDB_executable_comment
+=== RUN   TestRestoreSQLGuards/MySQL_blocks_SOURCE_local_file
+=== PAUSE TestRestoreSQLGuards/MySQL_blocks_SOURCE_local_file
+=== RUN   TestRestoreSQLGuards/MySQL_blocks_system_shell
+=== CONT  TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/filesystem_pragma
+=== PAUSE TestRestoreSQLGuards/MySQL_blocks_system_shell
+=== CONT  TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/file_virtual_table
+=== RUN   TestRestoreSQLGuards/MySQL_blocks_short_system_shell
+=== PAUSE TestRestoreSQLGuards/MySQL_blocks_short_system_shell
+=== RUN   TestRestoreSQLGuards/PostgreSQL_allows_pg_dump_guards_and_COPY_data
+=== CONT  TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/write_file
+=== RUN   TestRestoreSQLGuards/PostgreSQL_blocks_\!_id
+=== PAUSE TestRestoreSQLGuards/PostgreSQL_blocks_\!_id
+=== RUN   TestRestoreSQLGuards/PostgreSQL_blocks_\include_/tmp/file.sql
+=== PAUSE TestRestoreSQLGuards/PostgreSQL_blocks_\include_/tmp/file.sql
+=== RUN   TestRestoreSQLGuards/PostgreSQL_blocks_\connect_elsewhere
+=== PAUSE TestRestoreSQLGuards/PostgreSQL_blocks_\connect_elsewhere
+=== RUN   TestRestoreSQLGuards/PostgreSQL_blocks_\copy_t_from_'/tmp/data'
+=== PAUSE TestRestoreSQLGuards/PostgreSQL_blocks_\copy_t_from_'/tmp/data'
+=== RUN   TestRestoreSQLGuards/PostgreSQL_blocks_\g_/tmp/query-output.txt
+=== PAUSE TestRestoreSQLGuards/PostgreSQL_blocks_\g_/tmp/query-output.txt
+=== CONT  TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/read_file
+=== RUN   TestRestoreSQLGuards/PostgreSQL_blocks_\lo_import_/tmp/local-file
+=== PAUSE TestRestoreSQLGuards/PostgreSQL_blocks_\lo_import_/tmp/local-file
+=== RUN   TestRestoreSQLGuards/PostgreSQL_blocks_\edit_/tmp/local-file
+=== PAUSE TestRestoreSQLGuards/PostgreSQL_blocks_\edit_/tmp/local-file
+=== RUN   TestRestoreSQLGuards/PostgreSQL_blocks_\setenv_PSQL_EDITOR_/tmp/program
+=== PAUSE TestRestoreSQLGuards/PostgreSQL_blocks_\setenv_PSQL_EDITOR_/tmp/program
+=== CONT  TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/vacuum_into
+=== RUN   TestRestoreSQLGuards/PostgreSQL_blocks_inline_g_pipe
+=== CONT  TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/quoted_extension_load
+=== CONT  TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/detach
+=== RUN   TestRestoreSQLGuards/PostgreSQL_blocks_inline_shell
+=== CONT  TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/attach
+=== CONT  TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/dot_command
+=== RUN   TestRestoreSQLGuards/PostgreSQL_blocks_command_after_long_prefix
+--- PASS: TestSQLiteSQLSafetyScanBlocksFilesystemEscapes (0.00s)
+    --- PASS: TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/dot_command_after_BOM (0.00s)
+    --- PASS: TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/extension_load (0.00s)
+    --- PASS: TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/open_transaction (0.00s)
+    --- PASS: TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/file_virtual_table (0.00s)
+    --- PASS: TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/filesystem_pragma (0.00s)
+    --- PASS: TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/write_file (0.00s)
+    --- PASS: TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/read_file (0.00s)
+    --- PASS: TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/vacuum_into (0.00s)
+    --- PASS: TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/quoted_extension_load (0.00s)
+    --- PASS: TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/detach (0.00s)
+    --- PASS: TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/attach (0.00s)
+    --- PASS: TestSQLiteSQLSafetyScanBlocksFilesystemEscapes/dot_command (0.00s)
+=== RUN   TestRestoreSQLSafetyScansHonorCancellation/PostgreSQL
+=== RUN   TestRestoreSQLGuards/PostgreSQL_blocks_inline_guard
+=== RUN   TestRestoreSQLGuards/PostgreSQL_ignores_command_text_inside_SQL_lexical_regions
+=== CONT  TestRestoreSQLGuards/MySQL_blocks_USE_elsewhere
+=== CONT  TestRestoreSQLGuards/PostgreSQL_blocks_\!_id
+=== CONT  TestRestoreSQLGuards/PostgreSQL_blocks_\g_/tmp/query-output.txt
+=== CONT  TestRestoreSQLGuards/MySQL_blocks_system_shell
+=== CONT  TestRestoreSQLGuards/PostgreSQL_blocks_\copy_t_from_'/tmp/data'
+=== CONT  TestRestoreSQLGuards/PostgreSQL_blocks_\setenv_PSQL_EDITOR_/tmp/program
+=== CONT  TestRestoreSQLGuards/PostgreSQL_blocks_\connect_elsewhere
+=== CONT  TestRestoreSQLGuards/MySQL_blocks_short_system_shell
+=== CONT  TestRestoreSQLGuards/PostgreSQL_blocks_\edit_/tmp/local-file
+=== CONT  TestRestoreSQLGuards/MySQL_blocks_SOURCE_local_file
+=== CONT  TestRestoreSQLGuards/PostgreSQL_blocks_\include_/tmp/file.sql
+=== CONT  TestRestoreSQLGuards/PostgreSQL_blocks_\lo_import_/tmp/local-file
+=== CONT  TestRestoreSQLGuards/MySQL_blocks_executable_comment
+=== CONT  TestRestoreSQLGuards/MySQL_blocks_MariaDB_executable_comment
+=== CONT  TestRestoreSQLGuards/MySQL_blocks_CREATE_elsewhere
+=== CONT  TestRestoreSQLGuards/MySQL_blocks_ALTER_elsewhere
+=== CONT  TestRestoreSQLGuards/MySQL_blocks_DROP_even_target
+--- PASS: TestRestoreSQLGuards (0.02s)
+    --- PASS: TestRestoreSQLGuards/MySQL_allows_selected_target_and_ignores_strings_and_comments (0.00s)
+    --- PASS: TestRestoreSQLGuards/MySQL_allows_MariaDB_sandbox_header (0.00s)
+    --- PASS: TestRestoreSQLGuards/PostgreSQL_allows_pg_dump_guards_and_COPY_data (0.00s)
+    --- PASS: TestRestoreSQLGuards/PostgreSQL_blocks_inline_g_pipe (0.00s)
+    --- PASS: TestRestoreSQLGuards/PostgreSQL_blocks_inline_shell (0.00s)
+    --- PASS: TestRestoreSQLGuards/PostgreSQL_blocks_command_after_long_prefix (0.02s)
+    --- PASS: TestRestoreSQLGuards/PostgreSQL_blocks_inline_guard (0.00s)
+    --- PASS: TestRestoreSQLGuards/PostgreSQL_ignores_command_text_inside_SQL_lexical_regions (0.00s)
+    --- PASS: TestRestoreSQLGuards/MySQL_blocks_USE_elsewhere (0.00s)
+    --- PASS: TestRestoreSQLGuards/PostgreSQL_blocks_\!_id (0.00s)
+    --- PASS: TestRestoreSQLGuards/PostgreSQL_blocks_\g_/tmp/query-output.txt (0.00s)
+    --- PASS: TestRestoreSQLGuards/PostgreSQL_blocks_\copy_t_from_'/tmp/data' (0.00s)
+    --- PASS: TestRestoreSQLGuards/MySQL_blocks_system_shell (0.00s)
+    --- PASS: TestRestoreSQLGuards/PostgreSQL_blocks_\setenv_PSQL_EDITOR_/tmp/program (0.00s)
+    --- PASS: TestRestoreSQLGuards/PostgreSQL_blocks_\connect_elsewhere (0.00s)
+    --- PASS: TestRestoreSQLGuards/PostgreSQL_blocks_\edit_/tmp/local-file (0.00s)
+    --- PASS: TestRestoreSQLGuards/PostgreSQL_blocks_\include_/tmp/file.sql (0.00s)
+    --- PASS: TestRestoreSQLGuards/MySQL_blocks_short_system_shell (0.00s)
+    --- PASS: TestRestoreSQLGuards/MySQL_blocks_SOURCE_local_file (0.00s)
+    --- PASS: TestRestoreSQLGuards/PostgreSQL_blocks_\lo_import_/tmp/local-file (0.00s)
+    --- PASS: TestRestoreSQLGuards/MySQL_blocks_executable_comment (0.00s)
+    --- PASS: TestRestoreSQLGuards/MySQL_blocks_ALTER_elsewhere (0.00s)
+    --- PASS: TestRestoreSQLGuards/MySQL_blocks_MariaDB_executable_comment (0.00s)
+    --- PASS: TestRestoreSQLGuards/MySQL_blocks_CREATE_elsewhere (0.00s)
+    --- PASS: TestRestoreSQLGuards/MySQL_blocks_DROP_even_target (0.00s)
+=== RUN   TestRestoreSQLSafetyScansHonorCancellation/MySQL
+=== RUN   TestRestoreSQLSafetyScansHonorCancellation/SQLite
+--- PASS: TestRestoreSQLSafetyScansHonorCancellation (0.08s)
+    --- PASS: TestRestoreSQLSafetyScansHonorCancellation/PostgreSQL (0.04s)
+    --- PASS: TestRestoreSQLSafetyScansHonorCancellation/MySQL (0.02s)
+    --- PASS: TestRestoreSQLSafetyScansHonorCancellation/SQLite (0.02s)
+PASS
+ok  	nativeguards	1.107s
+?   	nativeguards/config	[no test files]
+?   	nativeguards/database	[no test files]

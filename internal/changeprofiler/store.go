@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/shreyam1008/dbterm/internal/appdirs"
@@ -19,8 +20,9 @@ import (
 )
 
 type Store struct {
-	db   *sql.DB
-	path string
+	db        *sql.DB
+	path      string
+	journalMu sync.Mutex
 }
 
 func DefaultPath() (string, error) {
@@ -54,6 +56,12 @@ func OpenStore(path string) (*Store, error) {
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
 	store := &Store{db: db, path: path}
+	release, err := store.lockJournalOperation()
+	if err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	defer release()
 	if err := store.migrate(context.Background()); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -135,6 +143,11 @@ func (s *Store) migrate(ctx context.Context) error {
 			sql_text TEXT NOT NULL, rows_affected INTEGER NOT NULL,
 			PRIMARY KEY(anchor_id, occurred_at, sql_text)
 		) WITHOUT ROWID`,
+		`CREATE TABLE IF NOT EXISTS profiler_journal_sessions (
+			anchor_id TEXT PRIMARY KEY REFERENCES profiler_anchors(id) ON DELETE CASCADE,
+			spec_json BLOB NOT NULL, cleanup_pending INTEGER NOT NULL DEFAULT 1,
+			last_error TEXT NOT NULL DEFAULT ''
+		)`,
 	}
 	for _, statement := range statements {
 		if _, err := s.db.ExecContext(ctx, statement); err != nil {
@@ -199,7 +212,9 @@ func newID() (string, error) {
 func (s *Store) ListAnchors(ctx context.Context) ([]Anchor, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id, name, connection_key, connection_label, engine, target_label,
 		status, consistency, started_at, COALESCE(last_scanned_at,''), COALESCE(finished_at,''),
-		inserted_count, updated_count, deleted_count, schema_count, error
+		inserted_count, updated_count, deleted_count, schema_count, error,
+		CASE WHEN EXISTS(SELECT 1 FROM profiler_journal_sessions j WHERE j.anchor_id=profiler_anchors.id) THEN 'journal' ELSE 'snapshot' END,
+		COALESCE((SELECT cleanup_pending FROM profiler_journal_sessions j WHERE j.anchor_id=profiler_anchors.id),0)
 		FROM profiler_anchors ORDER BY started_at DESC, id`)
 	if err != nil {
 		return nil, err
@@ -219,7 +234,9 @@ func (s *Store) ListAnchors(ctx context.Context) ([]Anchor, error) {
 func (s *Store) GetAnchor(ctx context.Context, id string) (Anchor, error) {
 	row := s.db.QueryRowContext(ctx, `SELECT id, name, connection_key, connection_label, engine, target_label,
 		status, consistency, started_at, COALESCE(last_scanned_at,''), COALESCE(finished_at,''),
-		inserted_count, updated_count, deleted_count, schema_count, error
+		inserted_count, updated_count, deleted_count, schema_count, error,
+		CASE WHEN EXISTS(SELECT 1 FROM profiler_journal_sessions j WHERE j.anchor_id=profiler_anchors.id) THEN 'journal' ELSE 'snapshot' END,
+		COALESCE((SELECT cleanup_pending FROM profiler_journal_sessions j WHERE j.anchor_id=profiler_anchors.id),0)
 		FROM profiler_anchors WHERE id = ?`, id)
 	return scanAnchor(row)
 }
@@ -231,7 +248,8 @@ func scanAnchor(row rowScanner) (Anchor, error) {
 	var started, scanned, finished string
 	if err := row.Scan(&anchor.ID, &anchor.Name, &anchor.ConnectionKey, &anchor.ConnectionLabel, &anchor.Engine,
 		&anchor.TargetLabel, &anchor.Status, &anchor.Consistency, &started, &scanned, &finished,
-		&anchor.Inserted, &anchor.Updated, &anchor.Deleted, &anchor.SchemaChanges, &anchor.Error); err != nil {
+		&anchor.Inserted, &anchor.Updated, &anchor.Deleted, &anchor.SchemaChanges, &anchor.Error,
+		&anchor.CaptureMode, &anchor.CleanupPending); err != nil {
 		return Anchor{}, err
 	}
 	anchor.StartedAt = parseTime(started)
@@ -243,7 +261,9 @@ func scanAnchor(row rowScanner) (Anchor, error) {
 func (s *Store) ActiveAnchor(ctx context.Context, connectionKey string) (Anchor, error) {
 	row := s.db.QueryRowContext(ctx, `SELECT id, name, connection_key, connection_label, engine, target_label,
 		status, consistency, started_at, COALESCE(last_scanned_at,''), COALESCE(finished_at,''),
-		inserted_count, updated_count, deleted_count, schema_count, error
+		inserted_count, updated_count, deleted_count, schema_count, error,
+		CASE WHEN EXISTS(SELECT 1 FROM profiler_journal_sessions j WHERE j.anchor_id=profiler_anchors.id) THEN 'journal' ELSE 'snapshot' END,
+		COALESCE((SELECT cleanup_pending FROM profiler_journal_sessions j WHERE j.anchor_id=profiler_anchors.id),0)
 		FROM profiler_anchors WHERE connection_key = ? AND status IN ('capturing','active','comparing')`, connectionKey)
 	return scanAnchor(row)
 }
@@ -264,6 +284,18 @@ func (s *Store) RenameAnchor(ctx context.Context, id, name string) error {
 }
 
 func (s *Store) DeleteAnchor(ctx context.Context, id string) error {
+	release, err := s.lockJournalOperation()
+	if err != nil {
+		return err
+	}
+	defer release()
+	var pending bool
+	if err := s.db.QueryRowContext(ctx, `SELECT COALESCE((SELECT cleanup_pending FROM profiler_journal_sessions WHERE anchor_id=?),0)`, id).Scan(&pending); err != nil {
+		return err
+	}
+	if pending {
+		return fmt.Errorf("checkpoint still owns a source journal; connect to its original database and remove its journal before deleting the local report")
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -383,9 +415,17 @@ func (s *Store) ListDiffRowsForValues(ctx context.Context, anchorID, table strin
 	var columnsJSON, keysJSON []byte
 	var kind KeyKind
 	var engine config.DBType
-	if err := s.db.QueryRowContext(ctx, `SELECT t.columns_json,t.key_columns_json,t.key_kind,a.engine
-		FROM profiler_tables t JOIN profiler_anchors a ON a.id=t.anchor_id WHERE t.anchor_id=? AND t.table_name=?`, anchorID, table).Scan(&columnsJSON, &keysJSON, &kind, &engine); err != nil {
+	var journal bool
+	if err := s.db.QueryRowContext(ctx, `SELECT t.columns_json,t.key_columns_json,t.key_kind,a.engine,
+		EXISTS(SELECT 1 FROM profiler_journal_sessions j WHERE j.anchor_id=a.id)
+		FROM profiler_tables t JOIN profiler_anchors a ON a.id=t.anchor_id WHERE t.anchor_id=? AND t.table_name=?`, anchorID, table).Scan(&columnsJSON, &keysJSON, &kind, &engine, &journal); err != nil {
 		return nil, err
+	}
+	// Journal adapters preserve native scalar text and precision; driver-derived
+	// snapshot identities are not interchangeable. The journal report remains
+	// authoritative rather than guessing a potentially wrong result highlight.
+	if journal {
+		return nil, nil
 	}
 	if kind == KeyFullRow || kind == KeyRowID {
 		return nil, nil

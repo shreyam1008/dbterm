@@ -22,6 +22,7 @@ type Consistency string
 
 const (
 	ConsistencySnapshot   Consistency = "consistent snapshot"
+	ConsistencyJournal    Consistency = "committed change journal"
 	ConsistencyBestEffort Consistency = "best effort, table by table"
 )
 
@@ -88,6 +89,8 @@ type Anchor struct {
 	Deleted         int64         `json:"deleted"`
 	SchemaChanges   int64         `json:"schema_changes"`
 	Error           string        `json:"error,omitempty"`
+	CaptureMode     CaptureMode   `json:"capture_mode,omitempty"`
+	CleanupPending  bool          `json:"cleanup_pending,omitempty"`
 }
 
 type TableSummary struct {
@@ -140,12 +143,14 @@ type Progress struct {
 type ProgressFunc func(Progress)
 
 type StartRequest struct {
-	Name            string
-	ConnectionKey   string
-	ConnectionLabel string
-	TargetLabel     string
-	Engine          config.DBType
-	Tables          []TablePlan
+	Name               string
+	ConnectionKey      string
+	ConnectionLabel    string
+	TargetLabel        string
+	Engine             config.DBType
+	Tables             []TablePlan
+	Mode               CaptureMode
+	AllowSourceObjects bool
 }
 
 // Queryer is implemented by sql.DB and sql.Tx.

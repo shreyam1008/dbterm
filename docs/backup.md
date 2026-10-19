@@ -108,9 +108,15 @@ publication.
 
 ### Engine consistency details
 
+Finish or discard Change Profiler checkpoints and complete pending source
+cleanup before creating a backup. dbterm refuses source or captured checkpoint
+recording objects so a restore cannot create an orphan recorder.
+
 - PostgreSQL uses `pg_dump` custom format with UTF-8, no ownership, and no
   privileges. Passwords use a private temporary password file rather than a
-  command-line argument.
+  command-line argument. Backup creation requires matching `pg_dump` and
+  `pg_restore` client tools: dbterm checks the captured archive's table of
+  contents before publication to reject checkpoint recording objects.
 - MySQL uses `--single-transaction --quick --routines --events --triggers` and a
   private temporary defaults file. `--single-transaction` gives a consistent
   InnoDB snapshot while normal writes continue, but schema-changing statements

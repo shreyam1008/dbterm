@@ -1,0 +1,96 @@
+=== RUN   TestCheckpointCaptureModeDefaultsRespectEngineAndReadOnly
+=== RUN   TestCheckpointCaptureModeDefaultsRespectEngineAndReadOnly/sqlite/readonly=false
+=== RUN   TestCheckpointCaptureModeDefaultsRespectEngineAndReadOnly/turso/readonly=false
+=== RUN   TestCheckpointCaptureModeDefaultsRespectEngineAndReadOnly/mysql/readonly=false
+=== RUN   TestCheckpointCaptureModeDefaultsRespectEngineAndReadOnly/postgresql/readonly=false
+=== RUN   TestCheckpointCaptureModeDefaultsRespectEngineAndReadOnly/d1/readonly=false
+=== RUN   TestCheckpointCaptureModeDefaultsRespectEngineAndReadOnly/postgresql/readonly=true
+--- PASS: TestCheckpointCaptureModeDefaultsRespectEngineAndReadOnly (0.02s)
+    --- PASS: TestCheckpointCaptureModeDefaultsRespectEngineAndReadOnly/sqlite/readonly=false (0.00s)
+    --- PASS: TestCheckpointCaptureModeDefaultsRespectEngineAndReadOnly/turso/readonly=false (0.00s)
+    --- PASS: TestCheckpointCaptureModeDefaultsRespectEngineAndReadOnly/mysql/readonly=false (0.00s)
+    --- PASS: TestCheckpointCaptureModeDefaultsRespectEngineAndReadOnly/postgresql/readonly=false (0.00s)
+    --- PASS: TestCheckpointCaptureModeDefaultsRespectEngineAndReadOnly/d1/readonly=false (0.00s)
+    --- PASS: TestCheckpointCaptureModeDefaultsRespectEngineAndReadOnly/postgresql/readonly=true (0.00s)
+=== RUN   TestCheckpointJournalConsentFitsAndRequiresExplicitAction
+=== RUN   TestCheckpointJournalConsentFitsAndRequiresExplicitAction/80x24
+=== RUN   TestCheckpointJournalConsentFitsAndRequiresExplicitAction/40x12
+--- PASS: TestCheckpointJournalConsentFitsAndRequiresExplicitAction (2.41s)
+    --- PASS: TestCheckpointJournalConsentFitsAndRequiresExplicitAction/80x24 (1.51s)
+    --- PASS: TestCheckpointJournalConsentFitsAndRequiresExplicitAction/40x12 (0.91s)
+=== RUN   TestCheckpointJournalReviewCancelPreservesSelection
+--- PASS: TestCheckpointJournalReviewCancelPreservesSelection (0.23s)
+=== RUN   TestProfilerCellPagesBoundLargeValuesWithoutLosingBytes
+--- PASS: TestProfilerCellPagesBoundLargeValuesWithoutLosingBytes (8.94s)
+=== RUN   TestExactProfilerComponentsAndKeyboardTraversal
+=== RUN   TestExactProfilerComponentsAndKeyboardTraversal/80x24
+    component_test.go:86: draw report-first 80x24: 38.916584ms
+    component_test.go:92: draw report-last 80x24: 46.546936ms
+    component_test.go:112: draw row-detail 80x24: 66.942485ms
+    component_test.go:135: draw full-cell-literal 80x24: 69.236041ms
+    component_test.go:142: draw full-cell-large 80x24: 124.469692ms
+    component_test.go:142: focused full-value TextView only 80x24: 38.566438ms
+    component_test.go:149: draw full-cell-next-page 80x24: 125.58881ms
+    component_test.go:169: draw schema-only 80x24: 9.281376ms
+=== RUN   TestExactProfilerComponentsAndKeyboardTraversal/120x32
+    component_test.go:86: draw report-first 120x32: 91.013993ms
+    component_test.go:92: draw report-last 120x32: 82.821555ms
+    component_test.go:112: draw row-detail 120x32: 106.236259ms
+    component_test.go:135: draw full-cell-literal 120x32: 111.992569ms
+    component_test.go:142: draw full-cell-large 120x32: 167.950326ms
+    component_test.go:142: focused full-value TextView only 120x32: 30.154042ms
+    component_test.go:149: draw full-cell-next-page 120x32: 158.253937ms
+    component_test.go:169: draw schema-only 120x32: 12.543753ms
+--- PASS: TestExactProfilerComponentsAndKeyboardTraversal (1.72s)
+    --- PASS: TestExactProfilerComponentsAndKeyboardTraversal/80x24 (0.82s)
+    --- PASS: TestExactProfilerComponentsAndKeyboardTraversal/120x32 (0.90s)
+=== RUN   TestJournalModeDefaultsAndD1Snapshot
+=== RUN   TestJournalModeDefaultsAndD1Snapshot/sqlite/readonly=false
+    journal_flow_test.go:58: draw journal-mode-sqlite-readonly-false 80x24: 2.030783ms
+=== RUN   TestJournalModeDefaultsAndD1Snapshot/turso/readonly=false
+    journal_flow_test.go:58: draw journal-mode-turso-readonly-false 80x24: 2.051555ms
+=== RUN   TestJournalModeDefaultsAndD1Snapshot/mysql/readonly=false
+    journal_flow_test.go:58: draw journal-mode-mysql-readonly-false 80x24: 2.505602ms
+=== RUN   TestJournalModeDefaultsAndD1Snapshot/postgresql/readonly=false
+    journal_flow_test.go:58: draw journal-mode-postgresql-readonly-false 80x24: 2.459401ms
+=== RUN   TestJournalModeDefaultsAndD1Snapshot/d1/readonly=false
+    journal_flow_test.go:58: draw journal-mode-d1-readonly-false 80x24: 1.708405ms
+=== RUN   TestJournalModeDefaultsAndD1Snapshot/postgresql/readonly=true
+    journal_flow_test.go:58: draw journal-mode-postgresql-readonly-true 80x24: 1.931923ms
+--- PASS: TestJournalModeDefaultsAndD1Snapshot (0.34s)
+    --- PASS: TestJournalModeDefaultsAndD1Snapshot/sqlite/readonly=false (0.05s)
+    --- PASS: TestJournalModeDefaultsAndD1Snapshot/turso/readonly=false (0.04s)
+    --- PASS: TestJournalModeDefaultsAndD1Snapshot/mysql/readonly=false (0.10s)
+    --- PASS: TestJournalModeDefaultsAndD1Snapshot/postgresql/readonly=false (0.04s)
+    --- PASS: TestJournalModeDefaultsAndD1Snapshot/d1/readonly=false (0.06s)
+    --- PASS: TestJournalModeDefaultsAndD1Snapshot/postgresql/readonly=true (0.04s)
+=== RUN   TestJournalReviewRequiresConsentAndCancelReturns
+=== RUN   TestJournalReviewRequiresConsentAndCancelReturns/sqlite
+    journal_flow_test.go:103: draw journal-table-review-sqlite 80x24: 16.684809ms
+    journal_flow_test.go:109: draw journal-consent-sqlite 80x24: 121.062846ms
+=== RUN   TestJournalReviewRequiresConsentAndCancelReturns/postgresql
+    journal_flow_test.go:103: draw journal-table-review-postgresql 80x24: 15.930208ms
+    journal_flow_test.go:109: draw journal-consent-postgresql 80x24: 210.048048ms
+=== RUN   TestJournalReviewRequiresConsentAndCancelReturns/mysql
+    journal_flow_test.go:103: draw journal-table-review-mysql 80x24: 17.213199ms
+    journal_flow_test.go:109: draw journal-consent-mysql 80x24: 172.179621ms
+--- PASS: TestJournalReviewRequiresConsentAndCancelReturns (2.28s)
+    --- PASS: TestJournalReviewRequiresConsentAndCancelReturns/sqlite (0.58s)
+    --- PASS: TestJournalReviewRequiresConsentAndCancelReturns/postgresql (0.94s)
+    --- PASS: TestJournalReviewRequiresConsentAndCancelReturns/mysql (0.76s)
+=== RUN   TestJournalReviewReadOnlyAndEmptyScopeBlockStart
+--- PASS: TestJournalReviewReadOnlyAndEmptyScopeBlockStart (0.23s)
+=== RUN   TestJournalActiveAndResultComponents
+=== RUN   TestJournalActiveAndResultComponents/80x24
+    journal_flow_test.go:162: draw journal-active 80x24: 230.589604ms
+    journal_flow_test.go:180: draw journal-finished 80x24: 204.009734ms
+    journal_flow_test.go:185: draw journal-result 80x24: 125.374691ms
+=== RUN   TestJournalActiveAndResultComponents/120x32
+    journal_flow_test.go:162: draw journal-active 120x32: 246.32946ms
+    journal_flow_test.go:180: draw journal-finished 120x32: 216.545597ms
+    journal_flow_test.go:185: draw journal-result 120x32: 122.77186ms
+--- PASS: TestJournalActiveAndResultComponents (1.75s)
+    --- PASS: TestJournalActiveAndResultComponents/80x24 (0.86s)
+    --- PASS: TestJournalActiveAndResultComponents/120x32 (0.89s)
+PASS
+ok  	checkpoint-ui-harness	17.949s

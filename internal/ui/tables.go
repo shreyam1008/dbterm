@@ -79,6 +79,9 @@ func loadTableListSnapshotContext(ctx context.Context, db *sql.DB, dbType config
 		if err := rows.Scan(&tableName); err != nil {
 			return nil, fmt.Errorf("could not read table name: %w", err)
 		}
+		if database.IsCheckpointJournalTable(dbType, tableName) {
+			continue
+		}
 
 		namespace := namespaceForTable(dbType, tableName)
 		if namespace != "" && namespace != lastNamespace {

@@ -38,6 +38,28 @@ func TestSQLiteTableDiscoveryKeepsUserNamesBeginningWithSQLite(t *testing.T) {
 	}
 }
 
+func TestCheckpointJournalNamespaceIsExact(t *testing.T) {
+	for _, test := range []struct {
+		engine config.DBType
+		name   string
+		owned  bool
+	}{
+		{config.SQLite, "__dbterm_cp_0123456789abcdef01234567", true},
+		{config.Turso, "__dbterm_cp_0123456789abcdef01234567", true},
+		{config.MySQL, "_dbterm_cp_0123456789abcdef01234567_events", true},
+		{config.PostgreSQL, "dbterm_cp_0123456789abcdef01234567.events", true},
+		{config.SQLite, "__dbterm_cp_user_data", false},
+		{config.SQLite, "__dbterm_cp_0123456789abcdef01234567_archive", false},
+		{config.MySQL, "_dbterm_cp_0123456789abcdef01234567_data", false},
+		{config.PostgreSQL, "public.dbterm_cp_0123456789abcdef01234567", false},
+		{config.PostgreSQL, "dbterm_cp_user.events", false},
+	} {
+		if got := IsCheckpointJournalTable(test.engine, test.name); got != test.owned {
+			t.Errorf("journal namespace %s/%q = %v, want %v", test.engine, test.name, got, test.owned)
+		}
+	}
+}
+
 func TestMySQLMetadataQueriesStayInCurrentDatabase(t *testing.T) {
 	tests := []struct {
 		name      string
